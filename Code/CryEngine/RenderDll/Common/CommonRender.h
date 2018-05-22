@@ -125,6 +125,8 @@ enum EResourceLayoutSlot
 
 enum EReservedTextureSlot
 {
+	//Dymek comment
+	//this share texture registers, be careful when adding texture slots.
 	EReservedTextureSlot_SkinExtraWeights       = 14,
 	EReservedTextureSlot_AdjacencyInfo          = 15,
 	EReservedTextureSlot_ComputeSkinVerts       = 16,

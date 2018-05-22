@@ -39,10 +39,13 @@ s_TexSlotSemantics[] =
 	{ EFTT_TRANSLUCENCY,     "EFTT_TRANSLUCENCY",     false, "Translucency", "_trans"  },
 	{ EFTT_EMITTANCE,        "EFTT_EMITTANCE",        true,  "Emittance",    "_em"     },
 
+	{ EFTT_DETAIL_OVERLAY_SMOOTHNESS,        "EFTT_DETAIL_OVERLAY_SMOOTHNESS",        false,  "Detail_Smoothness",    "" },
+
 	// Backwards compatible names are found here and mapped to the updated enum
 	{ EFTT_NORMALS,          "EFTT_BUMP",             false, "Normal",       ""        },         // called "Bump" in the shaders
 	{ EFTT_SMOOTHNESS,       "EFTT_GLOSS_NORMAL_A",   false, "GlossNormalA", ""        },
 	{ EFTT_HEIGHT,           "EFTT_BUMPHEIGHT",       false, "Height",       ""        },         // called "BumpHeight" in the shaders
+	
 
 	// This is the terminator for the name-search
 	{ EFTT_UNKNOWN,          "EFTT_UNKNOWN",          false, nullptr,        ""        },

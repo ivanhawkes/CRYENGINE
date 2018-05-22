@@ -41,7 +41,6 @@
 //====================================================================
 // Fixed Per-Material constants
 // Needs to match shader registers in FXConstantDefs
-
 #define NUM_PM_CONSTANTS             (10 + EFTT_MAX * 2)
 #define FIRST_REG_PM                 (0)
 
@@ -53,6 +52,18 @@
 #define REG_PM_DEFORM_WAVE           (7 + EFTT_MAX * 2)
 #define REG_PM_DETAILTILING_ALPHAREF (8 + EFTT_MAX * 2)
 #define REG_PM_SILPOM_DETAIL_PARAMS  (9 + EFTT_MAX * 2)
+
+//#define NUM_PM_CONSTANTS             (10 + 14 * 2)
+//#define FIRST_REG_PM                 (0)
+//
+//#define REG_PM_CHANNELS_SB           (0)                  // Scale-Bias for each texture slot
+//#define REG_PM_DIFFUSE_COL           (0 + 14 * 2)
+//#define REG_PM_SPECULAR_COL          (1 + 14 * 2)
+//#define REG_PM_EMISSIVE_COL          (2 + 14 * 2)
+//#define REG_PM_TCM_MATRIX            (3 + 14 * 2)
+//#define REG_PM_DEFORM_WAVE           (7 + 14 * 2)
+//#define REG_PM_DETAILTILING_ALPHAREF (8 + 14 * 2)
+//#define REG_PM_SILPOM_DETAIL_PARAMS  (9 + 14 * 2)
 
 // Shader.h
 // Shader pipeline common declarations.

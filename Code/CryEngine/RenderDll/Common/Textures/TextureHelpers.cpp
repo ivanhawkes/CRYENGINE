@@ -41,6 +41,8 @@ s_TexSlotSemantics[] =
 	{ EFTT_TRANSLUCENCY,     2, &CRendererResources::s_ptexWhite,     &CRendererResources::s_ptexWhite,    "_trans",  "TM_Translucency",    "$TEX_Translucency"    },
 	{ EFTT_EMITTANCE,        1, &CRendererResources::s_ptexWhite,     &CRendererResources::s_ptexWhite,    "_em",     "TM_Emittance",       "$TEX_Emittance"       },
 
+	{ EFTT_DETAIL_OVERLAY_SMOOTHNESS, 2, &CRendererResources::s_ptexWhite,     &CRendererResources::s_ptexWhite,    "",     "TM_Detail_Smoothness",       "$TEX_Detail_Smoothness" },
+
 	// This is the terminator for the name-search
 	{ EFTT_UNKNOWN,          0, &CRendererResources::s_pTexNULL,      &CRendererResources::s_pTexNULL,     "",        nullptr,              nullptr                },
 };

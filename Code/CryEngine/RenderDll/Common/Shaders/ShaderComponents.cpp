@@ -545,6 +545,8 @@ static STextureDB sTextures[] =
 	STextureDB(PARAM(TM_Smoothness,                   ECGT_MatSlot_Smoothness),           0),
 	STextureDB(PARAM(TM_Emittance,                    ECGT_MatSlot_Emittance),            0),
 
+	STextureDB(PARAM(TM_Detail_Smoothness,            ECGT_MatSlot_DetailSmoothness),            0),
+
 	STextureDB(PARAM(TSF_ScaleformInput0,             ECGT_ScaleformInput0),              0),
 	STextureDB(PARAM(TSF_ScaleformInput1,             ECGT_ScaleformInput1),              0),
 	STextureDB(PARAM(TSF_ScaleformInput2,             ECGT_ScaleformInput2),              0),

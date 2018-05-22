@@ -248,6 +248,9 @@ EEfResTextures CShaderMan::mfCheckTextureSlotName(const char* mapname)
 	else if (!stricmp(mapname, "$Emittance"))
 		slot = EFTT_EMITTANCE;
 
+	else if (!stricmp(mapname, "$Detail_Smoothness"))
+		slot = EFTT_DETAIL_OVERLAY_SMOOTHNESS;
+
 	// backwards compatible names
 	else if (!stricmp(mapname, "$Cubemap"))
 		slot = EFTT_ENV;
@@ -403,6 +406,8 @@ const char* CShaderMan::mfTemplateTexIdToName(int Id)
 		return "GlossNormalA";
 	case EFTT_EMITTANCE:
 		return "Emittance";
+	case EFTT_DETAIL_OVERLAY_SMOOTHNESS:
+		return "Detail_Smoothness";
 	default:
 		return "Unknown";
 	}
