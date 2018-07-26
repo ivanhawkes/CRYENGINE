@@ -18,17 +18,7 @@ namespace CryAudio
 //////////////////////////////////////////////////////////////////////////
 CObjectManager::~CObjectManager()
 {
-	if (m_pIImpl != nullptr)
-	{
-		Release();
-	}
-
-	for (auto const pObject : m_constructedObjects)
-	{
-		delete pObject;
-	}
-
-	m_constructedObjects.clear();
+	CRY_ASSERT_MESSAGE(m_constructedObjects.empty(), "There are still objects during CObjectManager destruction!");
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -38,36 +28,44 @@ void CObjectManager::Init(uint32 const poolSize)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObjectManager::SetImpl(Impl::IImpl* const pIImpl)
+void CObjectManager::OnAfterImplChanged()
 {
-	m_pIImpl = pIImpl;
-
 	for (auto const pObject : m_constructedObjects)
 	{
 		CRY_ASSERT(pObject->GetImplDataPtr() == nullptr);
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-		pObject->SetImplDataPtr(m_pIImpl->ConstructObject(pObject->m_name.c_str()));
+		pObject->SetImplDataPtr(g_pIImpl->ConstructObject(pObject->m_name.c_str()));
 #else
-		pObject->SetImplDataPtr(m_pIImpl->ConstructObject());
+		pObject->SetImplDataPtr(g_pIImpl->ConstructObject());
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CObjectManager::ReleaseImplData()
+{
+	// Don't clear m_constructedObjects here as we need the objects to survive a middleware switch!
+	for (auto const pObject : m_constructedObjects)
+	{
+		g_pIImpl->DestructObject(pObject->GetImplDataPtr());
+		pObject->Release();
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObjectManager::Release()
 {
-	// Don't clear m_constructedObjects here as we need the objects to survive a middleware switch!
 	for (auto const pObject : m_constructedObjects)
 	{
-		m_pIImpl->DestructObject(pObject->GetImplDataPtr());
-		pObject->Release();
+		CRY_ASSERT_MESSAGE(pObject->GetImplDataPtr() == nullptr, "An object cannot have valid impl data during CObjectManager destruction!");
+		delete pObject;
 	}
 
-	m_pIImpl = nullptr;
+	m_constructedObjects.clear();
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObjectManager::Update(float const deltaTime, Impl::SObject3DAttributes const& listenerAttributes)
+void CObjectManager::Update(float const deltaTime, CObjectTransformation const& listenerTransformation, Vec3 const& listenerVelocity)
 {
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 	CPropagationProcessor::s_totalAsyncPhysRays = 0;
@@ -76,8 +74,7 @@ void CObjectManager::Update(float const deltaTime, Impl::SObject3DAttributes con
 
 	if (deltaTime > 0.0f)
 	{
-		bool const listenerMoved = listenerAttributes.velocity.GetLengthSquared() > FloatEpsilon;
-
+		bool const listenerMoved = listenerVelocity.GetLengthSquared() > FloatEpsilon;
 		auto iter = m_constructedObjects.begin();
 		auto iterEnd = m_constructedObjects.end();
 
@@ -87,7 +84,7 @@ void CObjectManager::Update(float const deltaTime, Impl::SObject3DAttributes con
 
 			CObjectTransformation const& transformation = pObject->GetTransformation();
 
-			float const distance = transformation.GetPosition().GetDistance(listenerAttributes.transformation.GetPosition());
+			float const distance = transformation.GetPosition().GetDistance(listenerTransformation.GetPosition());
 			float const radius = pObject->GetMaxRadius();
 
 			if (radius <= 0.0f || distance < radius)
@@ -110,11 +107,11 @@ void CObjectManager::Update(float const deltaTime, Impl::SObject3DAttributes con
 
 			if (IsActive(pObject))
 			{
-				pObject->Update(deltaTime, distance, listenerAttributes.transformation.GetPosition(), listenerAttributes.velocity, listenerMoved);
+				pObject->Update(deltaTime, distance, listenerTransformation.GetPosition(), listenerVelocity, listenerMoved);
 			}
 			else if (pObject->CanBeReleased())
 			{
-				m_pIImpl->DestructObject(pObject->GetImplDataPtr());
+				g_pIImpl->DestructObject(pObject->GetImplDataPtr());
 				pObject->SetImplDataPtr(nullptr);
 				delete pObject;
 
@@ -277,26 +274,26 @@ size_t CObjectManager::GetNumActiveAudioObjects() const
 
 //////////////////////////////////////////////////////////////////////////
 void CObjectManager::DrawPerObjectDebugInfo(
-  IRenderAuxGeom& auxGeom,
-  Vec3 const& listenerPos,
-  AudioTriggerLookup const& triggers,
-  AudioParameterLookup const& parameters,
-  AudioSwitchLookup const& switches,
-  AudioPreloadRequestLookup const& preloadRequests,
-  AudioEnvironmentLookup const& environments) const
+	IRenderAuxGeom& auxGeom,
+	Vec3 const& listenerPos,
+	AudioTriggerLookup const& triggers,
+	AudioParameterLookup const& parameters,
+	AudioSwitchLookup const& switches,
+	AudioPreloadRequestLookup const& preloadRequests,
+	AudioEnvironmentLookup const& environments) const
 {
 	for (auto const pObject : m_constructedObjects)
 	{
 		if (IsActive(pObject))
 		{
 			pObject->DrawDebugInfo(
-			  auxGeom,
-			  listenerPos,
-			  triggers,
-			  parameters,
-			  switches,
-			  preloadRequests,
-			  environments);
+				auxGeom,
+				listenerPos,
+				triggers,
+				parameters,
+				switches,
+				preloadRequests,
+				environments);
 		}
 	}
 }

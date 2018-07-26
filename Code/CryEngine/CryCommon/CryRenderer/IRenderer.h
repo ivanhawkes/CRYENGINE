@@ -22,6 +22,8 @@
 #include <CryCore/CryVariant.h>
 #include "IRenderView.h"
 
+#include <vector>
+
 // forward declarations
 struct SRenderingPassInfo;
 struct IFoliage;
@@ -565,6 +567,7 @@ struct CRY_ALIGN(16) SAddParticlesToSceneJob
 	IParticleVertexCreator* pVertexCreator = nullptr;
 	gpu_pfx2::IParticleComponentRuntime* pGpuRuntime = nullptr;
 	int16 nCustomTexId;
+	AABB aabb;
 };
 
 #ifdef SUPPORT_HW_MOUSE_CURSOR
@@ -657,28 +660,6 @@ enum EDrawTextFlags : uint32
 	eDrawText_IgnoreOverscan = BIT32(10), //!< Ignore the overscan borders, text should be drawn at the location specified.
 	eDrawText_LegacyBehavior = BIT32(11)  //!< Reserved for internal system use.
 };
-
-// Debug stats/views for Partial resolves
-// if REFRACTION_PARTIAL_RESOLVE_DEBUG_VIEWS is enabled, make sure REFRACTION_PARTIAL_RESOLVE_STATS is too
-#if defined(PERFORMANCE_BUILD)
-	#define REFRACTION_PARTIAL_RESOLVE_STATS       1
-	#define REFRACTION_PARTIAL_RESOLVE_DEBUG_VIEWS 0
-#elif defined(_RELEASE) // note: _RELEASE is defined in PERFORMANCE_BUILD, so this check must come second
-	#define REFRACTION_PARTIAL_RESOLVE_STATS       0
-	#define REFRACTION_PARTIAL_RESOLVE_DEBUG_VIEWS 0
-#else
-	#define REFRACTION_PARTIAL_RESOLVE_STATS       1
-	#define REFRACTION_PARTIAL_RESOLVE_DEBUG_VIEWS 1
-#endif
-
-#if REFRACTION_PARTIAL_RESOLVE_DEBUG_VIEWS
-enum ERefractionPartialResolvesDebugViews
-{
-	eRPR_DEBUG_VIEW_2D_AREA = 1,
-	eRPR_DEBUG_VIEW_3D_BOUNDS,
-	eRPR_DEBUG_VIEW_2D_AREA_OVERLAY
-};
-#endif
 
 //! \cond INTERNAL
 //! This structure used in DrawText method of renderer.
@@ -804,12 +785,15 @@ enum ERenderPipelineProfilerStats
 {
 	eRPPSTATS_OverallFrame = 0,
 	eRPPSTATS_Recursion,
+	eRPPSTATS_UIFlash,
+	eRPPSTATS_Aux,
 
 	// Scene
 	eRPPSTATS_SceneOverall,
 	eRPPSTATS_SceneDecals,
 	eRPPSTATS_SceneForward,
 	eRPPSTATS_SceneWater,
+	eRPPSTATS_SceneTransparent,
 
 	// Shadows
 	eRPPSTATS_ShadowsOverall,
@@ -823,7 +807,6 @@ enum ERenderPipelineProfilerStats
 
 	// VFX
 	eRPPSTATS_VfxOverall,
-	eRPPSTATS_VfxTransparent,
 	eRPPSTATS_VfxFog,
 	eRPPSTATS_VfxFlares,
 
@@ -866,9 +849,10 @@ struct RPProfilerDetailedStats
 	char            name[31];
 	float           gpuTime;
 	float           gpuTimeSmoothed;
+	float           cpuTime;
 	float           cpuTimeSmoothed;
 	CTimeValue      startTimeCPU, endTimeCPU;
-	uint32          startTimestamp, endTimestamp;
+	uint64          startTimeGPU, endTimeGPU;
 	int             numDIPs, numPolys;
 	int8            recLevel;   // Negative value means error in stack
 	uint8           flags;
@@ -958,7 +942,7 @@ struct IRenderer//: public IRendererCallbackServer
 		HWND handle  = 0; // WIN_HWND
 
 		ColorF clearColor               = Clr_Empty;
-		ColorF clearDepthStencil        = Clr_FarPlane;
+		ColorF clearDepthStencil        = Clr_FarPlane_Rev;
 		Vec2i  superSamplingFactor      = { 1, 1 };
 		Vec2i  screenResolution         = { 0, 0 };
 
@@ -1151,16 +1135,16 @@ struct IRenderer//: public IRendererCallbackServer
 	  float sx, float sy, float sz,
 	  float* px, float* py, float* pz) = 0;
 
-	virtual bool WriteDDS(byte* dat, int wdt, int hgt, int Size, const char* name, ETEX_Format eF, int NumMips) = 0;
-	virtual bool WriteTGA(byte* dat, int wdt, int hgt, const char* name, int src_bits_per_pixel, int dest_bits_per_pixel) = 0;
-	virtual bool WriteJPG(byte* dat, int wdt, int hgt, char* name, int src_bits_per_pixel, int nQuality = 100) = 0;
+	virtual bool WriteDDS(const byte* dat, int wdt, int hgt, int Size, const char* name, ETEX_Format eF, int NumMips) = 0;
+	virtual bool WriteTGA(const byte* dat, int wdt, int hgt, const char* name, int src_bits_per_pixel, int dest_bits_per_pixel) = 0;
+	virtual bool WriteJPG(const byte* dat, int wdt, int hgt, char* name, int src_bits_per_pixel, int nQuality = 100) = 0;
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//Replacement functions for Font
 
 	virtual bool FontUploadTexture(class CFBitmap*, ETEX_Format eTF = eTF_R8G8B8A8) = 0;
-	virtual int  FontCreateTexture(int Width, int Height, byte* pData, ETEX_Format eTF = eTF_R8G8B8A8, bool genMips = false) = 0;
-	virtual bool FontUpdateTexture(int nTexId, int X, int Y, int USize, int VSize, byte* pData) = 0;
+	virtual int  FontCreateTexture(int Width, int Height, const byte* pData, ETEX_Format eTF = eTF_R8G8B8A8, bool genMips = false) = 0;
+	virtual bool FontUpdateTexture(int nTexId, int X, int Y, int USize, int VSize, const byte* pData) = 0;
 	virtual void FontReleaseTexture(class CFBitmap* pBmp) = 0;
 
 	virtual bool FlushRTCommands(bool bWait, bool bImmediatelly, bool bForce) = 0;
@@ -1255,7 +1239,7 @@ struct IRenderer//: public IRendererCallbackServer
 
 	//! Load lightmap for name.
 	virtual int  EF_LoadLightmap(const char* name) = 0;
-	virtual bool EF_RenderEnvironmentCubeHDR(int size, const Vec3& Pos, TArray<unsigned short>& vecData) = 0;
+	virtual DynArray<uint16_t> EF_RenderEnvironmentCubeHDR(size_t size, const Vec3& Pos) = 0;
 	// Writes a TIF file to the system with the requested preset
 	// Intended for use with EF_RenderEnvironmentCubeHDR
 	virtual bool WriteTIFToDisk(const void* pData, int width, int height, int bytesPerChannel, int numChannels, bool bFloat, const char* szPreset, const char* szFileName) = 0;
@@ -1279,7 +1263,7 @@ struct IRenderer//: public IRendererCallbackServer
 	virtual CRenderObject* EF_DuplicateRO(CRenderObject* pObj, const SRenderingPassInfo& passInfo) = 0;
 
 	//! Draw all shaded REs in the list
-	virtual void EF_EndEf3D(const int nFlags, const int nPrecacheUpdateId, const int nNearPrecacheUpdateId, const SRenderingPassInfo& passInfo) = 0;
+	virtual void EF_EndEf3D(const int nPrecacheUpdateId, const int nNearPrecacheUpdateId, const SRenderingPassInfo& passInfo) = 0;
 
 	virtual void EF_InvokeShadowMapRenderJobs(const SRenderingPassInfo& passInfo, const int nFlags) = 0;
 	virtual IRenderView* GetNextAvailableShadowsView(IRenderView* pMainRenderView, ShadowMapFrustum* pOwnerFrustum) = 0;
@@ -1416,8 +1400,8 @@ struct IRenderer//: public IRendererCallbackServer
 	virtual void         UpdateTextureInVideoMemory(uint32 tnum, unsigned char* newdata, int posx, int posy, int w, int h, ETEX_Format eTFSrc = eTF_B8G8R8, int posz = 0, int sizez = 1) = 0;
 
 	// NB: Without header.
-	virtual bool DXTCompress(byte* raw_data, int nWidth, int nHeight, ETEX_Format eTF, bool bUseHW, bool bGenMips, int nSrcBytesPerPix, MIPDXTcallback callback) = 0;
-	virtual bool DXTDecompress(byte* srcData, const size_t srcFileSize, byte* dstData, int nWidth, int nHeight, int nMips, ETEX_Format eSrcTF, bool bUseHW, int nDstBytesPerPix) = 0;
+	virtual bool DXTCompress  (const byte* raw_data, int nWidth, int nHeight, ETEX_Format eTF, bool bUseHW, bool bGenMips, int nSrcBytesPerPix, MIPDXTcallback callback) = 0;
+	virtual bool DXTDecompress(const byte* srcData, const size_t srcFileSize, byte* dstData, int nWidth, int nHeight, int nMips, ETEX_Format eSrcTF, bool bUseHW, int nDstBytesPerPix) = 0;
 	virtual void RemoveTexture(unsigned int TextureId) = 0;
 
 	virtual bool BakeMesh(const SMeshBakingInputParams* pInputParams, SMeshBakingOutput* pReturnValues) = 0;
@@ -1670,8 +1654,8 @@ struct IRenderer//: public IRendererCallbackServer
 	virtual void SyncComputeVerticesJobs() = 0;
 
 	//! Lock/Unlock the video memory buffer used by particles when using the jobsystem.
-	virtual void  LockParticleVideoMemory() = 0;
-	virtual void  UnLockParticleVideoMemory() = 0;
+	virtual void  LockParticleVideoMemory(int frameId) = 0;
+	virtual void  UnLockParticleVideoMemory(int frameId) = 0;
 
 	virtual void  ActivateLayer(const char* pLayerName, bool activate) = 0;
 

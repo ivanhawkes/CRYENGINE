@@ -64,16 +64,16 @@ class CMannequinPaneClass : public IViewPaneClass
 	//////////////////////////////////////////////////////////////////////////
 	// IClassDesc
 	//////////////////////////////////////////////////////////////////////////
-	virtual ESystemClassID SystemClassID() { return ESYSTEM_CLASS_VIEWPANE; };
-	virtual const char*    ClassName()       { return MANNEQUIN_EDITOR_TOOL_NAME; };
-	virtual const char*    Category()        { return "Animation"; };
+	virtual ESystemClassID SystemClassID()   { return ESYSTEM_CLASS_VIEWPANE; }
+	virtual const char*    ClassName()       { return MANNEQUIN_EDITOR_TOOL_NAME; }
+	virtual const char*    Category()        { return "Animation"; }
 	virtual const char*    GetMenuPath()     { return "Animation"; }
 	//////////////////////////////////////////////////////////////////////////
-	virtual CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CMannequinDialog); };
-	virtual const char*    GetPaneTitle()    { return _T(MANNEQUIN_EDITOR_TOOL_NAME); };
-	virtual QRect          GetPaneRect()     { return QRect(0, 0, 500, 300); };
-	virtual bool           SinglePane()      { return true; };
-	virtual bool           WantIdleUpdate()  { return true; };
+	virtual CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CMannequinDialog); }
+	virtual const char*    GetPaneTitle()    { return _T(MANNEQUIN_EDITOR_TOOL_NAME); }
+	virtual QRect          GetPaneRect()     { return QRect(0, 0, 500, 300); }
+	virtual bool           SinglePane()      { return true; }
+	virtual bool           WantIdleUpdate()  { return true; }
 };
 
 REGISTER_CLASS_DESC(CMannequinPaneClass);
@@ -786,7 +786,7 @@ bool CMannequinDialog::InitialiseToPreviewFile(const char* previewFile)
 				params.sName = name;
 				params.vPosition.Set(0.0f, 0.0f, 0.0f);
 				params.qRotation.SetIdentity();
-				params.nFlags |= (ENTITY_FLAG_NEVER_NETWORK_STATIC | ENTITY_FLAG_CLIENT_ONLY);
+				params.nFlags |= ENTITY_FLAG_CLIENT_ONLY;
 
 				context.viewData[em].entity = gEnv->pEntitySystem->SpawnEntity(params, true);
 				assert(context.viewData[em].entity);
@@ -2268,4 +2268,3 @@ void CMannequinDialog::EnableMenuCommand(uint32 commandId, bool enable)
 		pContextEditorCommand->SetEnabled(enable);
 	}
 }
-

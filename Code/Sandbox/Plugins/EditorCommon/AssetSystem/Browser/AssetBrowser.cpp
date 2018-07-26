@@ -310,7 +310,7 @@ public:
 class CUsedBy : public CDependenciesOperatorBase
 {
 public:
-	virtual QString GetName() override { return QWidget::tr("UsedBy"); }
+	virtual QString GetName() override { return QWidget::tr("used by"); }
 
 	virtual bool    Match(const QVariant& value, const QVariant& filterValue) override
 	{
@@ -339,7 +339,7 @@ public:
 class CUse : public CDependenciesOperatorBase
 {
 public:
-	virtual QString GetName() override { return QWidget::tr("Use"); }
+	virtual QString GetName() override { return QWidget::tr("that use"); }
 
 	virtual bool    Match(const QVariant& value, const QVariant& filterValue) override
 	{
@@ -374,9 +374,9 @@ public:
 		: CItemModelAttribute("Dependencies", &s_dependenciesAttributeType, CItemModelAttribute::AlwaysHidden, true, QVariant(), (int)CAssetModel::Roles::InternalPointerRole)
 	{
 		static CAssetModel::CAutoRegisterColumn column(this, [](const CAsset* pAsset, const CItemModelAttribute* /*pAttribute*/)
-		    {
-		       return QVariant();
-				});
+	    {
+			return QVariant();
+		});
 	}
 };
 
@@ -387,10 +387,10 @@ public:
 		: CItemModelAttribute("Usage count", &Attributes::s_stringAttributeType, CItemModelAttribute::StartHidden, false)
 	{
 		static CAssetModel::CAutoRegisterColumn column(this, [](const CAsset* pAsset, const CItemModelAttribute* pAttribute)
-		    {
-		       const CUsageCountAttribute* const pUsageCountAttribute = static_cast<const CUsageCountAttribute*>(pAttribute);
-		       return pUsageCountAttribute->GetValue(*pAsset);
-				});
+		{
+			const CUsageCountAttribute* const pUsageCountAttribute = static_cast<const CUsageCountAttribute*>(pAttribute);
+			return pUsageCountAttribute->GetValue(*pAsset);
+		});
 	}
 
 	void SetDetailContext(CAttributeFilter* pFilter)
@@ -614,9 +614,31 @@ private:
 	QMetaObject::Connection m_connection;
 };
 
+void TryInstantEditing(CAsset* pAsset)
+{
+	if (!pAsset)
+	{
+		return;
+	}
+
+	CAssetEditor* pAssetEditor = pAsset->GetType()->GetInstantEditor();
+	if (!pAssetEditor)
+	{
+		return;
+	}
+
+	CRY_ASSERT(pAssetEditor->CanOpenAsset(pAsset));
+
+	CRY_ASSERT(GetIEditor()->FindDockableIf([pAssetEditor, pAsset](IPane* pPane, const string& className) -> bool
+	{
+		return pAssetEditor == pPane && pAsset->GetType()->GetInstantEditor() == static_cast<CAssetEditor*>(pPane);
+	}));
+
+	pAsset->Edit(pAssetEditor);
+
 }
 
-//////////////////////////////////////////////////////////////////////////
+}
 
 CAssetBrowser::CAssetBrowser(bool bHideEngineFolder /*= false*/, QWidget* pParent /*= nullptr*/)
 	: CDockableEditor(pParent)
@@ -690,6 +712,11 @@ void CAssetBrowser::dragEnterEvent(QDragEnterEvent* pEvent)
 	{
 		pEvent->acceptProposedAction();
 	}
+	else if (CAssetManager::GetInstance()->HasAssetConverter(*pDragDropData))
+	{
+		pEvent->acceptProposedAction();
+	}
+
 }
 
 void CAssetBrowser::dragMoveEvent(QDragMoveEvent* pEvent)
@@ -713,6 +740,20 @@ void CAssetBrowser::dragMoveEvent(QDragMoveEvent* pEvent)
 			}
 		}
 	}
+	else 
+	{
+		CAssetConverter * pConverter =  CAssetManager::GetInstance()->GetAssetConverter(*pEvent->mimeData());
+		if (pConverter)
+		{
+			CDragDropData::ShowDragText(qApp->widgetAt(QCursor::pos()), QString(pConverter->ConversionInfo(*pEvent->mimeData()).c_str()));
+			pEvent->acceptProposedAction();
+		}
+	}
+}
+
+void CAssetBrowser::dragLeaveEvent(QDragLeaveEvent* pEvent)
+{
+	CDragDropData::ClearDragTooltip(qApp->widgetAt(QCursor::pos()));
 }
 
 bool DiscardChanges(const QString& what)
@@ -767,6 +808,22 @@ void CAssetBrowser::dropEvent(QDropEvent* pEvent)
 		}
 		pEvent->acceptProposedAction();
 	}
+	else if (bHasFolderPath)
+	{
+		CAssetConverter* pConverter = CAssetManager::GetInstance()->GetAssetConverter(*pEvent->mimeData());
+
+		if (pConverter)
+		{
+			SAssetConverterConversionInfo info{ folderPath, this };
+			//we need to select the actual folder where the conversion is going to take place
+			m_foldersView->SelectFolder(QString(folderPath));
+			pEvent->acceptProposedAction();
+			pConverter->Convert(*pEvent->mimeData(), info);
+		}
+	}
+
+	CDragDropData::ClearDragTooltip(qApp->widgetAt(QCursor::pos()));
+
 }
 
 void CAssetBrowser::mouseReleaseEvent(QMouseEvent* pEvent)
@@ -1340,7 +1397,6 @@ CAsset* CAssetBrowser::QueryNewAsset(const CAssetType& type, const void* pTypeSp
 	BeginCreateAsset(type, pTypeSpecificParameter);
 
 	CNewAssetModel* const pModel = CNewAssetModel::GetInstance();
-
 	while (CNewAssetModel::GetInstance()->IsEditing())
 	{
 		qApp->processEvents();
@@ -1442,6 +1498,11 @@ QVariantMap CAssetBrowser::GetLayout() const
 	state.insert("foldersView", m_foldersView->GetState());
 
 	return state;
+}
+
+QFilteringPanel* CAssetBrowser::GetFilterPanel()
+{
+	return m_filterPanel;
 }
 
 QVector<CAsset*> CAssetBrowser::GetSelectedAssets() const
@@ -1638,44 +1699,70 @@ void CAssetBrowser::OnContextMenu()
 	QStringList folders;
 	ProcessSelection(assets, folders);
 
-	CAssetManager::GetInstance()->AppendContextMenuActions(
-		abstractMenu,
-		assets.toStdVector(),
-		std::make_shared<Private_AssetBrowser::CContextMenuContext>(this));
-
 	if (assets.length() != 0)
 	{
-		bool bCanReimport = false;
-		bool bReadOnly = false;
+		bool canReimport = false;
+		bool isReadOnly = false;
+		bool isModified = false;
 		QMap<const CAssetType*, std::vector<CAsset*>> assetsByType;
 
 		for (CAsset* asset : assets)
 		{
 			if (asset->GetType()->IsImported() && !asset->IsReadOnly() && asset->HasSourceFile())
 			{
-				bCanReimport = true;
+				canReimport = true;
 			}
 
 			if (asset->IsReadOnly() || !GetISystem()->GetIPak()->IsFileExist(assets.front()->GetFile(0), ICryPak::eFileLocation_OnDisk))
 			{
-				bReadOnly = true;
+				isReadOnly = true;
 			}
+
+			isModified = isModified || asset->IsModified();
 
 			assetsByType[asset->GetType()].push_back(asset);
 		}
 
 		int section = abstractMenu.FindSectionByName("Assets");
 
-		if (bCanReimport)
+		if (canReimport)
 		{
 			auto action = abstractMenu.CreateAction(tr("Reimport"), section);
 			connect(action, &QAction::triggered, [this, assets]() { OnReimport(assets); });
 		}
 
-		if (!bReadOnly)
+		if (!isReadOnly)
 		{
 			auto action = abstractMenu.CreateAction(tr("Delete"));
 			connect(action, &QAction::triggered, [this, assets]() { OnDelete(assets); });
+		}
+
+		if (isModified)
+		{
+			auto action = abstractMenu.CreateAction(tr("Save"));
+			connect(action, &QAction::triggered, [this, assets]() 
+			{  
+				for (CAsset* pAsset : assets)
+				{
+					pAsset->Save();
+				}
+			});
+
+			action = abstractMenu.CreateAction(tr("Discard Changes"));
+			connect(action, &QAction::triggered, [this, assets]()
+			{
+				const QString title(tr("Discard Changes"));
+				const QString text(tr("Are you sure you want to discard the changes in the selected assets?"));
+
+				const auto button = CQuestionDialog::SQuestion(title, text, QDialogButtonBox::Discard | QDialogButtonBox::Cancel, QDialogButtonBox::Cancel);
+				if (QDialogButtonBox::Discard == button)
+				{
+					for (CAsset* pAsset : assets)
+					{
+						pAsset->Reload();
+					}
+				}
+			});
 		}
 
 		//TODO : source control
@@ -1708,6 +1795,8 @@ void CAssetBrowser::OnContextMenu()
 			const string path = PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), pAsset->GetFile(0));
 			QtUtil::OpenInExplorer(path);
 		});
+
+		AppendFilterDependenciesActions(&abstractMenu, assets.front());
 	}
 
 	if (folders.length() == 1)//only one folder selected
@@ -1777,12 +1866,38 @@ void CAssetBrowser::OnContextMenu()
 		}
 	}
 
+	CAssetManager::GetInstance()->AppendContextMenuActions(
+		abstractMenu,
+		assets.toStdVector(),
+		std::make_shared<Private_AssetBrowser::CContextMenuContext>(this));
+
 	QMenu menu;
 	abstractMenu.Build(MenuWidgetBuilders::CMenuBuilder(&menu));
 
 	if (menu.actions().count() > 0)
 	{
 		menu.exec(QCursor::pos());
+	}
+}
+
+void CAssetBrowser::AppendFilterDependenciesActions(CAbstractMenu* pAbstractMenu, const CAsset* pAsset)
+{
+	using namespace Private_AssetBrowser;
+
+	const auto dependencyOperators = s_dependenciesAttribute.GetType()->GetOperators();
+	for (Attributes::IAttributeFilterOperator* pOperator : dependencyOperators)
+	{
+		QAction* pAction = pAbstractMenu->CreateAction(QString("%1 %2 '%3'").arg(tr("Show Assets"), pOperator->GetName(), pAsset->GetName()));
+		connect(pAction, &QAction::triggered, [pOperator, pAsset]()
+		{
+			CAssetBrowser* const pAssetBrowser = static_cast<CAssetBrowser*>(GetIEditor()->CreateDockable("Asset Browser"));
+			if (pAssetBrowser)
+			{
+				pAssetBrowser->GetFilterPanel()->AddFilter(s_dependenciesAttribute.GetName(), pOperator->GetName(), QtUtil::ToQString(pAsset->GetFile(0)));
+				pAssetBrowser->GetFilterPanel()->SetExpanded(true);
+				pAssetBrowser->SetRecursiveView(true);
+			}
+		});
 	}
 }
 
@@ -1815,6 +1930,10 @@ void CAssetBrowser::OnDoubleClick(const QModelIndex& index)
 
 void CAssetBrowser::OnDoubleClick(CAsset* pAsset)
 {
+	if (m_pQuickEditTimer)
+	{
+		m_pQuickEditTimer->stop();
+	}
 	pAsset->Edit();
 }
 
@@ -1836,6 +1955,32 @@ void CAssetBrowser::OnCurrentChanged(const QModelIndex& current, const QModelInd
 
 void CAssetBrowser::UpdatePreview(const QModelIndex& currentIndex)
 {
+
+	using namespace Private_AssetBrowser;
+
+	if (IsAsset(currentIndex))
+	{
+		CAsset* const pAsset = ToAsset(currentIndex);
+		if (pAsset && pAsset->GetType()->GetInstantEditor())
+		{
+			if (!m_pQuickEditTimer)
+			{
+				m_pQuickEditTimer.reset(new QTimer());
+				m_pQuickEditTimer->setSingleShot(true);
+				m_pQuickEditTimer->setInterval(200);
+
+				connect(m_pQuickEditTimer.get(), &QTimer::timeout, [this]()
+				{
+					QModelIndex currentIndex = m_selection->currentIndex();
+					CAsset* pAsset = currentIndex.isValid() ? ToAsset(currentIndex) : nullptr;
+					TryInstantEditing(pAsset);
+				});
+			}
+
+			m_pQuickEditTimer->start();
+		}
+	}
+
 #if ASSET_BROWSER_USE_PREVIEW_WIDGET
 	if (m_previewWidget->isVisible())
 	{
@@ -1975,6 +2120,21 @@ void CAssetBrowser::OnDelete(const QVector<CAsset*>& assets)
 	// Physically delete asset files.
 	const bool bDeleteAssetFiles(true);
 	pAssetManager->DeleteAssets(assetsToDelete, bDeleteAssetFiles);
+}
+
+bool CAssetBrowser::OnOpen()
+{
+	const QVector<CAsset*> assets = GetSelectedAssets();
+	if (assets.empty())
+	{
+		return false;
+	}
+
+	for (CAsset* pAsset : assets)
+	{
+		OnDoubleClick(pAsset);
+	}
+	return true;
 }
 
 void CAssetBrowser::OnMove(const QVector<CAsset*>& assets, const QString& destinationFolder)

@@ -19,10 +19,32 @@ try:
 	import _winreg
 except:
 	pass
+
+# Incredibuild Workaround:
+#
+# Xoreax Support ticket: #DMS-651-80979
+#
+# Description:
+# Incredibuild has issues with the clang C compiler (clang.exe). The C++ compiler (clang++.exe ) works fine.
+# This issue has been observed when compiling with the Android NDK r16b clang compiler toolchain.
+# The same command line executes correctly if build locally without IB.
+#
+# Workaround:
+# Replace all "\\" in the cmd line with "/"
+#
+# Example:
+# Cmd (simplified) :  clang.exe -Ic:\\Foo c:\\Project\my_c_file.c -c -o c:\\Project\my_object_file.o
+# Error produced   :  clang.exe : error : no such file or directory: 'c:Projectmy_c_file.c'
+use_incredibuild_workaround = True
 	
 class Local_CommandCoordinator(object):
 		
 	def execute_command(self, cmd, **kw):
+
+		if use_incredibuild_workaround:
+			# Replace all "\\" with "/" in command line
+			cmd[:] = [w.replace('\\', '/') for w in cmd]
+
 		try:
 			if kw['stdout'] or kw['stderr']:
 				p = subprocess.Popen(cmd, **kw)
@@ -124,13 +146,13 @@ def execute_waf_via_ib(bld):
 		allow_local = "/AvoidLocal=On"
 		
 	# Get correct incredibuild installation folder to not depend on PATH
-	ib_folder = get_ib_folder()
-	if (has_dev_tools_acceleration_license and not has_make_and_build_license)  or 'linux' in bld.variant or 'android' in bld.variant or 'cppcheck' in bld.variant:
+	ib_folder = get_ib_folder()	
+	if (has_dev_tools_acceleration_license and not has_make_and_build_license) or 'cppcheck' in bld.variant:
 		try:			
 			p = subprocess.Popen ([str(ib_folder) + '/xgconsole.exe', "/command=" + command, "/profile=Code\\Tools\\waf-1.7.13\\profile.xml", "/useidemonitor", "/nologo", allow_local])
 		except:
 			raise BuildError()
-	else:
+	else:	
 		try:
 			p = subprocess.Popen ([ str(ib_folder) + '/BuildConsole.exe', "/command=" + command, "/useidemonitor", "/nologo", allow_local])
 		except:

@@ -11,11 +11,6 @@ namespace CryAudio
 {
 class CATLEvent;
 
-namespace Impl
-{
-struct IImpl;
-} // namespace Impl
-
 class CEventManager final
 {
 public:
@@ -27,7 +22,8 @@ public:
 	CEventManager& operator=(CEventManager const&) = delete;
 
 	void           Init(uint32 const poolSize);
-	void           SetImpl(Impl::IImpl* const pIImpl);
+	void           OnAfterImplChanged();
+	void           ReleaseImplData();
 	void           Release();
 
 	CATLEvent*     ConstructEvent();
@@ -37,7 +33,6 @@ public:
 
 private:
 
-	Impl::IImpl*            m_pIImpl = nullptr;
 	std::vector<CATLEvent*> m_constructedEvents;
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)

@@ -45,7 +45,7 @@ public:
 	virtual bool               mfIsHWSkinned()                                                                         { return m_pSrc->mfIsHWSkinned(); }
 	virtual CRenderElement*    mfCopyConstruct(void)                                                                   { return m_pSrc->mfCopyConstruct(); }
 	virtual void               mfCenter(Vec3& centr, CRenderObject* pObj, const SRenderingPassInfo& passInfo)          { m_pSrc->mfCenter(centr, pObj, passInfo); }
-	virtual void               mfGetBBox(Vec3& vMins, Vec3& vMaxs)                                                     { m_pSrc->mfGetBBox(vMins, vMaxs); }
+	virtual void               mfGetBBox(Vec3& vMins, Vec3& vMaxs) const                                               { m_pSrc->mfGetBBox(vMins, vMaxs); }
 	virtual void               mfGetPlane(Plane& pl)                                                                   { m_pSrc->mfGetPlane(pl); }
 
 	virtual void*              mfGetPointer(ESrcPointer ePT, int* Stride, EParamType Type, ESrcPointer Dst, int Flags) { return m_pSrc->mfGetPointer(ePT, Stride, Type, Dst, Flags); }
@@ -445,7 +445,7 @@ static void EtchAlphas(std::vector<IIndexedMesh*> outputList, IMaterial* pMateri
 	}
 }
 
-static bool Dilate(CTexture* pTex, CTexture* pOutput, int nPhase, std::vector<IIndexedMesh*> pInputIndexedMesh, IMaterial* pMaterial, const SMeshBakingMaterialParams* params, int numParams, SDepthTexture* pDepthStencil, const SMeshBakingInputParams* pInputParams)
+static bool Dilate(CTexture* pTex, CTexture* pOutput, int nPhase, std::vector<IIndexedMesh*> pInputIndexedMesh, IMaterial* pMaterial, const SMeshBakingMaterialParams* params, int numParams, CTexture* pDepthStencil, const SMeshBakingInputParams* pInputParams)
 {
 	// OLD PIPELINE
 	ASSERT_LEGACY_PIPELINE
@@ -733,7 +733,7 @@ bool CD3D9Renderer::BakeMesh(const SMeshBakingInputParams* pInputParams, SMeshBa
 			pBakeMaterial.push_back(PatchMaterial(*it)); // Replace current shader with MeshBake
 		}
 
-		auto pTmpDepthSurface = GetTempDepthSurface(gEnv->pRenderer->GetFrameID(), outputWidth, outputHeight);
+		CTexture* pTmpDepthSurface = CreateDepthTarget(outputWidth, outputHeight, Clr_Empty, eTF_Unknown);
 		if (!pTmpDepthSurface)
 		{
 			CryLog("BakeMesh: Failed as temporary depth surface could not be created of size %dx%d\n", outputWidth, outputHeight);
@@ -912,6 +912,7 @@ bool CD3D9Renderer::BakeMesh(const SMeshBakingInputParams* pInputParams, SMeshBa
 		}
 		*/
 
+		SAFE_RELEASE(pTmpDepthSurface);
 		CRenderer::CV_r_shadersasynccompiling = cachedShaderCompileCvar;
 
 #if defined(CREATE_RENDERDOC_CAPTURE)

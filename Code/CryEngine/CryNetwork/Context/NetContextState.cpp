@@ -68,6 +68,7 @@ CNetContextState::CNetContextState(CNetContext* pContext, int token, CNetContext
 	m_pGameContext = pContext->GetGameContext();
 	m_token = token;
 	m_multiplayer = pContext->IsMultiplayer();
+	m_startedEstablishingContext = false;
 	m_established = false;
 	m_bInCleanup = false;
 	m_bInGame = false;
@@ -262,6 +263,13 @@ void CNetContextState::HandleSubscriptionDelta(INetContextListenerPtr pListener,
 		SendEventTo(&event, pListener);
 	}
 
+	if (IsStartedEstablishingContext() && TurnedOnBit(eNOE_StartedEstablishingContext, oldEvents, newEvents) )
+	{
+		SNetObjectEvent event;
+		event.event = eNOE_StartedEstablishingContext;
+		SendEventTo(&event, pListener);
+	}
+
 	if (IsContextEstablished() && TurnedOnBit(eNOE_EstablishedContext, oldEvents, newEvents))
 	{
 		SNetObjectEvent event;
@@ -423,6 +431,17 @@ bool CNetContextState::SendEventToListener(INetContextListenerPtr pListener, SNe
 	}
 #endif
 	return false;
+}
+
+void CNetContextState::StartedEstablishingContext()
+{
+	NET_ASSERT(!IsContextEstablished());
+
+	m_startedEstablishingContext = true;
+
+	SNetObjectEvent event;
+	event.event = eNOE_StartedEstablishingContext;
+	Broadcast(&event);
 }
 
 void CNetContextState::EstablishedContext()
@@ -1951,7 +1970,7 @@ EntityId CNetContextState::AddReservedUnboundEntityMapEntry(uint16 partialNetID,
 		{
 			if (eID == 0)
 			{
-				eID = gEnv->pEntitySystem->ReserveUnknownEntityId();
+				eID = gEnv->pEntitySystem->ReserveNewEntityId();
 			}
 			if (eID)
 			{
@@ -2557,6 +2576,11 @@ void CNetContextState::RegisterEstablisher(INetContextListenerPtr pListener, CCo
 {
 	ASSERT_GLOBAL_LOCK;
 	m_allEstablishers[pListener] = pEst;
+
+#if LOG_CONTEXT_ESTABLISHMENT
+	NetLogEstablishment(1, "Establishment: registering establisher for '%s' %p" , pListener ? pListener->GetName().c_str() : "Context", pListener.get());
+#endif
+
 	if (m_allEstablishers.size() == 1)
 	{
 		TO_GAME_LAZY(&CNetContextState::GC_Lazy_TickEstablishers, this);
@@ -2568,13 +2592,18 @@ void CNetContextState::SetEstablisherState(INetContextListenerPtr pListener, ECo
 	ASSERT_GLOBAL_LOCK;
 	EstablishersMap::iterator iter = m_allEstablishers.find(pListener);
 	if (iter == m_allEstablishers.end())
-#if ENABLE_DEBUG_KIT
-		NetWarning("Couldn't find establisher trying to set state %d for %s", state, pListener ? pListener->GetName().c_str() : "Context");
+#if LOG_CONTEXT_ESTABLISHMENT
+		NetWarnEstablishment("Couldn't find establisher trying to set state %d:%s for %s", state, CContextView::GetStateName(state),
+			pListener ? pListener->GetName().c_str() : "Context");
 #else
 		;
 #endif
 	else
+	{
+		NetLogEstablishment(1, "Establishment: set state %d:%s for %s", state, CContextView::GetStateName(state),
+			pListener ? pListener->GetName().c_str() : "Context");
 		iter->second.state = state;
+	}
 }
 
 void CNetContextState::GC_Lazy_TickEstablishers()
@@ -2607,6 +2636,11 @@ void CNetContextState::GC_Lazy_TickEstablishers()
 		}
 		else
 		{
+#if LOG_CONTEXT_ESTABLISHMENT
+			NetLogEstablishment(2, "Establishment: executing tasks for '%s'", pListener ? pListener->GetName().c_str() : "Context");
+#endif
+
+
 #if ENABLE_DEBUG_KIT
 			est.pEst->DebugDraw();
 #endif
@@ -2625,7 +2659,7 @@ void CNetContextState::GC_Lazy_TickEstablishers()
 				case eCEP_Working:
 					if (!est.pEst->StepTo(s) || est.pEst->IsDone())
 					{
-#ifndef _RELEASE
+#if LOG_CONTEXT_ESTABLISHMENT
 						est.pEst->OutputTiming();
 #endif
 						est.phase = eCEP_Dead;
@@ -2645,6 +2679,10 @@ void CNetContextState::GC_Lazy_TickEstablishers()
 	SCOPED_GLOBAL_LOCK;
 	for (EstablishersMap::iterator iterCur = m_currentEstablishers.begin(); iterCur != m_currentEstablishers.end(); ++iterCur)
 	{
+#if LOG_CONTEXT_ESTABLISHMENT
+		NetLogEstablishment(2, "Establishment: commiting tasks for '%s'", iterCur->first ? iterCur->first->GetName().c_str() : "Context");
+#endif
+
 		EstablishersMap::iterator iterEst = m_allEstablishers.find(iterCur->first);
 
 		SContextEstablisher& estCur = iterCur->second;
@@ -2659,6 +2697,10 @@ void CNetContextState::GC_Lazy_TickEstablishers()
 		}
 		else
 		{
+#if LOG_CONTEXT_ESTABLISHMENT
+			NetLogEstablishment(1, "Establishment: removing establisher for '%s'", iterCur->first ? iterCur->first->GetName().c_str() : "Context");
+#endif
+
 			iterEst = m_allEstablishers.erase(iterEst);
 		}
 	}
@@ -2924,10 +2966,10 @@ void CNetContextState::NetDump(ENetDumpType type)
 				IEntity* pEntity = gEnv->pEntitySystem->GetEntity(iterNetIDs->first);
 				if (pEntity)
 				{
-					bool bIsDynamic = (pEntity->GetFlags() & ENTITY_FLAG_NEVER_NETWORK_STATIC) || (pEntity->GetId() >= LOCAL_PLAYER_ENTITY_ID);
-					const char* name = pEntity ? pEntity->GetName() : "<<no name>>";
+					const bool isDynamicEntity = !pEntity->IsLoadedFromLevelFile();
+					const char* szEntityName = pEntity->GetName();
 
-					if (((nLoop == 0) && !bIsDynamic) || ((nLoop == 1) && bIsDynamic))
+					if (((nLoop == 0) && !isDynamicEntity) || ((nLoop == 1) && isDynamicEntity))
 					{
 						string nom(pEntity->GetClass() ? pEntity->GetClass()->GetName() : "Unknown");
 						classesMap[nom]++;
@@ -2941,13 +2983,13 @@ void CNetContextState::NetDump(ENetDumpType type)
 							TNetChannelID chanid = pChan ? pChan->GetLocalChannelID() : 0;
 
 							NetLog("  %d %s %s flags(alc,ctrl,stc,own):%d%d%d%d aspects:%.2x class %s channel=%p controlchan %d",
-							       iterNetIDs->first, iterNetIDs->second.GetText(), name,
+							       iterNetIDs->first, iterNetIDs->second.GetText(), szEntityName,
 							       obj.main->bAllocated, obj.main->bControlled, obj.main->spawnType, obj.main->bOwned,
 							       obj.xtra->nAspectsEnabled, nom.c_str(), pChan, chanid);
 						}
 						else
 						{
-							NetLog("  %d %s %s class %s", iterNetIDs->first, iterNetIDs->second.GetText(), name, nom.c_str());
+							NetLog("  %d %s %s class %s", iterNetIDs->first, iterNetIDs->second.GetText(), szEntityName, nom.c_str());
 						}
 					}
 				}

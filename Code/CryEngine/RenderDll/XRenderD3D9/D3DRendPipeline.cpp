@@ -527,7 +527,7 @@ void CD3D9Renderer::RT_PreRenderScene(CRenderView* pRenderView)
 	CMotionBlur::InsertNewElements();
 	CRenderMesh::UpdateModified();
 
-	// Calcualte AA jitter
+	// Calculate AA jitter
 	if (bAllowPostAA)
 	{
 		if (GetS3DRend().IsStereoEnabled())
@@ -575,7 +575,6 @@ void CD3D9Renderer::RT_PreRenderScene(CRenderView* pRenderView)
 
 void CD3D9Renderer::RT_PostRenderScene(CRenderView* pRenderView)
 {
-
 	{
 		PROFILE_FRAME(ShadowViewsEndFrame);
 		for (auto& fr : pRenderView->m_shadows.m_renderFrustums)
@@ -608,12 +607,15 @@ void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 		pRenderView->SwitchUsageMode(CRenderView::eUsageModeReading);
 	}
 
-	const uint32 shaderRenderingFlags = pRenderView->GetShaderRenderingFlags();
+	uint32 shaderRenderingFlags = pRenderView->GetShaderRenderingFlags();
 
 	const bool bRecurse = pRenderView->IsRecursive();
 	const bool bSecondaryViewport = (shaderRenderingFlags & SHDF_SECONDARY_VIEWPORT) != 0;
+	const bool bFullRendering = (shaderRenderingFlags & SHDF_ZPASS) && (shaderRenderingFlags & SHDF_ALLOWPOSTPROCESS);
 	const bool bAllowPostProcess = pRenderView->IsPostProcessingEnabled();
 	const CTimeValue Time = iTimer->GetAsyncTime();
+
+	shaderRenderingFlags |= (!bFullRendering || bRecurse || bSecondaryViewport) * SHDF_FORWARD_MINIMAL;
 
 	// Only Billboard rendering doesn't use CRenderOutput
 	if (!pRenderView->GetRenderOutput() && !pRenderView->IsBillboardGenView())
@@ -662,15 +664,25 @@ void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 
 		GetGraphicsPipeline().Update(pRenderView, EShaderRenderingFlags(shaderRenderingFlags));
 
+		{
+			PROFILE_FRAME(WaitForParticleRendItems);
+			SyncComputeVerticesJobs();
+			UnLockParticleVideoMemory(GetRenderFrameID());
+		}
+
 		// Creating CompiledRenederObjects should happen after Update() call of the GraphicsPipeline, as it requires access to initialized Render Targets
 		// If some pipeline stage manages/retires resources used in compiled objects, they should also be handled in Update()
 		pRenderView->CompileModifiedRenderObjects();
+
+		// Sort transparent lists that might have refractive items that will require resolve passes.
+		// This is done after the CompileModifiedRenderObjects we need to project render itemss AABB.
+		pRenderView->StartOptimizeTransparentRenderItemsResolvesJob();
 
 		if (pRenderView->IsBillboardGenView())
 		{
 			GetGraphicsPipeline().ExecuteBillboards();
 		}
-		else if (bRecurse || bSecondaryViewport)
+		else if (shaderRenderingFlags & SHDF_FORWARD_MINIMAL)
 		{
 			GetGraphicsPipeline().ExecuteMinimumForwardShading();
 		}
@@ -678,15 +690,9 @@ void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 		{
 			GetGraphicsPipeline().ExecuteDebugger();
 		}
-		else if ((shaderRenderingFlags & SHDF_ZPASS) && (shaderRenderingFlags & SHDF_ALLOWPOSTPROCESS))
-		{
-			GetGraphicsPipeline().Execute();
-		}
 		else
 		{
-			CRY_ASSERT((shaderRenderingFlags & SHDF_ZPASS) == 0);
-			CRY_ASSERT((shaderRenderingFlags & SHDF_ALLOWPOSTPROCESS) == 0);
-			GetGraphicsPipeline().ExecuteMinimumForwardShading();
+			GetGraphicsPipeline().Execute();
 		}
 
 		//////////////////////////////////////////////////////////////////////////
@@ -711,10 +717,6 @@ void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 
 	////////////////////////////////////////////////
 
-	CFlashTextureSourceBase::RenderLights();
-
-	SRenderStatistics::Write().m_fRenderTime += iTimer->GetAsyncTime().GetDifferenceInSeconds(Time);
-
 	CV_r_nodrawnear            = nSaveDrawNear;
 	CV_r_watercaustics         = nSaveDrawCaustics;
 
@@ -722,6 +724,11 @@ void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 		PROFILE_FRAME(RenderViewEndFrame);
 		pRenderView->SwitchUsageMode(CRenderView::eUsageModeReadingDone);
 	}
+
+	SRenderStatistics::Write().m_fRenderTime += iTimer->GetAsyncTime().GetDifferenceInSeconds(Time);
+
+	if (CRendererCVars::CV_r_FlushToGPU >= 1)
+		GetDeviceObjectFactory().FlushToGPU();
 }
 
 //======================================================================================================
@@ -790,15 +797,17 @@ void CD3D9Renderer::SubmitRenderViewForRendering(int nFlags, const SRenderingPas
 			}
 		}
 
-		m_fRTTimeSceneRender += iTimer->GetAsyncTime().GetDifferenceInSeconds(timeRenderSceneBegin);
+		SRenderStatistics::Write().m_Summary.sceneTime += iTimer->GetAsyncTime().GetDifferenceInSeconds(timeRenderSceneBegin);
 	}, ERenderCommandFlags::None);
 }
 
 // Process all render item lists
-void CD3D9Renderer::EF_EndEf3D(const int nFlags, const int nPrecacheUpdateIdSlow, const int nPrecacheUpdateIdFast, const SRenderingPassInfo& passInfo)
+void CD3D9Renderer::EF_EndEf3D(const int nPrecacheUpdateIdSlow, const int nPrecacheUpdateIdFast, const SRenderingPassInfo& passInfo)
 {
 	ASSERT_IS_MAIN_THREAD(m_pRT)
 	auto nThreadID = gRenDev->GetMainThreadID();
+
+	const int nFlags = passInfo.GetIRenderView()->GetShaderRenderingFlags();
 
 	m_beginFrameCount--;
 
@@ -922,8 +931,7 @@ bool CD3D9Renderer::StoreGBufferToAtlas(const RectI& rcDst, int nSrcWidth, int n
 void CD3D9Renderer::EnablePipelineProfiler(bool bEnable)
 {
 #if defined(ENABLE_SIMPLE_GPU_TIMERS)
-	if (m_pPipelineProfiler)
-		m_pPipelineProfiler->SetEnabled(bEnable);
+	m_pPipelineProfiler->SetEnabled(bEnable);
 #endif
 }
 
@@ -981,11 +989,11 @@ void CD3D9Renderer::LogShaderImportMiss(const CShader* pShader)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void CD3D9Renderer::WaitForParticleBuffer()
+void CD3D9Renderer::WaitForParticleBuffer(int frameId)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
 	
-	gcpRendD3D.GetGraphicsPipeline().GetParticleBufferSet().WaitForFence();
+	gcpRendD3D.GetGraphicsPipeline().GetParticleBufferSet().WaitForFence(frameId);
 }
 //========================================================================================================
 

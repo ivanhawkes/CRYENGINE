@@ -121,10 +121,22 @@ CCryMatchMaking::CCryMatchMaking(CCryLobby* lobby, CCryLobbyService* service, EC
 	}
 
 	#if NETWORK_HOST_MIGRATION
-	gEnv->pConsole->GetCVar("net_hostHintingNATTypeOverride")->SetOnChangeCallback(HostHintingOverrideChanged);
-	gEnv->pConsole->GetCVar("net_hostHintingActiveConnectionsOverride")->SetOnChangeCallback(HostHintingOverrideChanged);
-	gEnv->pConsole->GetCVar("net_hostHintingPingOverride")->SetOnChangeCallback(HostHintingOverrideChanged);
-	gEnv->pConsole->GetCVar("net_hostHintingUpstreamBPSOverride")->SetOnChangeCallback(HostHintingOverrideChanged);
+	if (ICVar* pVar = gEnv->pConsole->GetCVar("net_hostHintingNATTypeOverride"))
+	{
+		pVar->AddOnChange(HostHintingOverrideChanged);
+	}
+	if (ICVar* pVar = gEnv->pConsole->GetCVar("net_hostHintingActiveConnectionsOverride"))
+	{
+		pVar->AddOnChange(HostHintingOverrideChanged);
+	}
+	if (ICVar* pVar = gEnv->pConsole->GetCVar("net_hostHintingPingOverride"))
+	{
+		pVar->AddOnChange(HostHintingOverrideChanged);
+	}
+	if (ICVar* pVar = gEnv->pConsole->GetCVar("net_hostHintingUpstreamBPSOverride"))
+	{
+		pVar->AddOnChange(HostHintingOverrideChanged);
+	}
 		#if ENABLE_HOST_MIGRATION_STATE_CHECK
 	m_hostMigrationStateCheckSession = CryLobbyInvalidSessionHandle;
 		#endif

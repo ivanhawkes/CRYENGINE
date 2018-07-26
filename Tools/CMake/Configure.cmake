@@ -125,6 +125,11 @@ if (NOT EXISTS "${CMAKE_BINARY_DIR}/ProjectCVarOverrides.h")
 endif ()
 list(APPEND global_defines "CRY_CVAR_OVERRIDE_FILE=\"${CMAKE_BINARY_DIR}/ProjectCVarOverrides.h\"")
 
+if (NOT EXISTS "${CMAKE_BINARY_DIR}/ProjectEngineDefineOverrides.h")
+	file(WRITE "${CMAKE_BINARY_DIR}/ProjectEngineDefineOverrides.h" "")
+endif ()
+list(APPEND global_defines "CRY_ENGINE_DEFINE_OVERRIDE_FILE=\"${CMAKE_BINARY_DIR}/ProjectEngineDefineOverrides.h\"")
+
 # Print current project settings
 MESSAGE(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
 MESSAGE(STATUS "CMAKE_GENERATOR = ${CMAKE_GENERATOR}")
@@ -247,9 +252,17 @@ if (OPTION_ENGINE)
 	if(NOT TARGET SDL2)
 		include("${TOOLS_CMAKE_DIR}/modules/SDL2.cmake")
 	endif()
+	if(NOT TARGET ncursesw)
+	   include("${TOOLS_CMAKE_DIR}/modules/ncurses.cmake")
+   endif()
+
+	option(OPTION_GEOM_CACHES "Enable Geom Cache" ON)
+
+	if(OPTION_GEOM_CACHES)
+		list(APPEND global_defines USE_GEOM_CACHES=1)
+	endif()
 endif()
 include("${TOOLS_CMAKE_DIR}/modules/Boost.cmake")
-include("${TOOLS_CMAKE_DIR}/modules/ncurses.cmake")
 
 # Apply global defines
 set_property(DIRECTORY "${CRYENGINE_DIR}" PROPERTY COMPILE_DEFINITIONS ${global_defines})

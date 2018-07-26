@@ -119,7 +119,7 @@ public:
 		m_bOpenForUndo = m_prefabObject->IsOpen();
 	}
 protected:
-	virtual const char* GetDescription() { return "Prefab's Open/Close"; };
+	virtual const char* GetDescription() { return "Prefab's Open/Close"; }
 
 	virtual void        Undo(bool bUndo)
 	{
@@ -841,7 +841,15 @@ void CPrefabManager::DeleteItem(IDataBaseItem* pItem)
 			pObjMan->DeleteObject(pObj);
 	}
 
-	__super::DeleteItem(pItem);
+	IDataBaseLibrary * pLibrary = pItem->GetLibrary();
+
+	CBaseLibraryManager::DeleteItem(pItem);
+
+	//cleanup the library when it's been emptied
+	if (pLibrary && !pLibrary->GetItemCount())
+	{
+		DeleteLibrary(pLibrary->GetName());
+	}
 }
 
 IDataBaseItem* CPrefabManager::LoadItem(const CryGUID& guid)
@@ -974,4 +982,3 @@ REGISTER_EDITOR_AND_SCRIPT_COMMAND(Private_PrefabCommands::PyCloseAll, prefab, c
 
 REGISTER_EDITOR_AND_SCRIPT_COMMAND(Private_PrefabCommands::PyReloadAll, prefab, reload_all,
                                    CCommandDescription("Reload all prefabs"));
-

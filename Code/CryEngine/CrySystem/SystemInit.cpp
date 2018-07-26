@@ -48,7 +48,7 @@
 #include <CryScriptSystem/IScriptSystem.h>
 #include <CrySystem/ICmdLine.h>
 #include <CrySystem/IProcess.h>
-#include <CryReflection/IReflection.h>
+#include <CryReflection/Framework.h>
 
 #include "CryPak.h"
 #include "XConsole.h"
@@ -74,7 +74,9 @@
 #include "DiskProfiler.h"
 #include "Watchdog.h"
 #include "Statoscope.h"
+#ifdef CRY_TESTING
 #include "TestSystem.h"
+#endif // CRY_TESTING
 #include "VisRegTest.h"
 #include "MTSafeAllocator.h"
 #include "NotificationNetwork.h"
@@ -533,7 +535,7 @@ struct SysSpecOverrideSink : public ILoadConfigurationEntrySink
 
 			if (applyCvar)
 			{
-				pCvar->Set(szValue);
+				pCvar->SetFromString(szValue);
 			}
 			else
 			{
@@ -1079,7 +1081,7 @@ bool CSystem::InitReflectionSystem(const SSystemInitParams& startupParams)
 {
 	LOADING_TIME_PROFILE_SECTION(GetISystem());
 
-	if (!InitializeEngineModule(startupParams, "CryReflection", cryiidof<Cry::Reflection::IReflection>(), true))
+	if (!InitializeEngineModule(startupParams, "CryReflection", cryiidof<Cry::Reflection::IModule>(), true))
 		return false;
 
 	if (!m_env.pReflection)
@@ -2047,16 +2049,14 @@ void CSystem::InitLog(const SSystemInitParams& startupParams)
 		}
 
 		string sLogFileName = startupParams.sLogFileName != nullptr ? startupParams.sLogFileName : DEFAULT_LOG_FILENAME;
-
-#if CRY_PLATFORM_WINDOWS
-		if (sLogFileName.size() > 0)
+		if (!sLogFileName.empty())
 		{
-			int instance = GetApplicationInstance();
-			if (instance != 0)
+			const int instance = GetApplicationInstance();
+			if (instance > 0)
 			{
 				string logFileExtension;
-				size_t extensionIndex = sLogFileName.find_last_of('.');
 				string logFileNamePrefix = sLogFileName;
+				const size_t extensionIndex = sLogFileName.find_last_of('.');
 				if (extensionIndex != string::npos)
 				{
 					logFileExtension = sLogFileName.substr(extensionIndex, sLogFileName.length() - extensionIndex);
@@ -2065,7 +2065,6 @@ void CSystem::InitLog(const SSystemInitParams& startupParams)
 				sLogFileName.Format("%s(%d)%s", logFileNamePrefix.c_str(), instance, logFileExtension.c_str());
 			}
 		}
-#endif
 
 		const ICmdLineArg* logfile = m_pCmdLine->FindArg(eCLAT_Pre, "logfile");
 		if (logfile && strlen(logfile->GetValue()) > 0)
@@ -2613,7 +2612,7 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 	}
 
 	// set unit test flag at start so multiple systems could handle initialization differently when needed
-	if (m_pCmdLine->FindArg(eCLAT_Pre, "run_unit_tests"))
+	if (m_pCmdLine->FindArg(eCLAT_Pre, "run_crytest"))
 	{
 		startupParams.bTesting = true;
 	}
@@ -2918,6 +2917,7 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 		//////////////////////////////////////////////////////////////////////////
 
 		//notify test system to init logs (since file system is setup).
+#ifdef CRY_TESTING
 		if (m_pTestSystem)
 		{
 			m_pTestSystem->InitLog();
@@ -2927,6 +2927,7 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 		{
 			CryTest::CTestSystem::InitCommands();
 		}
+#endif // CRY_TESTING
 
 		// Initialise after pLog and CPU feature initialization
 		// AND after console creation (Editor only)
@@ -2952,6 +2953,8 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 		{
 			return false;
 		}
+
+		Cry::Reflection::CTypeRegistrationChain::Execute(g_cvars.sys_reflection_natvis != 0);
 
 		m_pResourceManager->Init();
 
@@ -5434,6 +5437,10 @@ void CSystem::CreateSystemVars()
 
 #if CRY_PLATFORM_WINDOWS
 	REGISTER_CVAR2("sys_highrestimer", &g_cvars.sys_highrestimer, 0, VF_REQUIRE_APP_RESTART, "Enables high resolution system timer.");
+#endif
+
+#if CRY_PLATFORM_WINDOWS
+	REGISTER_CVAR2("sys_reflection_natvis", &g_cvars.sys_reflection_natvis, 0, VF_NULL, "Enables reflection .natvis file generation on startup.");
 #endif
 
 	g_cvars.sys_intromoviesduringinit = 0;

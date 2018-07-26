@@ -19,7 +19,7 @@
 
 // TODO: Replace when CNodeStyle was moved into its own header.
 #include "NodeGraph/NodeWidgetStyle.h"
-#include "NodeGraph/NodeHeaderWidgetStyle.h"
+#include "NodeGraph/HeaderWidgetStyle.h"
 #include "NodeGraph/NodeGraphViewStyle.h"
 #include "NodeGraph/ConnectionWidgetStyle.h"
 #include "NodeGraph/NodePinWidgetStyle.h"
@@ -121,6 +121,11 @@ void CParticleGraphModel::ToggleSoloNode(CNodeItem& node)
 			pNodeItem->SetVisible(true);
 		}
 	}
+}
+
+void CParticleGraphModel::OnNodeItemChanged(CryGraphEditor::CAbstractNodeItem* pItem)
+{
+	signalChanged();
 }
 
 CryGraphEditor::CAbstractNodeItem* CParticleGraphModel::CreateNode(QVariant identifier, const QPointF& position)
@@ -416,7 +421,7 @@ CNodeItem* CParticleGraphModel::CreateNodeItem(pfx2::IParticleComponent& compone
 void AddNodeStyle(CryGraphEditor::CNodeGraphViewStyle& viewStyle, const char* szStyleId, const char* szIcon, QColor color, bool coloredHeaderIconText = true)
 {
 	CryGraphEditor::CNodeWidgetStyle* pStyle = new CryGraphEditor::CNodeWidgetStyle(szStyleId, viewStyle);
-	CryGraphEditor::CNodeHeaderWidgetStyle& headerStyle = pStyle->GetHeaderWidgetStyle();
+	CryGraphEditor::CHeaderWidgetStyle& headerStyle = pStyle->GetHeaderWidgetStyle();
 	headerStyle.SetNodeIcon(QIcon());
 }
 

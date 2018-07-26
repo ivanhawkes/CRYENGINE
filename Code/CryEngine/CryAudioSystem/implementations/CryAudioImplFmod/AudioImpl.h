@@ -24,9 +24,8 @@ public:
 	// CryAudio::Impl::IImpl
 	virtual void                Update() override;
 	virtual ERequestStatus      Init(uint32 const objectPoolSize, uint32 const eventPoolSize) override;
-	virtual ERequestStatus      OnBeforeShutDown() override;
-	virtual ERequestStatus      ShutDown() override;
-	virtual ERequestStatus      Release() override;
+	virtual void                ShutDown() override;
+	virtual void                Release() override;
 	virtual ERequestStatus      OnLoseFocus() override;
 	virtual ERequestStatus      OnGetFocus() override;
 	virtual ERequestStatus      MuteAll() override;
@@ -74,11 +73,13 @@ private:
 	static char const* const s_szBusPrefix;
 	static char const* const s_szVcaPrefix;
 
-	void CreateVersionString(CryFixedStringT<MaxInfoStringLength>& stringOut) const;
-	bool LoadMasterBanks();
-	void UnloadMasterBanks();
-	void MuteMasterBus(bool const shouldMute);
-	void PauseMasterBus(bool const shouldPause);
+	void        CreateVersionString(CryFixedStringT<MaxInfoStringLength>& stringOut) const;
+	bool        LoadMasterBanks();
+	void        UnloadMasterBanks();
+	void        MuteMasterBus(bool const shouldMute);
+	void        PauseMasterBus(bool const shouldPause);
+
+	FMOD_RESULT LoadBankCustom(char const* const szFileName, FMOD::Studio::Bank** ppBank);
 
 	bool                                  m_isMuted;
 
@@ -86,6 +87,9 @@ private:
 
 	CryFixedStringT<MaxFilePathLength>    m_regularSoundBankFolder;
 	CryFixedStringT<MaxFilePathLength>    m_localizedSoundBankFolder;
+
+	CryFixedStringT<MaxFileNameLength>    m_masterBankPath;
+	CryFixedStringT<MaxFileNameLength>    m_masterBankStringsPath;
 
 	FMOD::Studio::System*                 m_pSystem;
 	FMOD::System*                         m_pLowLevelSystem;

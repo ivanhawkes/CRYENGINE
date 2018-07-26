@@ -166,6 +166,8 @@ struct SSystemCVars
 
 	int     sys_deferAudioUpdateOptim;
 	int     sys_filesystemCaseSensitivity;
+	
+	int sys_reflection_natvis;
 
 	PakVars pakVars;
 
@@ -353,7 +355,9 @@ public:
 	DRS::IDynamicResponseSystem* GetIDynamicResponseSystem()          { return m_env.pDynamicResponseSystem; }
 	IHardwareMouse*              GetIHardwareMouse() override         { return m_env.pHardwareMouse; }
 	ISystemEventDispatcher*      GetISystemEventDispatcher() override { return m_pSystemEventDispatcher; }
+#ifdef CRY_TESTING
 	CryTest::ITestSystem*        GetITestSystem() override            { return m_pTestSystem.get(); }
+#endif
 	IUserAnalyticsSystem*        GetIUserAnalyticsSystem() override   { return m_pUserAnalyticsSystem; }
 	Cry::IPluginManager*         GetIPluginManager() override         { return m_pPluginManager; }
 	IProjectManager*             GetIProjectManager() override;
@@ -791,6 +795,7 @@ private: // ------------------------------------------------------
 	ICVar* m_sys_menupreloadpacks;
 
 	ICVar* m_cvAIUpdate;
+	ICVar* m_rIntialWindowSizeRatio;
 	ICVar* m_rWidth;
 	ICVar* m_rHeight;
 	ICVar* m_rColorBits;
@@ -978,7 +983,7 @@ public:
 
 	virtual bool IsLoading() override
 	{
-		return (m_systemGlobalState <= ESYSTEM_GLOBAL_STATE_LEVEL_LOAD_END);
+		return (m_systemGlobalState < ESYSTEM_GLOBAL_STATE_LEVEL_LOAD_END);
 	}
 
 	virtual ESystemGlobalState GetSystemGlobalState(void) override;
@@ -1000,7 +1005,9 @@ public:
 protected: // -------------------------------------------------------------
 	ILoadingProgressListener*                 m_pProgressListener;
 	CCmdLine*                                 m_pCmdLine;
+#ifdef CRY_TESTING
 	std::unique_ptr<CryTest::ITestSystem>     m_pTestSystem;
+#endif
 	CVisRegTest*                              m_pVisRegTest;
 	CResourceManager*                         m_pResourceManager;
 	ITextModeConsole*                         m_pTextModeConsole;

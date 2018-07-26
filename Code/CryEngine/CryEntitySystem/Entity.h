@@ -301,7 +301,9 @@ public:
 	virtual IStatObj*                  GetStatObj(int nSlot) final;
 	virtual int                        SetStatObj(IStatObj* pStatObj, int nSlot, bool bUpdatePhysics, float mass = -1.0f) final;
 	virtual IParticleEmitter*          GetParticleEmitter(int nSlot) final;
+#if defined(USE_GEOM_CACHES)
 	virtual IGeomCacheRenderNode*      GetGeomCacheRenderNode(int nSlot) final;
+#endif
 	virtual IRenderNode*               GetRenderNode(int nSlot = -1) const final;
 	virtual bool                       IsRendered() const final;
 	virtual void                       PreviewRender(SEntityPreviewContext& context) final;
@@ -318,7 +320,7 @@ public:
 	virtual int                        LoadLight(int nSlot, SRenderLight* pLight) final;
 	int                                LoadLightImpl(int nSlot, SRenderLight* pLight);
 
-	virtual bool                       UpdateLightClipBounds(SRenderLight& light);
+	virtual bool                       UpdateLightClipBounds(SRenderLight& light) final;
 	int                                LoadCloudBlocker(int nSlot, const SCloudBlockerProperties& properties);
 	virtual int                        LoadFogVolume(int nSlot, const SFogVolumeProperties& properties) override;
 
@@ -427,6 +429,9 @@ public:
 	}
 	bool HasInternalFlag(EInternalFlag flag) const { return m_internalFlags.Check(flag); }
 
+	void RemoveSchematycObject() { m_pLegacySchematycData.reset(); };
+	void CreateSchematycObject(const SEntitySpawnParams& params);
+
 protected:
 	//////////////////////////////////////////////////////////////////////////
 	// Attachment.
@@ -441,8 +446,6 @@ private:
 	}
 	// Fetch the IA object from the AIObjectID, if any
 	IAIObject* GetAIObject() const;
-
-	void       CreateSchematycObject(const SEntitySpawnParams& params);
 
 	void       AddComponentInternal(std::shared_ptr<IEntityComponent> pComponent, const CryGUID& componentTypeID, IEntityComponent::SInitParams* pInitParams, const CEntityComponentClassDesc* pClassDescription);
 

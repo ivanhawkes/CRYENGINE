@@ -138,6 +138,7 @@ void CMainWindow::InitToolbar(QVBoxLayout* const pWindowLayout)
 	QObject::connect(pRefreshAudioSystemAction, &QAction::triggered, this, &CMainWindow::RefreshAudioSystem);
 
 	pToolBarsLayout->addWidget(m_pToolBar, 0, Qt::AlignLeft);
+	pToolBarsLayout->addWidget(m_pImplNameLabel, 0, Qt::AlignRight);
 
 	pWindowLayout->addLayout(pToolBarsLayout);
 }
@@ -348,13 +349,13 @@ void CMainWindow::Reload(bool const hasImplChanged /*= false*/)
 			CAudioControlsEditorPlugin::ReloadData(EReloadFlags::ReloadSystemControls | EReloadFlags::ReloadImplData | EReloadFlags::SendSignals);
 		}
 
+		if (m_pSystemControlsWidget != nullptr)
+		{
+			m_pSystemControlsWidget->Reset();
+		}
+
 		if (!hasImplChanged)
 		{
-			if (m_pSystemControlsWidget != nullptr)
-			{
-				m_pSystemControlsWidget->Reset();
-			}
-
 			if (m_pPropertiesWidget != nullptr)
 			{
 				m_pPropertiesWidget->OnSetSelectedAssets(GetSelectedAssets(), false);

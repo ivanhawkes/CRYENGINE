@@ -202,7 +202,7 @@ extern "C" IGameStartup * CreateGameStartup();
 
 CCryAction* CCryAction::m_pThis = 0;
 
-static const int s_saveGameFrameDelay = 3; // enough to render enough frames to display the save warning icon before the save generation
+static const int s_saveGameFrameDelay = 3; // Enough to render enough frames to display the save warning icon before the save generation.
 
 static const float s_loadSaveDelay = 0.5f;  // Delay between load/save operations.
 
@@ -251,7 +251,7 @@ void CCryAction::DumpMemInfo(const char* format, ...)
 	gEnv->pLog->LogWithType(ILog::eAlways, "Alloc=%" PRIu64 "d kb  String=%" PRIu64 " kb  STL-alloc=%" PRIu64 " kb  STL-wasted=%" PRIu64 " kb", (memInfo.allocated - memInfo.freed) >> 10, memInfo.CryString_allocated >> 10, memInfo.STL_allocated >> 10, memInfo.STL_wasted >> 10);
 }
 
-// no dot use iterators in first part because of calls of some listners may modify array of listeners (add new)
+// Do not use iterators in the first part. The array of listeners can be modified by calls to other listeners (they might add new listeners for example).
 #define CALL_FRAMEWORK_LISTENERS(func)                                  \
   {                                                                     \
     for (size_t n = 0; n < m_pGFListeners->size(); n++)                 \
@@ -2309,16 +2309,22 @@ bool CCryAction::CompleteInit()
 
 	InitCommands();
 
-#if defined(CRY_UNIT_TESTING)
+#if defined(CRY_TESTING)
+	// Flag is set when testing is specified from command line arguments
+	// This means testing is started by running the testing target or automation, instead of the console command "crytest".
+	// In this case we run all tests and quit afterwards.
 	if (gEnv->bTesting)
 	{
-		//in local unit tests we pass in -unit_test_open_failed to notify the user, in automated tests we don't pass in.
-		CryTest::EReporterType reporterType = m_pSystem->GetICmdLine()->FindArg(eCLAT_Pre, "unit_test_open_failed") ? 
-			CryTest::EReporterType::ExcelWithNotification : CryTest::EReporterType::Excel;
 		CryTest::ITestSystem* pTestSystem = m_pSystem->GetITestSystem();
 		CRY_ASSERT(pTestSystem != nullptr);
+
 		pTestSystem->SetQuitAfterTests(true);
-		pTestSystem->Run(reporterType);
+
+		// For manual testing we pass in -crytest_open_report to open the test report for the user, 
+		// in automated tests we don't. See Build.cmake.
+		pTestSystem->SetOpenReport(m_pSystem->GetICmdLine()->FindArg(eCLAT_Pre, "crytest_open_report") != nullptr);
+
+		pTestSystem->Run();
 	}
 #endif
 

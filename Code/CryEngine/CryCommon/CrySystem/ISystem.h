@@ -69,13 +69,21 @@ namespace CryAudio
 struct IAudioSystem;
 }
 struct ISystem;
-namespace Cry
-{
-namespace Reflection
-{
-struct IReflection;
-}
-}
+
+namespace Cry {
+namespace Reflection {
+
+struct IModule;
+
+} // ~Reflection namespace
+namespace Script {
+
+struct ICoreEnvironment;
+struct ICoreRegistry;
+
+} // ~Script namespace
+} // ~Cry namespace
+
 struct IFrameProfileSystem;
 struct IStatoscope;
 class IDiskProfiler;
@@ -125,7 +133,6 @@ struct IServiceNetwork;
 struct IUserAnalyticsSystem;
 struct IRemoteCommandManager;
 struct IWindowMessageHandler;
-struct SFunctor;
 struct IScaleformHelper;
 struct IProjectManager;
 class IImeManager;
@@ -135,7 +142,7 @@ class CBootProfilerRecord;
 
 namespace Cry
 {
-	struct IPluginManager;
+struct IPluginManager;
 }
 
 namespace UIFramework
@@ -176,12 +183,12 @@ struct IJobManager;
 struct ICrySchematycCore;
 namespace Schematyc2
 {
-	struct IFramework;
+struct IFramework;
 }
 
 namespace minigui
 {
-	struct IMiniGUI;
+struct IMiniGUI;
 }
 
 #define PROC_MENU     1
@@ -471,6 +478,12 @@ enum ESystemEvent
 	//! Sent when a new audio implementation is loaded.
 	ESYSTEM_EVENT_AUDIO_IMPLEMENTATION_LOADED,
 
+	//! Sent to inform the audio system to mute.
+	ESYSTEM_EVENT_AUDIO_MUTE,
+
+	//! Sent to inform the audio system to unmute.
+	ESYSTEM_EVENT_AUDIO_UNMUTE,
+
 	//! Purpose of this event is to enable different modules to communicate with each other without knowing about each other.
 	ESYSTEM_EVENT_URI,
 
@@ -638,33 +651,33 @@ struct SSystemInitParams
 	char                 szBinariesDir[256];
 
 #if !defined(RELEASE)
-	bool                 bEditor = false;       //!< When running in Editor mode.
+	bool bEditor = false;                       //!< When running in Editor mode.
 #endif
 
-	bool                 bPreview;            //!< When running in Preview mode (Minimal initialization).
-	bool                 bDedicatedServer;    //!< When running a dedicated server.
-	bool                 bExecuteCommandLine; //!< can be switched of to suppress the feature or do it later during the initialization.
-	bool                 bUIFramework;
-	bool                 bSkipFont;            //!< Don't load CryFont.dll.
-	bool                 bSkipRenderer;        //!< Don't load Renderer.
-	bool                 bSkipNetwork;         //!< Don't create Network.
-	bool                 bSkipLiveCreate;      //!< Don't create LiveCreate.
-	bool                 bSkipWebsocketServer; //!< Don't create the WebSocket server.
-	bool                 bMinimal;             //!< Don't load banks.
-	bool                 bSkipInput;           //!< do not load CryInput.
-	bool                 bTesting;             //!< When running CryUnitTest.
-	bool                 bNoRandom;            //!< use fixed generator init/seed.
-	bool                 bShaderCacheGen;      //!< When running in shadercache gen mode.
-	bool                 bUnattendedMode;      //!< When running as part of a build on build-machines: Prevent popping up of any dialog.
+	bool bPreview;                            //!< When running in Preview mode (Minimal initialization).
+	bool bDedicatedServer;                    //!< When running a dedicated server.
+	bool bExecuteCommandLine;                 //!< can be switched of to suppress the feature or do it later during the initialization.
+	bool bUIFramework;
+	bool bSkipFont;                            //!< Don't load CryFont.dll.
+	bool bSkipRenderer;                        //!< Don't load Renderer.
+	bool bSkipNetwork;                         //!< Don't create Network.
+	bool bSkipLiveCreate;                      //!< Don't create LiveCreate.
+	bool bSkipWebsocketServer;                 //!< Don't create the WebSocket server.
+	bool bMinimal;                             //!< Don't load banks.
+	bool bSkipInput;                           //!< do not load CryInput.
+	bool bTesting;                             //!< When running CryUnitTest.
+	bool bNoRandom;                            //!< use fixed generator init/seed.
+	bool bShaderCacheGen;                      //!< When running in shadercache gen mode.
+	bool bUnattendedMode;                      //!< When running as part of a build on build-machines: Prevent popping up of any dialog.
 
 #if CRY_PLATFORM_DURANGO
 	const EPLM_Event* pLastPLMEvent;
 #endif
 
-	ISystem*        pSystem;              //!< Pointer to existing ISystem interface, it will be reused if not NULL.
+	ISystem* pSystem;                     //!< Pointer to existing ISystem interface, it will be reused if not NULL.
 	//! Char szLocalIP[256];              //! local IP address (needed if we have several servers on one machine).
 #if CRY_PLATFORM_LINUX || CRY_PLATFORM_ANDROID || CRY_PLATFORM_APPLE
-	void (* pCheckFunc)(void*);            //!< Authentication function (must be set).
+	void (*pCheckFunc)(void*);             //!< Authentication function (must be set).
 #else
 	void* pCheckFunc;                     //!< Authentication function (must be set).
 #endif
@@ -754,7 +767,7 @@ DEFINE_ENUM_FLAG_OPERATORS(ELoadConfigurationFlags);
 
 struct SPlatformInfo
 {
-	const char* szProcessorType;
+	const char*  szProcessorType;
 	unsigned int numCoresAvailableToProcess;
 	unsigned int numLogicalProcessors;
 
@@ -774,11 +787,11 @@ struct SPlatformInfo
 
 	struct SWinInfo
 	{
-		char          path[MAX_PATH];
-		EWinVersion   ver;
-		uint32_t      build;
-		bool          is64Bit;
-		bool          vistaKB940105Required;
+		char        path[MAX_PATH];
+		EWinVersion ver;
+		uint32_t    build;
+		bool        is64Bit;
+		bool        vistaKB940105Required;
 	};
 
 	SWinInfo winInfo;
@@ -829,52 +842,54 @@ union UAsyncDipState
 //! \see ISystem
 struct SSystemGlobalEnvironment
 {
-	IDialogSystem*               pDialogSystem;
-	I3DEngine*                   p3DEngine;
-	INetwork*                    pNetwork;
-	INetContext*                 pNetContext;
-	ICryLobby*                   pLobby;
-	IScriptSystem*               pScriptSystem;
-	IPhysicalWorld*              pPhysicalWorld;
-	IFlowSystem*                 pFlowSystem;
-	IInput*                      pInput;
-	IStatoscope*                 pStatoscope;
-	ICryPak*                     pCryPak;
-	IFileChangeMonitor*          pFileChangeMonitor;
-	IProfileLogSystem*           pProfileLogSystem;
-	IParticleManager*            pParticleManager;
-	IOpticsManager*              pOpticsManager;
-	IFrameProfileSystem*         pFrameProfileSystem;
-	ITimer*                      pTimer;
-	ICryFont*                    pCryFont;
-	IGameFramework*              pGameFramework;
-	ILocalMemoryUsage*           pLocalMemoryUsage;
-	IEntitySystem*               pEntitySystem;
-	IConsole*                    pConsole;
-	CryAudio::IAudioSystem*      pAudioSystem;
-	ISystem*                     pSystem;
-	ICharacterManager*           pCharacterManager;
-	IAISystem*                   pAISystem;
-	ILog*                        pLog;
-	ICodeCheckpointMgr*          pCodeCheckpointMgr;
-	IMovieSystem*                pMovieSystem;
-	INameTable*                  pNameTable;
-	IRenderer*                   pRenderer;
-	IRenderAuxGeom*              pAuxGeomRenderer;
-	IHardwareMouse*              pHardwareMouse;
-	IMaterialEffects*            pMaterialEffects;
-	JobManager::IJobManager*     pJobManager;
-	IOverloadSceneManager*       pOverloadSceneManager;
-	IFlashUI*                    pFlashUI;
-	UIFramework::IUIFramework*   pUIFramework;
-	IServiceNetwork*             pServiceNetwork;
-	IRemoteCommandManager*       pRemoteCommandManager;
-	DRS::IDynamicResponseSystem* pDynamicResponseSystem;
-	IThreadManager*              pThreadManager;
-	IScaleformHelper*            pScaleformHelper; // nullptr when Scaleform support is not enabled
-	ICrySchematycCore*           pSchematyc;
-	Schematyc2::IFramework*      pSchematyc2;
-	Cry::Reflection::IReflection* pReflection;
+	IDialogSystem*                 pDialogSystem;
+	I3DEngine*                     p3DEngine;
+	INetwork*                      pNetwork;
+	INetContext*                   pNetContext;
+	ICryLobby*                     pLobby;
+	IScriptSystem*                 pScriptSystem;
+	IPhysicalWorld*                pPhysicalWorld;
+	IFlowSystem*                   pFlowSystem;
+	IInput*                        pInput;
+	IStatoscope*                   pStatoscope;
+	ICryPak*                       pCryPak;
+	IFileChangeMonitor*            pFileChangeMonitor;
+	IProfileLogSystem*             pProfileLogSystem;
+	IParticleManager*              pParticleManager;
+	IOpticsManager*                pOpticsManager;
+	IFrameProfileSystem*           pFrameProfileSystem;
+	ITimer*                        pTimer;
+	ICryFont*                      pCryFont;
+	IGameFramework*                pGameFramework;
+	ILocalMemoryUsage*             pLocalMemoryUsage;
+	IEntitySystem*                 pEntitySystem;
+	IConsole*                      pConsole;
+	CryAudio::IAudioSystem*        pAudioSystem;
+	ISystem*                       pSystem;
+	ICharacterManager*             pCharacterManager;
+	IAISystem*                     pAISystem;
+	ILog*                          pLog;
+	ICodeCheckpointMgr*            pCodeCheckpointMgr;
+	IMovieSystem*                  pMovieSystem;
+	INameTable*                    pNameTable;
+	IRenderer*                     pRenderer;
+	IRenderAuxGeom*                pAuxGeomRenderer;
+	IHardwareMouse*                pHardwareMouse;
+	IMaterialEffects*              pMaterialEffects;
+	JobManager::IJobManager*       pJobManager;
+	IOverloadSceneManager*         pOverloadSceneManager;
+	IFlashUI*                      pFlashUI;
+	UIFramework::IUIFramework*     pUIFramework;
+	IServiceNetwork*               pServiceNetwork;
+	IRemoteCommandManager*         pRemoteCommandManager;
+	DRS::IDynamicResponseSystem*   pDynamicResponseSystem;
+	IThreadManager*                pThreadManager;
+	IScaleformHelper*              pScaleformHelper;  // nullptr when Scaleform support is not enabled
+	ICrySchematycCore*             pSchematyc;
+	Schematyc2::IFramework*        pSchematyc2;
+	Cry::Reflection::IModule*      pReflection;
+	Cry::Script::ICoreEnvironment* pScriptCoreEnv;
+	Cry::Script::ICoreRegistry*    pScriptCoreRegistry;
 
 #if CRY_PLATFORM_DURANGO
 	void*      pWindow;
@@ -918,16 +933,16 @@ struct SSystemGlobalEnvironment
 	//////////////////////////////////////////////////////////////////////////
 
 #if defined(USE_CRY_ASSERT)
-	bool ignoreAllAsserts = false;
-	bool noAssertDialog   = false;
-	bool stoppedOnAssert = false;
+	bool            ignoreAllAsserts = false;
+	bool            noAssertDialog = false;
+	bool            stoppedOnAssert = false;
 	ECryAssertLevel cryAssertLevel = ECryAssertLevel::Enabled;
 #endif
 
 	//! Whether we are running unattended, disallows message boxes and other blocking events that require human intervention
-	bool bUnattendedMode;
+	bool          bUnattendedMode;
 	//! Whether we are unit testing
-	bool bTesting;
+	bool          bTesting;
 
 	bool          bNoRandomSeed;
 
@@ -964,7 +979,7 @@ struct SSystemGlobalEnvironment
 	}
 
 #if CRY_PLATFORM_DESKTOP
-#if !defined(RELEASE)
+	#if !defined(RELEASE)
 	ILINE void SetIsEditor(bool isEditor)
 	{
 		bEditor = isEditor;
@@ -979,7 +994,7 @@ struct SSystemGlobalEnvironment
 	{
 		bEditorSimulationMode = isEditorSimulationMode;
 	}
-#endif
+	#endif
 
 	ILINE void SetIsDedicated(bool isDedicated)
 	{
@@ -990,9 +1005,9 @@ struct SSystemGlobalEnvironment
 
 	ILINE void SetIsClient(bool isClient)
 	{
-#if !defined(DEDICATED_SERVER)
+	#if !defined(DEDICATED_SERVER)
 		bClient = isClient;
-#endif
+	#endif
 	}
 #endif
 
@@ -1095,16 +1110,16 @@ struct SSystemGlobalEnvironment
 	bool bDedicatedArbitrator;
 
 private:
-#if !defined(RELEASE)
-	bool bEditor;          //!< Engine is running under editor.
-	bool bEditorGameMode;  //!< Engine is in editor game mode.
+	#if !defined(RELEASE)
+	bool bEditor;               //!< Engine is running under editor.
+	bool bEditorGameMode;       //!< Engine is in editor game mode.
 	bool bEditorSimulationMode; //!< Engine is in editor Physics/AI simulation mode.
-#endif
+	#endif
 
-#if !defined(DEDICATED_SERVER)
+	#if !defined(DEDICATED_SERVER)
 	bool bDedicated;       //!< Engine is in dedicated.
 	bool bClient;
-#endif
+	#endif
 #endif
 
 	bool m_isFMVPlaying;
@@ -1214,7 +1229,7 @@ struct ISystem
 	//! it may call this method to render the essential statistics.
 	virtual void RenderStatistics() = 0;
 	virtual void RenderPhysicsStatistics(IPhysicalWorld* pWorld) = 0;
-	
+
 	//! Returns the current used memory.
 	virtual uint32 GetUsedMemory() = 0;
 
@@ -1392,10 +1407,10 @@ struct ISystem
 
 	//! Sets the camera that will be used for main rendering next frame.
 	//! This has to be set before Cry::IEnginePlugin::UpdateBeforeFinalizeCamera is called in order to be set in time for occlusion culling and rendering.
-	virtual void                         SetViewCamera(CCamera& Camera) = 0;
+	virtual void SetViewCamera(CCamera& Camera) = 0;
 	//! Gets the camera that will be used for main rendering next frame
 	//! Note that the camera might be overridden by user code, and is only considered final after Cry::IEnginePlugin::UpdateBeforeFinalizeCamera has been executed.
-	virtual const CCamera&               GetViewCamera() const = 0;
+	virtual const CCamera& GetViewCamera() const = 0;
 
 	//! When ignore update sets to true, system will ignore and updates and render calls.
 	virtual void IgnoreUpdates(bool bIgnore) = 0;
@@ -1420,7 +1435,7 @@ struct ISystem
 	virtual void EndLoadingSectionProfiling(CLoadingTimeProfiler* pProfiler) = 0;
 
 	//! Starts function profiling with bootprofiler (session must be started).
-	virtual CBootProfilerRecord* StartBootSectionProfiler(const char* name, const char* args,EProfileDescription type) = 0;
+	virtual CBootProfilerRecord* StartBootSectionProfiler(const char* name, const char* args, EProfileDescription type) = 0;
 
 	//! Ends function profiling with bootprofiler.
 	virtual void StopBootSectionProfiler(CBootProfilerRecord* record) = 0;
@@ -1471,7 +1486,7 @@ struct ISystem
 	//! \param pCallback 0 means normal LoadConfigVar behaviour is used.
 	//! \param bQuiet when set to true will suppress warning message if config file is not found.
 	virtual void LoadConfiguration(const char* sFilename, ILoadConfigurationEntrySink* pSink = 0, ELoadConfigurationType configType = eLoadConfigDefault,
-		ELoadConfigurationFlags flags = ELoadConfigurationFlags::None) = 0;
+	                               ELoadConfigurationFlags flags = ELoadConfigurationFlags::None) = 0;
 
 	//! Retrieves current configuration specification for client or server.
 	//! \param bClient If true returns local client config spec, if false returns server config spec.
@@ -1575,8 +1590,10 @@ struct ISystem
 	//! \note For debugging use only!, queries current C++ call stack.
 	virtual void debug_LogCallStack(int nMaxFuncs = 32, int nFlags = 0) = 0;
 
+#ifdef CRY_TESTING
 	//! \return 0 if not activated, activate through #System.ApplicationTest.
 	virtual CryTest::ITestSystem* GetITestSystem() = 0;
+#endif
 
 	//! Execute command line arguments. Should be after init game.
 	//! Example: +g_gametype ASSAULT +map "testy"
@@ -1698,11 +1715,11 @@ inline ISystem* GetISystem()
 //! Gets the system scheduler interface.
 inline ISystemScheduler* GetISystemScheduler(void)
 {
-#if defined(SYS_ENV_AS_STRUCT)
+	#if defined(SYS_ENV_AS_STRUCT)
 	return gEnv->pSystemScheduler;
-#else
+	#else
 	return gEnv != nullptr ? gEnv->pSystemScheduler : nullptr;
-#endif // defined(SYS_ENV_AS_STRUCT)
+	#endif // defined(SYS_ENV_AS_STRUCT)
 }
 #endif // defined(MAP_LOADING_SLICING)
 //! This function must be called once by each module at the beginning, to setup global pointers.
@@ -1758,34 +1775,91 @@ inline void CryWarning(EValidatorModule module, EValidatorSeverity severity, con
 	#define CONST_CVAR_FLAGS (VF_CHEAT)
 #endif
 
+#ifdef EXCLUDE_NORMAL_LOG       // setting this removes a lot of logging to reduced code size (useful for consoles)
+
+	#define CryLog(...)       ((void)0)
+	#define CryComment(...)   ((void)0)
+	#define CryLogAlways(...) ((void)0)
+
+#else // EXCLUDE_NORMAL_LOG
+
+//! Simple logs of data with low verbosity.
+void        CryLog(const char*, ...) PRINTF_PARAMS(1, 2);
+inline void CryLog(const char* format, ...)
+{
+	// Fran: we need these guards for the testing framework to work
+	if (gEnv && gEnv->pSystem && gEnv->pLog)
+	{
+		va_list args;
+		va_start(args, format);
+		gEnv->pLog->LogV(ILog::eMessage, format, args);
+		va_end(args);
+	}
+}
+//! Very rarely used log comment.
+void        CryComment(const char*, ...) PRINTF_PARAMS(1, 2);
+inline void CryComment(const char* format, ...)
+{
+	// Fran: we need these guards for the testing framework to work
+	if (gEnv && gEnv->pSystem && gEnv->pLog)
+	{
+		va_list args;
+		va_start(args, format);
+		gEnv->pLog->LogV(ILog::eComment, format, args);
+		va_end(args);
+	}
+}
+//! Logs important data that must be printed regardless verbosity.
+void        CryLogAlways(const char*, ...) PRINTF_PARAMS(1, 2);
+inline void CryLogAlways(const char* format, ...)
+{
+	// log should not be used before system is ready
+	// error before system init should be handled explicitly
+
+	// Fran: we need these guards for the testing framework to work
+
+	if (gEnv && gEnv->pSystem && gEnv->pLog)
+	{
+		//		assert(gEnv);
+		//		assert(gEnv->pSystem);
+
+		va_list args;
+		va_start(args, format);
+		gEnv->pLog->LogV(ILog::eAlways, format, args);
+		va_end(args);
+	}
+}
+
+#endif // EXCLUDE_NORMAL_LOG
+
 #include <CrySystem/IConsole.h>
 
 #if (defined(_LAUNCHER) && defined(CRY_IS_MONOLITHIC_BUILD)) || !defined(_LIB)
 extern std::vector<const char*> g_moduleCommands;
 extern std::vector<const char*> g_moduleCVars;
-#define MODULE_REGISTER_COMMAND(name) g_moduleCommands.push_back(name)
-#define MODULE_REGISTER_CVAR(name) g_moduleCVars.push_back(name)
+	#define MODULE_REGISTER_COMMAND(name) g_moduleCommands.push_back(name)
+	#define MODULE_REGISTER_CVAR(name)    g_moduleCVars.push_back(name)
 #else
-#define MODULE_REGISTER_COMMAND(name) static_cast<void>(0)
-#define MODULE_REGISTER_CVAR(name) static_cast<void>(0)
+	#define MODULE_REGISTER_COMMAND(name) static_cast<void>(0)
+	#define MODULE_REGISTER_CVAR(name)    static_cast<void>(0)
 #endif
 
 struct ConsoleRegistrationHelper
 {
-	static CRY_FORCE_INLINE void AddCommand(const char* szCommand, ConsoleCommandFunc func, int flags = 0, const char* szHelp = nullptr, bool bIsManagedExternally = false)
+	static void AddCommand(const char* szCommand, ConsoleCommandFunc func, int flags = 0, const char* szHelp = nullptr, bool bIsManagedExternally = false)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		MODULE_REGISTER_COMMAND(szCommand);
 		gEnv->pConsole->AddCommand(szCommand, func, flags, szHelp, bIsManagedExternally);
 	}
-	static CRY_FORCE_INLINE void AddCommand(const char* szName, const char* szScriptFunc, int flags = 0, const char* szHelp = nullptr)
+	static void AddCommand(const char* szName, const char* szScriptFunc, int flags = 0, const char* szHelp = nullptr)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		MODULE_REGISTER_COMMAND(szName);
 		gEnv->pConsole->AddCommand(szName, szScriptFunc, flags, szHelp);
 	}
 
-	static CRY_FORCE_INLINE ICVar* RegisterString(const char* szName, const char* szValue, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
+	static ICVar* RegisterString(const char* szName, const char* szValue, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		if (gEnv && gEnv->pConsole)
@@ -1798,7 +1872,7 @@ struct ConsoleRegistrationHelper
 			return nullptr;
 		}
 	}
-	static CRY_FORCE_INLINE ICVar* RegisterInt(const char* szName, int value, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
+	static ICVar* RegisterInt(const char* szName, int value, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		if (gEnv && gEnv->pConsole)
@@ -1811,7 +1885,7 @@ struct ConsoleRegistrationHelper
 			return nullptr;
 		}
 	}
-	static CRY_FORCE_INLINE ICVar* RegisterInt64(const char* szName, int64 value, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
+	static ICVar* RegisterInt64(const char* szName, int64 value, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		if (gEnv && gEnv->pConsole)
@@ -1824,7 +1898,7 @@ struct ConsoleRegistrationHelper
 			return nullptr;
 		}
 	}
-	static CRY_FORCE_INLINE ICVar* RegisterFloat(const char* szName, float value, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
+	static ICVar* RegisterFloat(const char* szName, float value, int flags, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		if (gEnv && gEnv->pConsole)
@@ -1839,12 +1913,12 @@ struct ConsoleRegistrationHelper
 	}
 
 	template<class T, class U>
-	static CRY_FORCE_INLINE ICVar* Register(const char* szName, T* pSrc, U defaultValue, int flags = 0, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr, bool bAllowModify = true)
+	static ICVar* Register(const char* szName, T* pSrc, U defaultValue, int flags = 0, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr, bool bAllowModify = true)
 	{
 		return RegisterImpl(get_enum_tag<T>(), szName, pSrc, defaultValue, flags, szHelp, pChangeFunc, bAllowModify);
 	}
 
-	static CRY_FORCE_INLINE ICVar* Register(ICVar* pVar)
+	static ICVar* Register(ICVar* pVar)
 	{
 		CRY_ASSERT(gEnv && gEnv->pConsole);
 		if (gEnv && gEnv->pConsole)
@@ -1866,16 +1940,15 @@ private:
 	struct get_enum_tag : std::conditional<std::is_enum<T>::value, enum_tag, non_enum_tag>::type {};
 
 	template<class T, class U>
-	static CRY_FORCE_INLINE ICVar* RegisterImpl(enum_tag, const char* szName, T* pSrc, U defaultValue, int flags = 0, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr, bool bAllowModify = true)
+	static ICVar* RegisterImpl(enum_tag, const char* szName, T* pSrc, U defaultValue, int flags = 0, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr, bool bAllowModify = true)
 	{
 		using ET = typename std::underlying_type<T>::type;
 		static_assert(std::is_same<ET, int>::value, "Invalid template type!");
 		return RegisterImpl(non_enum_tag(), szName, reinterpret_cast<ET*>(pSrc), static_cast<ET>(defaultValue), flags, szHelp, pChangeFunc, bAllowModify);
 	}
 
-
 	template<class T, class U>
-	static CRY_FORCE_INLINE ICVar* RegisterImpl(non_enum_tag, const char* szName, T* pSrc, U defaultValue, int flags = 0, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr, bool bAllowModify = true)
+	static ICVar* RegisterImpl(non_enum_tag, const char* szName, T* pSrc, U defaultValue, int flags = 0, const char* szHelp = "", ConsoleVarFunc pChangeFunc = nullptr, bool bAllowModify = true)
 	{
 		static_assert(std::is_same<T, int>::value || std::is_same<T, float>::value || std::is_same<T, const char*>::value, "Invalid template type!");
 		static_assert(std::is_convertible<U, T>::value, "Invalid default value type!");
@@ -1952,68 +2025,67 @@ struct SDummyCVar : ICVar
 	#endif
 	}
 
-	void            Release() override                                              {}
-	int             GetIVal() const override                                        { WarnUse(); return static_cast<int>(value); }
-	int64           GetI64Val() const override                                      { WarnUse(); return static_cast<int64>(value); }
-	float           GetFVal() const override                                        { WarnUse(); return static_cast<float>(value); }
-	const char*     GetString() const override                                      { return ""; }
-	const char*     GetDataProbeString() const override                             { return ""; }
-	void            Set(const char* s) override                                     { if (SQueryTypeEnum<T>::ParseString(s) != value) InvalidAccess(); }
-	void            ForceSet(const char* s) override                                { Set(s); }
-	void            Set(float f) override                                           { if (static_cast<T>(f) != value) InvalidAccess(); }
-	void            Set(int i) override                                             { if (static_cast<T>(i) != value) InvalidAccess(); }
-	void            Set(int64 i) override                                           { if (static_cast<T>(i) != value) InvalidAccess(); }
-	void            SetFromString(const char* s) override                           { if (SQueryTypeEnum<T>::ParseString(s) != value) InvalidAccess(); }
-	void            ClearFlags(int flags) override                                  {}
-	int             GetFlags() const override                                       { return VF_CONST_CVAR | VF_READONLY; }
-	int             SetFlags(int flags) override                                    { return 0; }
-	ECVarType       GetType() const override                                        { return SQueryTypeEnum<T>::type; }
-	const char*     GetHelp() override                                              { return NULL; }
-	bool            IsConstCVar() const override                                    { return true; }
-	void            SetOnChangeCallback(ConsoleVarFunc pChangeFunc) override        { (void)pChangeFunc; }
-	uint64          AddOnChangeFunctor(const SFunctor& /*changeFunctor*/) override  { return 0;  }
-	uint64          GetNumberOfOnChangeFunctors() const override                    { return 0; }
-	const SFunctor& GetOnChangeFunctor(uint64 nFunctorIndex) const override         { InvalidAccess();  static SFunctor oDummy; return oDummy; }
-	bool            RemoveOnChangeFunctor(const uint64 nElement) override           { return true; }
-	ConsoleVarFunc  GetOnChangeCallback() const override                            { InvalidAccess(); return NULL; }
-	void            GetMemoryUsage(class ICrySizer* pSizer) const override          {}
-	int             GetRealIVal() const override                                    { return GetIVal(); }
-	void            SetDataProbeString(const char* pDataProbeString)                { InvalidAccess(); }
-	void            SetMinValue(int min) override                                   {}
-	void            SetMinValue(float min) override                                 {}
-	void            SetMinValue(int64 min) override                                 {}
-	void            SetMaxValue(int max) override                                   {}
-	void            SetMaxValue(float max) override                                 {}
-	void            SetMaxValue(int64 max) override                                 {}
-	void            SetAllowedValues(std::initializer_list<int> values) override    {}
-	void            SetAllowedValues(std::initializer_list<float> values) override  {}
-	void            SetAllowedValues(std::initializer_list<string> values) override {}
-	void            SetAllowedValues(std::initializer_list<int64> values) override  {}
+	void                         Release() override                                              {}
+	int                          GetIVal() const override                                        { WarnUse(); return static_cast<int>(value); }
+	int64                        GetI64Val() const override                                      { WarnUse(); return static_cast<int64>(value); }
+	float                        GetFVal() const override                                        { WarnUse(); return static_cast<float>(value); }
+	const char*                  GetString() const override                                      { return ""; }
+	const char*                  GetDataProbeString() const override                             { return ""; }
+	void                         Set(const char* s) override                                     { if (SQueryTypeEnum<T>::ParseString(s) != value) InvalidAccess(); }
+	void                         ForceSet(const char* s) override                                { Set(s); }
+	void                         Set(const float f) override                                     { if (static_cast<T>(f) != value) InvalidAccess(); }
+	void                         Set(const int i) override                                       { if (static_cast<T>(i) != value) InvalidAccess(); }
+	void                         Set(int64 i) override                                           { if (static_cast<T>(i) != value) InvalidAccess(); }
+	void                         SetFromString(const char* szValue) override                     { Set(szValue); }
+	void                         ClearFlags(int flags) override                                  {}
+	int                          GetFlags() const override                                       { return VF_CONST_CVAR | VF_READONLY; }
+	int                          SetFlags(int flags) override                                    { return 0; }
+	ECVarType                    GetType() const override                                        { return SQueryTypeEnum<T>::type; }
+	const char*                  GetHelp() const override                                        { return NULL; }
+	bool                         IsConstCVar() const override                                    { return true; }
+	uint64                       AddOnChange(SmallFunction<void()> /*changeFunctor*/) override   { return 0; }
+	uint64                       GetNumberOfOnChangeFunctors() const override                    { return 0; }
+	const SmallFunction<void()>& GetOnChangeFunctor(uint64 nFunctorIndex) const override         { InvalidAccess();  static SmallFunction<void()> oDummy; return oDummy; }
+	bool                         RemoveOnChangeFunctor(const uint64 nElement) override           { return true; }
+	void                         GetMemoryUsage(class ICrySizer* pSizer) const override          {}
+	int                          GetRealIVal() const override                                    { return GetIVal(); }
+	void                         SetDataProbeString(const char* pDataProbeString)                { InvalidAccess(); }
+	void                         SetMinValue(int min) override                                   {}
+	void                         SetMinValue(int64 min) override                                 {}
+	void                         SetMinValue(float min) override                                 {}
+	void                         SetMaxValue(int max) override                                   {}
+	void                         SetMaxValue(int64 max) override                                 {}
+	void                         SetMaxValue(float max) override                                 {}
+	void                         SetAllowedValues(std::initializer_list<int> values) override    {}
+	void                         SetAllowedValues(std::initializer_list<int64> values) override  {}
+	void                         SetAllowedValues(std::initializer_list<float> values) override  {}
+	void                         SetAllowedValues(std::initializer_list<string> values) override {}
+	bool                         IsOwnedByConsole() const override                               { return true; }
 };
 }
 
-	#define REGISTER_DUMMY_CVAR(type, name, value)                                                        \
-	  do {                                                                                                \
-	    static struct DummyCVar : Detail::SDummyCVar<type>                                                \
-	    {                                                                                                 \
-	      DummyCVar() : Detail::SDummyCVar<type>(value) {}                                                \
-	      const char* GetName() const { return name; }                                                    \
-	    } DummyStaticInstance;                                                                            \
-	    if (!(gEnv->pConsole != nullptr ? ConsoleRegistrationHelper::Register(&DummyStaticInstance) : 0)) \
-	    {                                                                                                 \
-	      __debugbreak();                                                                                 \
-	      CryFatalError("Can not register dummy CVar");                                                   \
-	    }                                                                                                 \
-	  } while (0)
+	#define REGISTER_DUMMY_CVAR(type, name, value)                                                      \
+	do {                                                                                                \
+		static struct DummyCVar : Detail::SDummyCVar<type>                                                \
+		{                                                                                                 \
+			DummyCVar() : Detail::SDummyCVar<type>(value) {}                                                \
+			const char* GetName() const { return name; }                                                    \
+		} DummyStaticInstance;                                                                            \
+		if (!(gEnv->pConsole != nullptr ? ConsoleRegistrationHelper::Register(&DummyStaticInstance) : 0)) \
+		{                                                                                                 \
+			__debugbreak();                                                                                 \
+			CryFatalError("Can not register dummy CVar");                                                   \
+		}                                                                                                 \
+	} while (0)
 
 	#define CONSOLE_CONST_CVAR_MODE
-	#define DeclareConstIntCVar(name, defaultValue)                          enum : int { name = GetCVarOverride(#name, defaultValue) }
-	#define DeclareStaticConstIntCVar(name, defaultValue)                    enum : int { name = GetCVarOverride(#name, defaultValue) }
-	#define DefineConstIntCVarName(strname, name, defaultValue, flags, help) { static_assert(static_cast<int>(GetCVarOverride(#name, defaultValue)) == static_cast<int>(name), "Unexpected value!"); REGISTER_DUMMY_CVAR(int, strname, GetCVarOverride(#name, defaultValue)); }
-	#define DefineConstIntCVar(name, defaultValue, flags, help)              { static_assert(static_cast<int>(GetCVarOverride(#name, defaultValue)) == static_cast<int>(name), "Unexpected value!"); REGISTER_DUMMY_CVAR(int, ( # name), GetCVarOverride(#name, defaultValue)); }
+	#define DeclareConstIntCVar(name, defaultValue)                          enum : int { name = GetCVarOverride( # name, defaultValue) }
+	#define DeclareStaticConstIntCVar(name, defaultValue)                    enum : int { name = GetCVarOverride( # name, defaultValue) }
+	#define DefineConstIntCVarName(strname, name, defaultValue, flags, help) { static_assert(static_cast<int>(GetCVarOverride( # name, defaultValue)) == static_cast<int>(name), "Unexpected value!"); REGISTER_DUMMY_CVAR(int, strname, GetCVarOverride( # name, defaultValue)); }
+	#define DefineConstIntCVar(name, defaultValue, flags, help)              { static_assert(static_cast<int>(GetCVarOverride( # name, defaultValue)) == static_cast<int>(name), "Unexpected value!"); REGISTER_DUMMY_CVAR(int, ( # name), GetCVarOverride( # name, defaultValue)); }
 
 //! DefineConstIntCVar2 is deprecated, any such instance can be converted to the 3 variant by removing the quotes around the first parameter.
-	#define DefineConstIntCVar3(name, _var_, defaultValue, flags, help) { static_assert(static_cast<int>(GetCVarOverride(#name, defaultValue)) == static_cast<int>(_var_), "Unexpected value!"); REGISTER_DUMMY_CVAR(int, name, GetCVarOverride(#name, defaultValue)); }
+	#define DefineConstIntCVar3(name, _var_, defaultValue, flags, help) { static_assert(static_cast<int>(GetCVarOverride( # name, defaultValue)) == static_cast<int>(_var_), "Unexpected value!"); REGISTER_DUMMY_CVAR(int, name, GetCVarOverride( # name, defaultValue)); }
 	#define AllocateConstIntCVar(scope, name)
 
 	#define DefineConstFloatCVar(name, flags, help) { REGISTER_DUMMY_CVAR(float, ( # name), name ## Default); }
@@ -2023,19 +2095,19 @@ struct SDummyCVar : ICVar
 
 #else
 
-	#define DeclareConstIntCVar(name, defaultValue)       int name
-	#define DeclareStaticConstIntCVar(name, defaultValue) static int name
+	#define DeclareConstIntCVar(name, defaultValue)                          int name
+	#define DeclareStaticConstIntCVar(name, defaultValue)                    static int name
 	#define DefineConstIntCVarName(strname, name, defaultValue, flags, help) ConsoleRegistrationHelper::Register(strname, &name, defaultValue, flags | CONST_CVAR_FLAGS, CVARHELP(help))
-	#define DefineConstIntCVar(name, defaultValue, flags, help) ConsoleRegistrationHelper::Register(( # name), &name, defaultValue, flags | CONST_CVAR_FLAGS, CVARHELP(help), nullptr, false)
+	#define DefineConstIntCVar(name, defaultValue, flags, help)              ConsoleRegistrationHelper::Register(( # name), &name, defaultValue, flags | CONST_CVAR_FLAGS, CVARHELP(help), nullptr, false)
 
 //! DefineConstIntCVar2 is deprecated, any such instance can be converted to the 3 variant by removing the quotes around the first parameter.
 	#define DefineConstIntCVar3(_name, _var, _def_val, _flags, help) ConsoleRegistrationHelper::Register(_name, &(_var), (_def_val), (_flags) | CONST_CVAR_FLAGS, CVARHELP(help), nullptr, false)
-	#define AllocateConstIntCVar(scope, name) int scope::name
+	#define AllocateConstIntCVar(scope, name)                        int scope::name
 
-	#define DefineConstFloatCVar(name, flags, help) ConsoleRegistrationHelper::Register(( # name), &name, name ## Default, flags | CONST_CVAR_FLAGS, CVARHELP(help), nullptr, false)
-	#define DeclareConstFloatCVar(name)         float name
-	#define DeclareStaticConstFloatCVar(name)   static float name
-	#define AllocateConstFloatCVar(scope, name) float scope::name
+	#define DefineConstFloatCVar(name, flags, help)                  ConsoleRegistrationHelper::Register(( # name), &name, name ## Default, flags | CONST_CVAR_FLAGS, CVARHELP(help), nullptr, false)
+	#define DeclareConstFloatCVar(name)                              float name
+	#define DeclareStaticConstFloatCVar(name)                        static float name
+	#define AllocateConstFloatCVar(scope, name)                      float scope::name
 #endif
 
 //! The following macros allow the help text to be easily stripped out.
@@ -2158,63 +2230,6 @@ struct SDummyCVar : ICVar
 #endif // defined(RELEASE)
 //////////////////////////////////////////////////////////////////////////////
 
-#ifdef EXCLUDE_NORMAL_LOG       // setting this removes a lot of logging to reduced code size (useful for consoles)
-
-	#define CryLog(...)       ((void)0)
-	#define CryComment(...)   ((void)0)
-	#define CryLogAlways(...) ((void)0)
-
-#else // EXCLUDE_NORMAL_LOG
-
-//! Simple logs of data with low verbosity.
-void        CryLog(const char*, ...) PRINTF_PARAMS(1, 2);
-inline void CryLog(const char* format, ...)
-{
-	// Fran: we need these guards for the testing framework to work
-	if (gEnv && gEnv->pSystem && gEnv->pLog)
-	{
-		va_list args;
-		va_start(args, format);
-		gEnv->pLog->LogV(ILog::eMessage, format, args);
-		va_end(args);
-	}
-}
-//! Very rarely used log comment.
-void        CryComment(const char*, ...) PRINTF_PARAMS(1, 2);
-inline void CryComment(const char* format, ...)
-{
-	// Fran: we need these guards for the testing framework to work
-	if (gEnv && gEnv->pSystem && gEnv->pLog)
-	{
-		va_list args;
-		va_start(args, format);
-		gEnv->pLog->LogV(ILog::eComment, format, args);
-		va_end(args);
-	}
-}
-//! Logs important data that must be printed regardless verbosity.
-void        CryLogAlways(const char*, ...) PRINTF_PARAMS(1, 2);
-inline void CryLogAlways(const char* format, ...)
-{
-	// log should not be used before system is ready
-	// error before system init should be handled explicitly
-
-	// Fran: we need these guards for the testing framework to work
-
-	if (gEnv && gEnv->pSystem && gEnv->pLog)
-	{
-		//		assert(gEnv);
-		//		assert(gEnv->pSystem);
-
-		va_list args;
-		va_start(args, format);
-		gEnv->pLog->LogV(ILog::eAlways, format, args);
-		va_end(args);
-	}
-}
-
-#endif // EXCLUDE_NORMAL_LOG
-
 /*****************************************************
    ASYNC MEMCPY FUNCTIONS
 *****************************************************/
@@ -2230,21 +2245,21 @@ inline void CryLogAlways(const char* format, ...)
 //! Multiple async copies can therefore be tied to the same sync variable, therefore wait for completion with while(*sync) (yield());.
 #if defined(CRY_ASYNC_MEMCPY_DELEGATE_TO_CRYSYSTEM)
 inline void cryAsyncMemcpy(
-  void* dst
-  , const void* src
-  , size_t size
-  , int nFlags
-  , volatile int* sync)
+	void* dst
+	, const void* src
+	, size_t size
+	, int nFlags
+	, volatile int* sync)
 {
 	GetISystem()->AsyncMemcpy(dst, src, size, nFlags, sync);
 }
 #else
 CRY_ASYNC_MEMCPY_API void cryAsyncMemcpy(
-  void* dst
-  , const void* src
-  , size_t size
-  , int nFlags
-  , volatile int* sync);
+	void* dst
+	, const void* src
+	, size_t size
+	, int nFlags
+	, volatile int* sync);
 #endif
 
 #include <CrySystem/Profilers/FrameProfiler/FrameProfiler.h>

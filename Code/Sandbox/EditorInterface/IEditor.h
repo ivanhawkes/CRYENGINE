@@ -15,7 +15,9 @@ class CConfigurationManager;
 class CCryEditDoc;
 class CDisplaySettings;
 class CFlowGraphManager;
+class CHeightmap;
 class CGameEngine;
+class CLevelEditorSharedState;
 class CMaterialManager;
 class CPersonalizationManager;
 class CPopupMenuItem;
@@ -28,19 +30,14 @@ class CViewManager;
 class CViewport;
 class CWaitProgress;
 class CWnd;
-class ICommandManager;
-class INotificationCenter;
-class IPane;
-class IPythonManager;
 class QString;
 class QWidget;
-class CLevelEditorSharedState;
-class CHeightmap;
 
 struct AABB;
 struct I3DEngine;
 struct IAIManager;
 struct IBackgroundTaskManager;
+struct ICommandManager;
 struct IDataBaseItem;
 struct IDataBaseManager;
 struct IDisplayViewport;
@@ -55,8 +52,11 @@ struct IIconManager;
 struct ILevelEditor;
 struct IMaterial;
 struct IMovieSystem;
+struct INotificationCenter;
 struct IObjectManager;
+struct IPane;
 struct IProjectManager;
+struct IPythonManager;
 struct IRenderer;
 struct IRenderNode;
 struct IResourceSelectorHost;
@@ -322,7 +322,9 @@ struct IEditor
 	virtual bool          IsDevModeEnabled() const = 0; //should go to preferences?
 
 	//Dockable pane management
-	virtual IPane* CreateDockable(const char* className) = 0;
+	virtual IPane* CreateDockable(const char* szClassName) = 0;
+	virtual IPane* FindDockable(const char* szClassName) = 0;
+	virtual IPane* FindDockableIf(const std::function<bool(IPane*, const string& /*className*/)>& predicate) = 0;
 	virtual void   RaiseDockable(IPane* pPane) = 0;
 
 	//!Creates a preview widget for any file type, returns null if cannot be previewed

@@ -373,6 +373,9 @@ bool DeviceInfo::CreateDevice(int zbpp, OnCreateDeviceCallback pCreateDeviceCall
 		#endif
 		#endif
 		#endif
+						D3D11_MAP_WRITE_NO_OVERWRITE_OPTIONAL[0 /*CB*/] = m_D3D110aOptions.MapNoOverwriteOnDynamicConstantBuffer ? D3D11_MAP_WRITE_NO_OVERWRITE : D3D11_MAP_WRITE_DISCARD;
+						D3D11_MAP_WRITE_NO_OVERWRITE_OPTIONAL[1 /*SR*/] = m_D3D110aOptions.MapNoOverwriteOnDynamicBufferSRV      ? D3D11_MAP_WRITE_NO_OVERWRITE : D3D11_MAP_WRITE_DISCARD;
+						D3D11_MAP_WRITE_NO_OVERWRITE_OPTIONAL[2 /*UA*/] =                                                                                         D3D11_MAP_WRITE_DISCARD;
 	#endif
 #endif
 
@@ -487,7 +490,7 @@ bool DeviceInfo::CreateDevice(int zbpp, OnCreateDeviceCallback pCreateDeviceCall
 		case NVAPI_ERROR:
 		default:
 			cry_sprintf(m_buildBranchVersion, strlen(m_buildBranchVersion), "Unavailable (NVAPI error)");
-			CryLogAlways("NvAPI_SYS_GetDriverAndBranchVersion() failed with error code: %d", static_cast<int>(opStatus));
+			CryWarning(VALIDATOR_MODULE_RENDERER, VALIDATOR_WARNING, "NvAPI_SYS_GetDriverAndBranchVersion() failed with error code: %d", static_cast<int>(opStatus));
 		}
 	}
 #else

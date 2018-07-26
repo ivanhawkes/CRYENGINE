@@ -26,13 +26,12 @@ bool CGeomEntity::Init(CBaseObject* prev, const string& file)
 	{
 		bRes = Super::Init(prev, "");
 		SetClass("GeomEntity");
-		SpawnEntity();
 	}
 	else
 	{
 		bRes = Super::Init(prev, "GeomEntity");
 		SetClass("GeomEntity");
-		SetGeometryFile(file);
+		mv_geometry.Set(file.c_str());
 		string name = PathUtil::GetFileName(file);
 		if (!name.IsEmpty())
 			SetUniqName(name);
@@ -47,6 +46,19 @@ bool CGeomEntity::Init(CBaseObject* prev, const string& file)
 		}
 	}
 	return bRes;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CGeomEntity::SpawnEntity()
+{
+	CEntityObject::SpawnEntity();
+
+	// Now that the entity was spawned, add the geometry
+	const string& geometry = mv_geometry;
+	if (!geometry.empty())
+	{
+		SetGeometryFile(mv_geometry);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -76,25 +88,19 @@ void CGeomEntity::CreateInspectorWidgets(CInspectorWidgetCreator& creator)
 //////////////////////////////////////////////////////////////////////////
 void CGeomEntity::SetGeometryFile(const string& filename)
 {
-	if (m_pEntity == nullptr)
-	{
-		SpawnEntity();
-	}
-
-	if (m_pEntity != nullptr)
-	{
-		if (auto* pGeometryComponent = m_pEntity->GetComponent<IGeometryEntityComponent>())
-		{
-			pGeometryComponent->SetGeometry(filename);
-			CalcBBox();
-			return;
-		}
-	}
-
 	mv_geometry.Set(filename.c_str());
 
-	if (!m_pEntity)
+	if (m_pEntity == nullptr)
 	{
+		// Entity was not spawned yet (most likely called during load time)
+		// The value of mv_geometry will be used to call this function again after CGeomEntity::SpawnEntity is called.
+		return;
+	}
+
+	if (auto* pGeometryComponent = m_pEntity->GetComponent<IGeometryEntityComponent>())
+	{
+		pGeometryComponent->SetGeometry(filename);
+		CalcBBox();
 		return;
 	}
 
@@ -196,8 +202,8 @@ void CGeomEntity::GetScriptProperties(XmlNodeRef xmlProperties)
 {
 	Super::GetScriptProperties(xmlProperties);
 
-	string value = mv_geometry;
-	if (value.GetLength() > 0)
+	const string value = mv_geometry;
+	if (!value.empty())
 	{
 		SetGeometryFile(value);
 	}
@@ -205,17 +211,11 @@ void CGeomEntity::GetScriptProperties(XmlNodeRef xmlProperties)
 
 void CGeomEntity::InvalidateGeometryFile(const string& file)
 {
-	string val = mv_geometry;
-	if (val == file)
+	const string value = mv_geometry;
+	if (value == file && m_pEntity != nullptr)
 	{
-		if (m_pEntity)
-		{
-			DeleteEntity();
-			SpawnEntity();
-		}
-
-		CalcBBox();
-		InvalidateTM(0);
+		// Refresh geometry in entity
+		SetGeometryFile(file);
 	}
 }
 
@@ -230,27 +230,3 @@ XmlNodeRef CGeomEntity::Export(const string& levelPath, XmlNodeRef& xmlNode)
 
 	return node;
 }
-
-//Temp. workaround to enforce LoadGeometry when CEntityObject::Reload happens.
-void CGeomEntity::SpawnEntity()
-{
-	Super::SpawnEntity();
-
-	if (m_pEntity)
-	{
-		string path = mv_geometry;
-		if (!path.IsEmpty())
-		{
-			const char* szExt = PathUtil::GetExt(path);
-			if (stricmp(szExt, CRY_SKEL_FILE_EXT) == 0 || stricmp(szExt, CRY_CHARACTER_DEFINITION_FILE_EXT) == 0 || stricmp(szExt, CRY_ANIM_GEOMETRY_FILE_EXT) == 0)
-			{
-				m_pEntity->LoadCharacter(0, path, IEntity::EF_AUTO_PHYSICALIZE);
-			}
-			else
-			{
-				m_pEntity->LoadGeometry(0, path, nullptr, IEntity::EF_AUTO_PHYSICALIZE);
-			}
-		}
-	}
-}
-

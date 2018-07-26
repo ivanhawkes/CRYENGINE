@@ -16,6 +16,7 @@
 #include <CrySystem/ITimer.h>
 #include "VoiceContext.h"
 #include <CryNetwork/INetworkService.h>
+#include <CryEntitySystem/IEntitySystem.h>
 #include "Protocol/NullSendable.h"
 
 #include "CET_Server.h"
@@ -24,6 +25,7 @@
 
 #include "BreakagePlayback.h"
 #include "PerformBreakage.h"
+
 
 class CServerContextView::CBindObjectMessage : public CUpdateMessage
 {
@@ -128,8 +130,10 @@ private:
 					}
 					else if (obj.main->spawnType == eST_Static)
 					{
-						EntityId nUserID = obj.main->userID;
-						pSender->ser.Value("userID", nUserID);
+#ifndef PURE_CLIENT
+						IEntitySystem::StaticEntityNetworkIdentifier id = gEnv->pEntitySystem->GetStaticEntityNetworkId(obj.main->userID);
+						pSender->ser.Value("userID", id);
+#endif
 					}
 					NetworkAspectType nAspectsEnabled = obj.xtra->nAspectsEnabled;
 					NetworkAspectType delegatableMask = obj.xtra->delegatableMask;
@@ -688,6 +692,9 @@ void CServerContextView::OnObjectEvent(CNetContextState* pState, SNetObjectEvent
 			if (m_lockLocalMapLoaded.IsLocking() && ContextState()->IsContextEstablished())
 				m_lockLocalMapLoaded = CChangeStateLock();
 			break;
+		case eNOE_StartedEstablishingContext:
+			StartedEstablishingContext();
+			break;
 		}
 	}
 
@@ -740,6 +747,13 @@ bool CServerContextView::EnterState(EContextViewState state)
 		//ClearAllState();
 		InitSessionIDs();
 		SendAuthChecks();
+
+		// NOTE: This state lock prevents context view establisher registration until context state is properly started.
+		// Establisher is registered in CContextView::GC_GetEstablishmentOrder() which is scheduled in state eCVS_Begin.
+		// Without the lock, there is a chance of triggering "Supersceded" error in CNetContextState::GC_Lazy_TickEstablishers.
+		if (!ContextState()->IsStartedEstablishingContext() && !ContextState()->IsDead())
+			m_lockContextStateInitialized = CChangeStateLock(this, GetWaitStateName(eCVS_Initial));
+
 		FinishLocalState();
 		break;
 	case eCVS_Begin:
@@ -944,11 +958,17 @@ NET_IMPLEMENT_SIMPLE_IMMEDIATE_MESSAGE(CServerContextView, InitPunkBuster, eNRT_
 
 void CServerContextView::ChangeContext()
 {
+	m_lockContextStateInitialized = CChangeStateLock();
 	if (IsPastOrInState(eCVS_Begin))
 		PushForcedState(eCVS_Initial, true);
 	if (IsInState(eCVS_InGame))
 		FinishLocalState();
 	CContextView::ChangeContext();
+}
+
+void CServerContextView::StartedEstablishingContext()
+{
+	m_lockContextStateInitialized = CChangeStateLock();
 }
 
 void CServerContextView::EstablishedContext()

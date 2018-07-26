@@ -35,11 +35,11 @@ void           UnloadSample(const SampleId id);
 
 // Events
 ERequestStatus ExecuteEvent(CObject* const pObject, CTrigger const* const pTrigger, CEvent* const pEvent);
-ERequestStatus SetVolume(CObject* const pObject, SampleId const sampleId);
+void           SetVolume(CObject* const pObject, SampleId const sampleId);
 float          GetVolumeMultiplier(CObject* const pObject, SampleId const sampleId);
 int            GetAbsoluteVolume(int const triggerVolume, float const multiplier);
-bool           PlayFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile);
-bool           StopFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile);
+ERequestStatus PlayFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile);
+ERequestStatus StopFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile);
 
 // stops an specific event instance
 bool StopEvent(CEvent const* const pEvent);
@@ -50,7 +50,7 @@ bool PauseEvent(CEvent const* const pEvent);
 bool ResumeEvent(CEvent const* const pEvent);
 
 // Listeners
-bool SetListenerPosition(ListenerId const listenerId, CObjectTransformation const& transformation);
+bool SetListenerTransformation(ListenerId const listenerId, CObjectTransformation const& transformation);
 
 // Audio Objects
 bool RegisterObject(CObject* const pObject);

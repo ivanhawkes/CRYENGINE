@@ -10,6 +10,37 @@
 #include <memory>
 #include <atomic>
 
+void InitJobManager()
+{
+	gEnv->pJobManager = GetJobManagerInterface();
+
+	auto pseudoProfilerCallback = [](class CFrameProfilerSection* pSection) {};
+	gEnv->callbackStartSection = pseudoProfilerCallback;
+	gEnv->callbackEndSection = pseudoProfilerCallback;
+	gEnv->pJobManager->Init(8);
+}
+
+void ShutdownJobManager()
+{
+	gEnv->pJobManager->ShutDown();
+}
+
+// Tests that the job manager can be properly initialized and shutdown without crash or hang
+TEST(CJobManagerTest, InitShutdown)
+{
+	gEnv->pTimer = new CTimer();
+	if (!gEnv->pThreadManager)
+		gEnv->pThreadManager = CreateThreadManager();
+
+	for (int i = 0; i < 100; ++i)
+	{	
+		InitJobManager();
+		ShutdownJobManager();
+	}
+
+	SAFE_DELETE(gEnv->pTimer);
+}
+
 class CTestJobHost
 {
 public:
@@ -35,20 +66,16 @@ class CJobSystemTest : public ::testing::Test
 protected:
 	virtual void SetUp() override
 	{
-		gEnv->pJobManager = GetJobManagerInterface();
 		gEnv->pTimer = new CTimer();
-
-		auto pseudoProfilerCallback = [](class CFrameProfilerSection* pSection) {};
-		gEnv->callbackStartSection = pseudoProfilerCallback;
-		gEnv->callbackEndSection = pseudoProfilerCallback;
-		gEnv->pThreadManager = CreateThreadManager();
-		gEnv->pJobManager->Init(8);
+		if (!gEnv->pThreadManager)
+			gEnv->pThreadManager = CreateThreadManager();
+		InitJobManager();
 	}
 
 	virtual void TearDown() override
 	{
-		delete gEnv->pTimer;
-		delete gEnv->pThreadManager;
+		ShutdownJobManager();
+		SAFE_DELETE(gEnv->pTimer);
 	}
 };
 

@@ -2,6 +2,7 @@
 
 #include "stdafx.h"
 #include "FileCacheManager.h"
+#include "ATLEntities.h"
 #include "AudioCVars.h"
 #include "Common/Logger.h"
 #include "Common.h"
@@ -21,27 +22,19 @@ CFileCacheManager::CFileCacheManager(AudioPreloadRequestLookup& preloadRequests)
 	: m_preloadRequests(preloadRequests)
 	, m_currentByteTotal(0)
 	, m_maxByteTotal(0)
-	, m_pIImpl(nullptr)
 {
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CFileCacheManager::SetImpl(Impl::IImpl* const pIImpl)
+CFileCacheManager::~CFileCacheManager()
 {
-	m_pIImpl = pIImpl;
+	CRY_ASSERT_MESSAGE(m_audioFileEntries.empty(), "There are still file entries during CFileCacheManager destruction!");
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CFileCacheManager::Init()
 {
 	AllocateHeap(static_cast<size_t>(g_cvars.m_fileCacheManagerSize), "AudioFileCacheManager");
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CFileCacheManager::Release()
-{
-	CRY_ASSERT(m_audioFileEntries.empty());
-	m_pIImpl = nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -67,9 +60,9 @@ FileEntryId CFileCacheManager::TryAddFileCacheEntry(XmlNodeRef const pFileNode, 
 	FileEntryId fileEntryId = InvalidFileEntryId;
 	Impl::SFileInfo fileInfo;
 
-	if (m_pIImpl->ConstructFile(pFileNode, &fileInfo) == ERequestStatus::Success)
+	if (g_pIImpl->ConstructFile(pFileNode, &fileInfo) == ERequestStatus::Success)
 	{
-		CryFixedStringT<MaxFilePathLength> fullPath(m_pIImpl->GetFileLocation(&fileInfo));
+		CryFixedStringT<MaxFilePathLength> fullPath(g_pIImpl->GetFileLocation(&fileInfo));
 		fullPath += "/";
 		fullPath += fileInfo.szFileName;
 		CATLAudioFileEntry* pFileEntry = new CATLAudioFileEntry(fullPath, fileInfo.pImplData);
@@ -121,7 +114,7 @@ FileEntryId CFileCacheManager::TryAddFileCacheEntry(XmlNodeRef const pFileNode, 
 				}
 
 				// Entry already exists, free the memory!
-				m_pIImpl->DestructFile(pFileEntry->m_pImplData);
+				g_pIImpl->DestructFile(pFileEntry->m_pImplData);
 				delete pFileEntry;
 			}
 		}
@@ -143,7 +136,7 @@ bool CFileCacheManager::TryRemoveFileCacheEntry(FileEntryId const audioFileEntry
 		if (pAudioFileEntry->m_dataScope == dataScope)
 		{
 			UncacheFileCacheEntryInternal(pAudioFileEntry, true, true);
-			m_pIImpl->DestructFile(pAudioFileEntry->m_pImplData);
+			g_pIImpl->DestructFile(pAudioFileEntry->m_pImplData);
 			delete pAudioFileEntry;
 			m_audioFileEntries.erase(iter);
 		}
@@ -252,7 +245,7 @@ ERequestStatus CFileCacheManager::UnloadDataByScope(EDataScope const dataScope)
 		{
 			if (UncacheFileCacheEntryInternal(pAudioFileEntry, true, true))
 			{
-				m_pIImpl->DestructFile(pAudioFileEntry->m_pImplData);
+				g_pIImpl->DestructFile(pAudioFileEntry->m_pImplData);
 				delete pAudioFileEntry;
 				iter = m_audioFileEntries.erase(iter);
 				iterEnd = m_audioFileEntries.end();
@@ -531,8 +524,10 @@ bool CFileCacheManager::FinishStreamInternal(IReadStreamPtr const pStream, int u
 			fileEntryInfo.size = pAudioFileEntry->m_size;
 			fileEntryInfo.pImplData = pAudioFileEntry->m_pImplData;
 			fileEntryInfo.szFileName = PathUtil::GetFile(pAudioFileEntry->m_path.c_str());
+			fileEntryInfo.szFilePath = pAudioFileEntry->m_path.c_str();
+			fileEntryInfo.bLocalized = (pAudioFileEntry->m_flags & EFileFlags::Localized) != 0;
 
-			m_pIImpl->RegisterInMemoryFile(&fileEntryInfo);
+			g_pIImpl->RegisterInMemoryFile(&fileEntryInfo);
 			bSuccess = true;
 		}
 		else if (error == ERROR_USER_ABORT)
@@ -597,7 +592,7 @@ void CFileCacheManager::UncacheFile(CATLAudioFileEntry* const pAudioFileEntry)
 		fileEntryInfo.pImplData = pAudioFileEntry->m_pImplData;
 		fileEntryInfo.szFileName = PathUtil::GetFile(pAudioFileEntry->m_path.c_str());
 
-		m_pIImpl->UnregisterInMemoryFile(&fileEntryInfo);
+		g_pIImpl->UnregisterInMemoryFile(&fileEntryInfo);
 	}
 
 	pAudioFileEntry->m_pMemoryBlock = nullptr;
@@ -639,7 +634,7 @@ void CFileCacheManager::UpdateLocalizedFileEntryData(CATLAudioFileEntry* const p
 	fileEntryInfo.pImplData = pAudioFileEntry->m_pImplData;
 	fileEntryInfo.szFileName = fileName.c_str();
 
-	pAudioFileEntry->m_path = m_pIImpl->GetFileLocation(&fileEntryInfo);
+	pAudioFileEntry->m_path = g_pIImpl->GetFileLocation(&fileEntryInfo);
 	pAudioFileEntry->m_path += "/";
 	pAudioFileEntry->m_path += fileName.c_str();
 	pAudioFileEntry->m_path.MakeLower();
@@ -650,11 +645,11 @@ void CFileCacheManager::UpdateLocalizedFileEntryData(CATLAudioFileEntry* const p
 
 ///////////////////////////////////////////////////////////////////////////
 bool CFileCacheManager::TryCacheFileCacheEntryInternal(
-  CATLAudioFileEntry* const pAudioFileEntry,
-  FileEntryId const audioFileEntryId,
-  bool const bLoadSynchronously,
-  bool const bOverrideUseCount /*= false*/,
-  size_t const useCount /*= 0*/)
+	CATLAudioFileEntry* const pAudioFileEntry,
+	FileEntryId const audioFileEntryId,
+	bool const bLoadSynchronously,
+	bool const bOverrideUseCount /*= false*/,
+	size_t const useCount /*= 0*/)
 {
 	bool bSuccess = false;
 

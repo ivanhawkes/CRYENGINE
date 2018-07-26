@@ -587,10 +587,10 @@ static void OnBnClickedAddComponent()
 			return QVariant();
 		}
 
-		virtual QString                         GetToolTip() const override                     { return m_tooltip; }
-		virtual const QIcon*                    GetColumnIcon(int32 columnIndex) const override { return &m_icon; }
+		virtual QString      GetToolTip(int32 columnIndex) const override { return m_tooltip; }
+		virtual const QIcon* GetColumnIcon(int32 columnIndex) const override { return &m_icon; }
 		virtual const CAbstractDictionaryEntry* GetParentEntry() const override                 { return m_pParentEntry; }
-		virtual bool                            IsEnabled() const override                      { return m_bEnabled; }
+		virtual bool         IsEnabled() const override                      { return m_bEnabled; }
 		// ~CAbstractDictionaryEntry
 
 		const Schematyc::IEnvComponent& GetComponent() const { return m_component; }
@@ -1428,6 +1428,7 @@ bool CEntityObject::HitTestEntity(HitContext& hc, bool& bHavePhysics)
 				return true;
 			}
 		}
+#if defined(USE_GEOM_CACHES)
 		else if (IGeomCacheRenderNode* pGeomCache = m_pEntity->GetGeomCacheRenderNode(i))
 		{
 			if (pGeomCache->RayIntersection(hitInfo))
@@ -1439,6 +1440,7 @@ bool CEntityObject::HitTestEntity(HitContext& hc, bool& bHavePhysics)
 				return true;
 			}
 		}
+#endif
 	}
 
 	IPhysicalEntity* pPhysicalEntity = m_pEntity->GetPhysicalEntity();
@@ -1892,12 +1894,9 @@ void CEntityObject::SpawnEntity()
 
 	IEntitySystem* pEntitySystem = GetIEditorImpl()->GetSystem()->GetIEntitySystem();
 
-	if (m_entityId != 0)
+	if (m_entityId != INVALID_ENTITYID && pEntitySystem->IsIDUsed(m_entityId))
 	{
-		if (pEntitySystem->IsIDUsed(m_entityId))
-		{
-			m_entityId = 0;
-		}
+		m_entityId = INVALID_ENTITYID;
 	}
 
 	SEntitySpawnParams params;
@@ -1938,11 +1937,6 @@ void CEntityObject::SpawnEntity()
 		}
 
 		params.nFlagsExtended = (params.nFlagsExtended & ~ENTITY_FLAG_EXTENDED_GI_MODE_BIT_MASK) | ((((int)mv_giMode) << ENTITY_FLAG_EXTENDED_GI_MODE_BIT_OFFSET) & ENTITY_FLAG_EXTENDED_GI_MODE_BIT_MASK);
-	}
-
-	if (params.id == 0)
-	{
-		params.bStaticEntityId = true; // Tells to Entity system to generate new static id.
 	}
 
 	params.guid = ToEntityGuid(GetId());
@@ -4634,6 +4628,7 @@ bool CEntityObject::ApplyAsset(const CAsset& asset, HitContext* pHitContext)
 						}
 					}
 				}
+#ifdef USE_GEOM_CACHES
 				else if (IGeomCacheRenderNode* pGeomCache = m_pEntity->GetGeomCacheRenderNode(slotIndex))
 				{
 					if (pGeomCache->RayIntersection(hitInfo))
@@ -4646,6 +4641,7 @@ bool CEntityObject::ApplyAsset(const CAsset& asset, HitContext* pHitContext)
 						}
 					}
 				}
+#endif
 			}
 
 			if (!isneg(hitSlotIndex))
@@ -5787,6 +5783,7 @@ string CEntityObject::GetMouseOverStatisticsText() const
 				}
 			}
 
+#if defined(USE_GEOM_CACHES)
 			IGeomCacheRenderNode* pGeomCacheRenderNode = m_pEntity->GetGeomCacheRenderNode(slot);
 
 			if (pGeomCacheRenderNode)
@@ -5813,6 +5810,7 @@ string CEntityObject::GetMouseOverStatisticsText() const
 					statsText += "\n  " + FormatWithThousandsSeperator(stats.m_memoryAnimationDataSize) + " Bytes Memory Animation Data";
 				}
 			}
+#endif
 
 			ICharacterInstance* pCharacter = m_pEntity->GetCharacter(slot);
 			if (pCharacter)

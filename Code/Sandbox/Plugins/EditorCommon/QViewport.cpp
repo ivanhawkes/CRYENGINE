@@ -5,6 +5,7 @@
 #include <CryMath/Cry_Camera.h>
 #include <CryRenderer/IRenderer.h>
 #include <CryRenderer/IRenderAuxGeom.h>
+#include <CryRenderer/IRenderView.h>
 #include <CrySystem/ITimer.h>
 #include <Cry3DEngine/I3DEngine.h>
 #include <CryPhysics/IPhysicsDebugRenderer.h>
@@ -811,6 +812,7 @@ void QViewport::Render(SDisplayContext& context)
 		aux->DrawTriangle(lb, bottomColor, rb, bottomColor, lt, topColor);
 	}
 
+	passInfo.GetIRenderView()->SetShaderRenderingFlags(SHDF_ALLOWHDR | SHDF_SECONDARY_VIEWPORT);
 	m_env->pRenderer->EF_StartEf(passInfo);
 
 	SRendParams rp;
@@ -872,14 +874,12 @@ void QViewport::Render(SDisplayContext& context)
 	rc.renderParams = &rp;
 	rc.pAuxGeom = aux;
 
-	for (size_t i = 0; i < m_consumers.size(); ++i)
-		m_consumers[i]->OnViewportRender(rc);
 	SignalRender(rc);
 
 	m_gizmoManager.Display(context);
 
 	m_env->pSystem->GetIPhysicsDebugRenderer()->Flush(m_lastFrameTime);
-	m_env->pRenderer->EF_EndEf3D(SHDF_ALLOWHDR | SHDF_SECONDARY_VIEWPORT, -1, -1, passInfo);
+	m_env->pRenderer->EF_EndEf3D(-1, -1, passInfo);
 
 	if (m_settings->grid.showGrid)
 	{
@@ -900,6 +900,9 @@ void QViewport::Render(SDisplayContext& context)
 		DrawOrigin(50, m_height - 50, 20.0f, m_camera->GetMatrix());
 		aux->SetOrthographicProjection(false);
 	}
+
+	for (size_t i = 0; i < m_consumers.size(); ++i)
+		m_consumers[i]->OnViewportRender(rc);
 
 	aux->Submit();
 	aux->SetRenderFlags(oldFlags);

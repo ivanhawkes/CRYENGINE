@@ -39,7 +39,6 @@ struct CustomForwardShadingAttribs
 //////////////////////////////// Samplers ////////////////
 
 ENVIRONMENTCUBEMAP
-DISSOLVE_NOISE_MAP
 
 sampler2D envMapSamplerRefr
 {
@@ -446,6 +445,8 @@ pixout GlassPS(vert2FragGeneral IN, bool bIsFrontFace : SV_IsFrontFace)
 	attribs.smoothness = MatSpecColor.w;
 	
 	half4 tintMap = half4(1, 0, 1, 0);  // Initialize to full tint / no cloudiness / full spec / no decals
+
+	ApplyDissolve(Get_SPI_Dissolve(), (int2)IN.WPos.xy);
 	
 #if !%DIRT_MAP
 	attribs.albedo = half3(0, 0, 0);

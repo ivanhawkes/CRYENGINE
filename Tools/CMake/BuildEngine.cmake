@@ -28,19 +28,19 @@ option(OPTION_DEVELOPER_CONSOLE_IN_RELEASE "Enables the developer console in Rel
 #The remote console is useful in development, but it is a potential security vulnerability, therefore opt-in
 option(OPTION_REMOTE_CONSOLE "Allows remote console connection" OFF)
 
-if(EXISTS "${SDK_DIR}/googletest_CE_Support")
-	option(OPTION_UNIT_TEST "Unit Tests" ON)
-elseif(OPTION_UNIT_TEST)
-	message(STATUS "Google Test not found in ${SDK_DIR}/googletest_CE_Support - disabling unit tests.")
+if(NOT ANDROID) # Unit test is disabled for Android until fully supported
+	if(EXISTS "${SDK_DIR}/googletest_CE_Support")
+		option(OPTION_UNIT_TEST "Unit Tests" ON)
+	elseif(OPTION_UNIT_TEST)
+		message(STATUS "Google Test not found in ${SDK_DIR}/googletest_CE_Support - disabling unit tests.")
 
-	# Disables the OPTION_UNIT_TEST option but also updates the message in the cache that is then used in the GUI as a tooltip.
-	set(OPTION_UNIT_TEST OFF CACHE BOOL "OPTION_UNIT_TEST was previously set but Google Test is not available. Check bootstrap settings." FORCE)
+		# Disables the OPTION_UNIT_TEST option but also updates the message in the cache that is then used in the GUI as a tooltip.
+		set(OPTION_UNIT_TEST OFF CACHE BOOL "OPTION_UNIT_TEST was previously set but Google Test is not available. Check bootstrap settings." FORCE)
+	endif()
 endif()
 
 #Plugins
-option(PLUGIN_FPSPLUGIN "Frames per second sample plugin" OFF)
 if(WIN32 OR WIN64)
-	option(PLUGIN_USERANALYTICS "Enable User Analytics" ON)
 	
 	if(EXISTS "${SDK_DIR}/OculusSDK")
 		option(PLUGIN_VR_OCULUS "Oculus support" ON)
@@ -48,25 +48,27 @@ if(WIN32 OR WIN64)
 		option(PLUGIN_VR_OCULUS "Oculus support" OFF)
 	endif()
 
+	option(OPTION_CRYMONO "C# support" OFF)
+
+	if (OPTION_CRYMONO)
+		option(OPTION_CRYMONO_SWIG "Expose C++ API to C# with SWIG" ON)
+	endif()
 	if(EXISTS "${SDK_DIR}/OSVR")
 		option(PLUGIN_VR_OSVR "OSVR support" ON)
 	else()
 		option(PLUGIN_VR_OSVR "OSVR support" OFF)
 	endif()
 
+	option(OPTION_PHYSDBGR "Include standalone physics debugger in the build" OFF)
+endif()
+
+if(WIN32 OR WIN64 OR LINUX)
+	option(PLUGIN_USERANALYTICS "Enable User Analytics" ON)
 	if(EXISTS "${SDK_DIR}/OpenVR")
 		option(PLUGIN_VR_OPENVR "OpenVR support" ON)
 	else()
 		option(PLUGIN_VR_OPENVR "OpenVR support" OFF)
 	endif()
-
-	option(OPTION_CRYMONO "C# support" OFF)
-	
-	if (OPTION_CRYMONO)
-		option(OPTION_CRYMONO_SWIG "Expose C++ API to C# with SWIG" ON)
-	endif()
-	
-	option(OPTION_PHYSDBGR "Include standalone physics debugger in the build" OFF)
 endif()
 
 option(OPTION_UNSIGNED_PAKS_IN_RELEASE "Allow unsigned PAK files to be used for release builds" ON)
@@ -372,7 +374,6 @@ if (OPTION_ENGINE)
 	add_subdirectory ("Code/CryEngine/CryInput")
 	add_subdirectory ("Code/CryEngine/CryMovie")
 	add_subdirectory ("Code/CryEngine/CryNetwork")
-	#add_subdirectory ("Code/CryEngine/CryReflection")
 	if (PLUGIN_SCHEMATYC_EXPERIMENTAL)
 		target_compile_definitions(CrySystem PUBLIC USE_SCHEMATYC_EXPERIMENTAL=1)
 		if (TARGET CrySystemLib)
@@ -388,7 +389,6 @@ if (OPTION_ENGINE)
 		endif()
 		add_subdirectory ("Code/CryEngine/CrySchematyc2")
 	endif()
-
 	add_subdirectory ("Code/CryEngine/CryScriptSystem")
 	add_subdirectory ("Code/CryEngine/CryFlowGraph")
 
@@ -427,12 +427,13 @@ if (OPTION_ENGINE)
 
 	#libs
 	add_subdirectory ("Code/Libs/bigdigits")
+	add_subdirectory ("Code/Libs/mikkelsen")
 	
 	if(PLUGIN_VR_OCULUS)
 		add_subdirectory("Code/Libs/oculus")
 	endif()
 	
-	if (WIN32)
+	if (WIN32 OR WIN64 OR LINUX)
 		add_subdirectory ("Code/Libs/curl")
 	endif ()
 	add_subdirectory ("Code/Libs/freetype")
@@ -487,6 +488,7 @@ if (OPTION_ENGINE)
 
 	    add_subdirectory("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/CryCommonUnitTest")
         add_subdirectory("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/CrySystemUnitTest")
+        add_subdirectory("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/CryReflectionUnitTest")
         add_subdirectory("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/CryEntitySystemUnitTest")
 		add_subdirectory("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/CryAnimationUnitTest")
 		add_subdirectory("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Cry3DEngineUnitTest")
@@ -516,5 +518,5 @@ if (OPTION_ENGINE OR OPTION_SHADERCACHEGEN)
 	add_subdirectory ("Code/Libs/jsmn")
 	add_subdirectory ("Code/Libs/lzma")
 	add_subdirectory ("Code/Libs/lzss")
-	add_subdirectory ("Code/Libs/tiff")
+	add_subdirectory ("Code/Libs/tiff")	
 endif()

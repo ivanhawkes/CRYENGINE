@@ -22,15 +22,18 @@
 #include "DeviceManager/DeviceFormats.h" // SPixFormat
 #include <Common/RenderDisplayContext.h>
 
+#include <algorithm>
+#include <iterator>
+
 #undef min
 #undef max
 
 //===============================================================================
 
-static bool DecompressSubresourcePayload(const STextureLayout& pLayout, const ETEX_TileMode eSrcTileMode, const void* pData[], STexturePayload& pPayload)
+static bool DecompressSubresourcePayload(const STextureLayout& pLayout, const ETEX_TileMode eSrcTileMode, const SSubresourceData& pData, STexturePayload& pPayload)
 {
 	assert(!pPayload.m_pSysMemSubresourceData);
-	if (!pData || !pData[0])
+	if (!pData.m_subresourcePointers)
 	{
 		pPayload.m_pSysMemSubresourceData = nullptr;
 		pPayload.m_eSysMemTileMode = eTM_Unspecified;
@@ -46,7 +49,7 @@ static bool DecompressSubresourcePayload(const STextureLayout& pLayout, const ET
 	// Contrary to hardware here the sub-resources are sorted by mips, then by slices.
 	// In hardware it's sorted by slices, then by mips (so same mips are consecutive).
 	const byte* pAutoData = nullptr;
-	const void** pDataCursor = pData;
+	const uint8** pDataCursor = pData.m_subresourcePointers;
 
 	PREFAST_ASSUME(*pDataCursor != nullptr);
 
@@ -80,7 +83,7 @@ static bool DecompressSubresourcePayload(const STextureLayout& pLayout, const ET
 
 		// reset to face 0
 		if (pLayout.m_eFlags & FT_REPLICATE_TO_ALL_SIDES)
-			pDataCursor = pData;
+			pDataCursor = pData.m_subresourcePointers;
 		// each face is nullptr-terminated
 		else if (!*pDataCursor)
 			pDataCursor++;
@@ -93,7 +96,7 @@ static bool DecompressSubresourcePayload(const STextureLayout& pLayout, const ET
 }
 
 #if defined(TEXTURE_GET_SYSTEM_COPY_SUPPORT)
-byte* CTexture::Convert(byte* pSrc, int nWidth, int nHeight, int nMips, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nOutMips, int& nOutSize, bool bLinear)
+const byte* CTexture::Convert(const byte* pSrc, int nWidth, int nHeight, int nMips, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nOutMips, int& nOutSize, bool bLinear)
 {
 	nOutSize = 0;
 	byte* pDst = NULL;
@@ -140,17 +143,17 @@ byte* CTexture::Convert(byte* pSrc, int nWidth, int nHeight, int nMips, ETEX_For
 					wdt = 1;
 				if (hgt <= 0)
 					hgt = 1;
-				void* outSrc = &pSrc[nOffsSRC];
+				const byte* outSrc = &pSrc[nOffsSRC];
 				DWORD outSize = CTexture::TextureDataSize(wdt, hgt, 1, 1, 1, eTFDst);
 
 				nOffsSRC += CTexture::TextureDataSize(wdt, hgt, 1, 1, 1, eTFSrc);
 
 				{
-					byte* src = (byte*)outSrc;
+					const byte* src = outSrc;
 
 					for (uint32 n = 0; n < outSize / 16; n++)     // for each block
 					{
-						uint8* pSrcBlock = &src[n * 16];
+						const uint8* pSrcBlock = &src[n * 16];
 						uint8* pDstBlock = &pDst[nOffsDST + n * 16];
 
 						ConvertBlock3DcToDXT5(pDstBlock, pSrcBlock);
@@ -245,19 +248,34 @@ bool CTexture::Resolve(int nTarget, bool bUseViewportSize)
 	return true;
 }
 
-bool CTexture::CreateDeviceTexture(const void* pData[])
+void CTexture::CreateDeviceTexture(SSubresourceData&& pData)
 {
 	CRY_ASSERT(m_eDstFormat != eTF_Unknown);
-	CRY_ASSERT(!pData || !*pData || m_eSrcTileMode != eTM_Unspecified);
+	CRY_ASSERT(!pData.m_subresourcePointers || m_eSrcTileMode != eTM_Unspecified);
 
-	bool bResult = false;
-	gRenDev->ExecuteRenderThreadCommand([=, &bResult] {
-		bResult = this->RT_CreateDeviceTexture(pData); }, ERenderCommandFlags::LevelLoadingThread_executeDirect | ERenderCommandFlags::FlushAndWait);
+	const bool bAsync = pData.m_owned;
+	const uint8** pSRP = pData.m_subresourcePointers;
 
-	return bResult;
+	this->AddRef();
+	gRenDev->ExecuteRenderThreadCommand([=] {
+		// Compensate for no move-capturing
+		SSubresourceData pLocalData(pSRP, bAsync);
+
+		bool bResult = this->RT_CreateDeviceTexture(pLocalData);
+		if (!bResult)
+			this->m_eFlags |=  FT_FAILED;
+		else
+			this->m_eFlags &= ~FT_FAILED;
+		this->Release();
+
+	}, ERenderCommandFlags::LevelLoadingThread_executeDirect
+	| (bAsync ? ERenderCommandFlags::None : ERenderCommandFlags::FlushAndWait));
+
+	pData.m_subresourcePointers = nullptr;
+	pData.m_owned = true;
 }
 
-bool CTexture::RT_CreateDeviceTexture(const void* pData[])
+bool CTexture::RT_CreateDeviceTexture(const SSubresourceData& pData)
 {
 	CRY_PROFILE_REGION(PROFILE_RENDERER, "CTexture::RT_CreateDeviceTexture");
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Texture, 0, "Creating Texture");
@@ -279,7 +297,7 @@ bool CTexture::RT_CreateDeviceTexture(const void* pData[])
 	STextureLayout TL = GetLayout();
 	STexturePayload TI;
 
-	CRY_ASSERT(!pData || !*pData || m_eSrcTileMode != eTM_Unspecified);
+	CRY_ASSERT(!pData.m_subresourcePointers || m_eSrcTileMode != eTM_Unspecified);
 	bool bHasPayload = DecompressSubresourcePayload(TL, m_eSrcTileMode, pData, TI);
 	if (!(m_pDevTexture = CDeviceTexture::Create(TL, bHasPayload ? &TI : nullptr)))
 		return false;
@@ -311,7 +329,7 @@ bool CTexture::RT_CreateDeviceTexture(const void* pData[])
 	// Notify that resource is dirty
 	InvalidateDeviceResource(this, eDeviceResourceDirty | eDeviceResourceViewDirty);
 
-	if (!pData || !pData[0])
+	if (!bHasPayload)
 		return true;
 
 	if (m_eTT == eTT_3D)
@@ -510,7 +528,7 @@ void CTexture::ValidateSRVs()
 }
 #endif
 
-void CTexture::UpdateTextureRegion(byte* pSrcData, int nX, int nY, int nZ, int USize, int VSize, int ZSize, ETEX_Format eSrcFormat)
+void CTexture::UpdateTextureRegion(const byte* pSrcData, int nX, int nY, int nZ, int USize, int VSize, int ZSize, ETEX_Format eSrcFormat)
 {
 	if (gRenDev->m_pRT->IsRenderThread())
 	{
@@ -537,7 +555,7 @@ void CTexture::UpdateTextureRegion(byte* pSrcData, int nX, int nY, int nZ, int U
 	}
 }
 
-void CTexture::RT_UpdateTextureRegion(byte* pSrcData, int nX, int nY, int nZ, int USize, int VSize, int ZSize, ETEX_Format eSrcFormat)
+void CTexture::RT_UpdateTextureRegion(const byte* pSrcData, int nX, int nY, int nZ, int USize, int VSize, int ZSize, ETEX_Format eSrcFormat)
 {
 	CRY_PROFILE_REGION(PROFILE_RENDERER, "CTexture::RT_UpdateTextureRegion");
 	PROFILE_FRAME(UpdateTextureRegion);
@@ -782,25 +800,26 @@ private:
 	ICVar*                 m_pCVar;
 };
 
-bool CTexture::RenderEnvironmentCMHDR(int size, const Vec3& Pos, TArray<unsigned short>& vecData)
+DynArray<std::uint16_t> CTexture::RenderEnvironmentCMHDR(std::size_t size, const Vec3& Pos)
 {
+	bool result = true;
+	DynArray<std::uint16_t> vecData;
+
 #if CRY_PLATFORM_DESKTOP
 
 	float timeStart = gEnv->pTimer->GetAsyncTime().GetSeconds();
 
 	iLog->Log("Start generating a cubemap (%d x %d) at position (%.1f, %.1f, %.1f)", size, size, Pos.x, Pos.y, Pos.z);
 
-	vecData.SetUse(0);
-
 	bool bFullScreen = gcpRendD3D->IsFullscreen();
 
 	CTexture* ptexGenEnvironmentCM = CTexture::GetOrCreate2DTexture("$GenEnvironmentCM", size, size, 1, FT_DONT_STREAM | FT_USAGE_RENDERTARGET, nullptr, eTF_R16G16B16A16F);
-	if (!ptexGenEnvironmentCM || !ptexGenEnvironmentCM->GetDevTexture())
+	if (!ptexGenEnvironmentCM)
 	{
-		iLog->Log("Failed generating a cubemap: out of video memory");
+		iLog->Log("Failed generating the cubemap texture");
 
 		SAFE_RELEASE(ptexGenEnvironmentCM);
-		return false;
+		return DynArray<std::uint16_t>{};
 	}
 
 	// Disable/set cvars that can affect cube map generation.
@@ -836,69 +855,80 @@ bool CTexture::RenderEnvironmentCMHDR(int size, const Vec3& Pos, TArray<unsigned
 		gcpRendD3D->GetGraphicsPipeline().Resize(size, size);
 	}, ERenderCommandFlags::None);
 
+	vecData.reserve(size * size * 6 * 4);
 	for (int nSide = 0; nSide < 6; nSide++)
 	{
-		auto pStreamEngine = gEnv->pSystem->GetStreamEngine();
-		bool bStreamingTasksInProgress = false;
-
-		uint32 waitFrames = 0;
-		const uint32 maxWaitFrames = max(0, CRendererCVars::CV_r_CubemapGenerationTimeout);
-
-		do
+		int32 waitFrames = max(0, CRendererCVars::CV_r_CubemapGenerationTimeout);
+		while (waitFrames-->0)
 		{
 #if defined(FEATURE_SVO_GI)
-			bool bSvoTasksInProgress = !gEnv->p3DEngine->IsSvoReady(true);
+			const bool is_svo_ready_pre_draw = gEnv->p3DEngine->IsSvoReady(true);
 #endif
 
 			gEnv->nMainFrameID++;
-
 			DrawSceneToCubeSide(pRenderOutput, Pos, size, nSide);
 
 			SStreamEngineOpenStats streamStats;
-			pStreamEngine->GetStreamingOpenStatistics(streamStats);
-
-			bStreamingTasksInProgress =
-				streamStats.nOpenRequestCountByType[eStreamTaskTypeGeometry] > 0 ||
-				streamStats.nOpenRequestCountByType[eStreamTaskTypeTexture] > 0;
-
+			gEnv->pSystem->GetStreamEngine()->GetStreamingOpenStatistics(streamStats);
+			if (streamStats.nOpenRequestCountByType[eStreamTaskTypeGeometry] == 0
+				&& streamStats.nOpenRequestCountByType[eStreamTaskTypeTexture] == 0
+				&& streamStats.nOpenRequestCountByType[eStreamTaskTypeTerrain] == 0
 #if defined(FEATURE_SVO_GI)
-			bStreamingTasksInProgress |= bSvoTasksInProgress | !gEnv->p3DEngine->IsSvoReady(true);
+				&& gEnv->p3DEngine->IsSvoReady(true)
+				&& is_svo_ready_pre_draw
 #endif
+				)
+				break;
 
-			if (bStreamingTasksInProgress)
-			{
-				CrySleep(10);
-			}
+			// Update streaming engine
+			CrySleep(10);
+			gEnv->pSystem->GetStreamEngine()->Update(eStreamTaskTypeTerrain | eStreamTaskTypeTexture | eStreamTaskTypeGeometry);
 
-			gcpRendD3D->ExecuteRenderThreadCommand([&]
-			{
-				if (!bStreamingTasksInProgress)
-				{
-					CDeviceTexture* pDstDevTex = ptexGenEnvironmentCM->GetDevTexture();
-					pDstDevTex->DownloadToStagingResource(0, [&](void* pData, uint32 rowPitch, uint32 slicePitch)
-					{
-						unsigned short* pTarg = (unsigned short*)pData;
-						const uint32 nLineStride = CTexture::TextureDataSize(size, 1, 1, 1, 1, eTF_R16G16B16A16F) / sizeof(unsigned short);
-
-						// Copy vertically flipped image
-						for (uint32 nLine = 0; nLine < size; ++nLine)
-							vecData.Copy(&pTarg[((size - 1) - nLine) * nLineStride], nLineStride);
-
-						return true;
-					});
-				}
-
-				GetDeviceObjectFactory().IssueFrameFences();
+			// Flush and garbage collect
+			gcpRendD3D->ExecuteRenderThreadCommand([&] {
+				GetDeviceObjectFactory().FlushToGPU(false, true);
 			}, ERenderCommandFlags::FlushAndWait);
+		}
 
-		} while (++waitFrames <= maxWaitFrames && bStreamingTasksInProgress);
-
-		if (maxWaitFrames>0 && waitFrames > maxWaitFrames)
+		if (waitFrames<0)
 		{
 			CryWarning(VALIDATOR_MODULE_RENDERER, VALIDATOR_WARNING, 
 			    "Cubemap generation timeout: some outstanding tasks didn't finish on time, generated cubemap might be incorrect.\n" \
 			    "Consider increasing r_CubemapGenerationTimeout");
 		}
+
+		bool success = false;
+		gcpRendD3D->ExecuteRenderThreadCommand([&]
+		{
+			CDeviceTexture* pDstDevTex = ptexGenEnvironmentCM->GetDevTexture();
+			if (!pDstDevTex)
+			{
+				iLog->Log("Failed generating a cubemap: out of video memory");
+				return;
+			}
+
+			pDstDevTex->DownloadToStagingResource(0, [&](void* pData, uint32 rowPitch, uint32 slicePitch)
+			{
+				const auto* pTarg = reinterpret_cast<const std::uint16_t*>(pData);
+				const uint32 nLineStride = CTexture::TextureDataSize(size, 1, 1, 1, 1, eTF_R16G16B16A16F) / sizeof(*pTarg);
+
+				// Copy vertically flipped image
+				for (uint32 nLine = 0; nLine < size; ++nLine)
+				{
+					const auto src = pTarg + ((size - 1) - nLine) * nLineStride;
+					std::copy(src, src + nLineStride, std::back_inserter(vecData));
+				}
+
+				success = true;
+				return true;
+			});
+
+			// After download clean up temporal memory pools
+			GetDeviceObjectFactory().FlushToGPU(false, true);
+		}, ERenderCommandFlags::FlushAndWait);
+
+		if (!success)
+			return DynArray<std::uint16_t>{};
 	}
 
 	SAFE_RELEASE(ptexGenEnvironmentCM);
@@ -913,7 +943,7 @@ bool CTexture::RenderEnvironmentCMHDR(int size, const Vec3& Pos, TArray<unsigned
 	iLog->Log("Successfully finished generating a cubemap in %.1f sec", timeUsed);
 #endif
 
-	return true;
+	return vecData;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1218,7 +1248,8 @@ bool CFlashTextureSource::Update()
 
 void CFlashTextureSourceSharedRT::ProbeDepthStencilSurfaceCreation(int width, int height)
 {
-	gcpRendD3D->GetTempDepthSurface(gcpRendD3D->GetFrameID(), width, height);
+	CTexture* pTex = gcpRendD3D->CreateDepthTarget(width, height, Clr_Empty, eTF_Unknown);
+	SAFE_RELEASE(pTex);
 }
 
 bool CFlashTextureSourceSharedRT::Update()

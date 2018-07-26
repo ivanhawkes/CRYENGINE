@@ -343,7 +343,7 @@ int CRenderMesh::Release()
 		}
 #   endif
 		m_nFlags |= FRM_RELEASED;
-		int nFrame = GetCurrentFrameID();
+		int nFrame = gRenDev->m_pRT ? GetCurrentFrameID() : gEnv->nMainFrameID;
 		util::list<CRenderMesh>* garbage = &CRenderMesh::s_MeshGarbageList[nFrame & (MAX_RELEASED_MESH_FRAMES - 1)];
 		m_Chain.relink_tail(garbage);
 	}
@@ -1390,12 +1390,88 @@ void CRenderMesh::SetSkinningDataVegetation(struct SMeshBoneMapping_uint8 *pBone
 	CreateRemappedBoneIndicesPair(~0u, m_ChunksSkinned);
 }
 
+namespace
+{
+	// Eight weight skinning: map bone ids 4-7 according to remap table
+	inline void DoExtraBoneMapping(uint16(&boneIds)[4], const DynArray<JointIdType>& tableRemap)
+	{
+		if (!tableRemap.empty())
+		{
+			for (int n = 0; n < 4; ++n) boneIds[n] = (boneIds[n] == 0) ? 0 : tableRemap[boneIds[n]];
+		}
+	}
+
+	// Eight weight skinning: map all bone ids 4-7 of all vertices according to remap table
+	inline void DoExtraBoneMapping(struct SMeshBoneMapping_uint16 *pExtraBoneMapping, int vtxCount, const DynArray<JointIdType>& tableRemap)
+	{
+		for (int i = 0; i < vtxCount; ++i)
+		{
+			DoExtraBoneMapping(pExtraBoneMapping[i].boneIds, tableRemap);
+		}
+	}
+} // namespace
+
+void CRenderMesh::CreateExtraBoneMappingBuffers(struct SMeshBoneMapping_uint16 *pExtraBoneMapping, bool bDoRemapping)
+{
+	m_extraBonesBuffer.Release();
+	if (!bDoRemapping) m_arrRemapTable.clear();
+
+	std::vector<SVF_W4B_I4S> pExtraBones;
+
+	if (pExtraBoneMapping && m_extraBonesBuffer.IsNullBuffer() && m_nVerts)
+	{
+		if (m_nVerts == m_arrOriginalBoneIds.size())
+		{
+			pExtraBoneMapping = m_arrOriginalBoneIds.data(); // Use original bone ids for mapping (in case of reinitialization, i.e., not reloading)
+		}
+
+		pExtraBones.resize(m_nVerts);
+		uint16 boneId[4];
+		for (int i = 0; i < m_nVerts; i++)
+		{
+			// get bone IDs
+			for (int n = 0; n < 4; ++n)
+			{
+				boneId[n] = pExtraBoneMapping[i].boneIds[n];
+			}
+
+			// do remapping
+			if (!m_arrRemapTable.empty())
+			{
+				DoExtraBoneMapping(boneId, m_arrRemapTable);
+			}
+
+			// set weights & indices
+			for (int n = 0; n < 4; ++n)
+			{
+				const uint8 weight = pExtraBoneMapping[i].weights[n];
+				if (weight == 0) boneId[n] = 0;
+				pExtraBones[i].indices[n] = boneId[n];
+				pExtraBones[i].weights.bcolor[n] = weight;
+			}
+		}
+
+		m_nFlags |= FRM_SKINNED_EIGHT_WEIGHTS;
+		m_extraBonesBuffer.Create(pExtraBones.size(), sizeof(SVF_W4B_I4S), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::USAGE_STRUCTURED | CDeviceObjectFactory::BIND_SHADER_RESOURCE, &pExtraBones[0]);
+		m_arrRemapTable.clear(); // remap only once (i.e., in case remapping-table has changed)
+	}
+	else
+	{
+		// dummy buffer with no contents: there is no shader permutation, so we need to set a the resource
+		// even if it's branched away (not all texture fetch instruction can be omitted and the fetch might
+		// happen anyway)
+		m_nFlags &= ~FRM_SKINNED_EIGHT_WEIGHTS;
+		m_extraBonesBuffer.Create(0, sizeof(SVF_W4B_I4S), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::USAGE_STRUCTURED | CDeviceObjectFactory::BIND_SHADER_RESOURCE, nullptr);
+	}
+
+}
+
 void CRenderMesh::SetSkinningDataCharacter(CMesh& mesh, uint32 flags, struct SMeshBoneMapping_uint16 *pBoneMapping, struct SMeshBoneMapping_uint16 *pExtraBoneMapping)
 {
-  MEMORY_SCOPE_CHECK_HEAP();
+	MEMORY_SCOPE_CHECK_HEAP();
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_RenderMeshType, 0, this->GetTypeName());
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_RenderMesh, 0, this->GetSourceName());
-  SVF_W4B_I4S *pSkinBuff = (SVF_W4B_I4S *)LockVB(VSF_HWSKIN_INFO, FSL_VIDEO_CREATE);
+	SVF_W4B_I4S *pSkinBuff = (SVF_W4B_I4S *)LockVB(VSF_HWSKIN_INFO, FSL_VIDEO_CREATE);
 
 	// stop initializing if allocation failed
 	if( pSkinBuff == NULL ) 
@@ -1406,107 +1482,38 @@ void CRenderMesh::SetSkinningDataCharacter(CMesh& mesh, uint32 flags, struct SMe
 
 	for (uint32 i=0; i<m_nVerts; i++ )
 	{
-		// get bone IDs
-		uint16 b0 = pBoneMapping[i].boneIds[0];
-		uint16 b1 = pBoneMapping[i].boneIds[1];
-		uint16 b2 = pBoneMapping[i].boneIds[2];
-		uint16 b3 = pBoneMapping[i].boneIds[3];
-
-		// get weights
-		const uint8 w0 = pBoneMapping[i].weights[0];
-		const uint8 w1 = pBoneMapping[i].weights[1];
-		const uint8 w2 = pBoneMapping[i].weights[2];
-		const uint8 w3 = pBoneMapping[i].weights[3];
-
-		// if weight is zero set bone ID to zero as the bone has no influence anyway,
-		// this will fix some issue with incorrectly exported models (e.g. system freezes on ATI cards when access invalid bones)
-		if (w0 == 0) b0 = 0;
-		if (w1 == 0) b1 = 0;
-		if (w2 == 0) b2 = 0;
-		if (w3 == 0) b3 = 0;
-
-		pSkinBuff[i].indices[0] = b0;
-		pSkinBuff[i].indices[1] = b1;
-		pSkinBuff[i].indices[2] = b2;
-		pSkinBuff[i].indices[3] = b3;
-
-		pSkinBuff[i].weights.bcolor[0] = w0;
-		pSkinBuff[i].weights.bcolor[1] = w1;
-		pSkinBuff[i].weights.bcolor[2] = w2;
-		pSkinBuff[i].weights.bcolor[3] = w3;
+		// set weights and boneIds
+		for (uint32 n = 0; n < 4; n++)
+		{
+			uint16 boneId = pBoneMapping[i].boneIds[n];
+			const uint8 weight = pBoneMapping[i].weights[n];
+			// if weight is zero set bone ID to zero as the bone has no influence anyway,
+			// this will fix some issue with incorrectly exported models (e.g. system freezes on ATI cards when access invalid bones)
+			if (weight == 0) boneId = 0;
+			pSkinBuff[i].indices[n] = boneId;
+			pSkinBuff[i].weights.bcolor[n] = weight;
+		}
 	}
 
 	UnlockVB(VSF_HWSKIN_INFO);
 
-	std::vector<SVF_W4B_I4S> pExtraBones;
+	CreateExtraBoneMappingBuffers(pExtraBoneMapping);
 
-	if (pExtraBoneMapping && m_extraBonesBuffer.IsNullBuffer() && m_nVerts)
+	if (pExtraBoneMapping)
 	{
-		pExtraBones.resize(m_nVerts);
-		for (uint32 i=0; i<m_nVerts; i++)
-		{
-			// get bone IDs
-			uint16 b0 = pExtraBoneMapping[i].boneIds[0];
-			uint16 b1 = pExtraBoneMapping[i].boneIds[1];
-			uint16 b2 = pExtraBoneMapping[i].boneIds[2];
-			uint16 b3 = pExtraBoneMapping[i].boneIds[3];
+		m_pExtraBoneMapping = reinterpret_cast<SMeshBoneMapping_uint16*>(AllocateMeshDataUnpooled(sizeof(SMeshBoneMapping_uint16) * m_nVerts));
 
-			// get weights
-			const uint8 w0 = pExtraBoneMapping[i].weights[0];
-			const uint8 w1 = pExtraBoneMapping[i].weights[1];
-			const uint8 w2 = pExtraBoneMapping[i].weights[2];
-			const uint8 w3 = pExtraBoneMapping[i].weights[3];
-
-			if (w0 == 0) b0 = 0;
-			if (w1 == 0) b1 = 0;
-			if (w2 == 0) b2 = 0;
-			if (w3 == 0) b3 = 0;
-
-			pExtraBones[i].indices[0] = b0;
-			pExtraBones[i].indices[1] = b1;
-			pExtraBones[i].indices[2] = b2;
-			pExtraBones[i].indices[3] = b3;
-
-			pExtraBones[i].weights.bcolor[0] = w0;
-			pExtraBones[i].weights.bcolor[1] = w1;
-			pExtraBones[i].weights.bcolor[2] = w2;
-			pExtraBones[i].weights.bcolor[3] = w3;
-		}
-
-		m_nFlags |= FRM_SKINNED_EIGHT_WEIGHTS;
-
-		m_extraBonesBuffer.Create(pExtraBones.size(), sizeof(SVF_W4B_I4S), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::USAGE_STRUCTURED | CDeviceObjectFactory::BIND_SHADER_RESOURCE, &pExtraBones[0]);
-	}
-	else
-	{
-		// dummy buffer with no contents: there is no shader permutation, so we need to set a the resource
-		// even if it's branched away (not all texture fetch instruction can be omitted and the fetch might
-		// happen anyway)
-		m_nFlags &= ~FRM_SKINNED_EIGHT_WEIGHTS;
-
-		m_extraBonesBuffer.Create(0, sizeof(SVF_W4B_I4S), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::USAGE_STRUCTURED | CDeviceObjectFactory::BIND_SHADER_RESOURCE, nullptr);
+		memcpy(m_pExtraBoneMapping, pExtraBoneMapping, sizeof(SMeshBoneMapping_uint16) * m_nVerts);
 	}
 
-	static ICVar* cvar_gd = gEnv->pConsole->GetCVar("r_ComputeSkinning");
-	bool bCreateCSBuffers = (flags & FSM_USE_COMPUTE_SKINNING) && (cvar_gd && cvar_gd->GetIVal()) && m_sType == "Character";
+	ComputeSkinningCreateBindPoseAndMorphBuffers(mesh);
 
-	if (bCreateCSBuffers)
-	{
-		if (pExtraBoneMapping)
-		{
-			m_pExtraBoneMapping = reinterpret_cast<SMeshBoneMapping_uint16*>(AllocateMeshDataUnpooled(sizeof(SMeshBoneMapping_uint16) * m_nVerts));
-
-			memcpy(m_pExtraBoneMapping, pExtraBoneMapping, sizeof(SMeshBoneMapping_uint16) * m_nVerts);
-		}
-
-		ComputeSkinningCreateBindPoseAndMorphBuffers(mesh);
-	}
 }
 
 
 void CRenderMesh::ComputeSkinningCreateBindPoseAndMorphBuffers(CMesh& mesh)
 {
-	if (!m_nVerts || !m_nInds)
+	if (!m_nVerts || !m_nInds || !mesh.m_pIndices)
 		return;
 
 	std::vector<uint32> buckets(m_nVerts, 0);
@@ -1520,8 +1527,15 @@ void CRenderMesh::ComputeSkinningCreateBindPoseAndMorphBuffers(CMesh& mesh)
 	for (uint32 i=1; i<m_nVerts; ++i)
 		bucketsCounter[i] = bucketsCounter[i-1] + buckets[i-1];
 
-	std::vector<uint32> adjTriangles;
-	adjTriangles.resize(m_nInds);
+	uint32*                          adjTriangles         = static_cast<uint32*>(AllocateMeshDataUnpooled(sizeof(uint32) * m_nInds));
+	compute_skinning::SSkinVertexIn* vertices             = static_cast<compute_skinning::SSkinVertexIn*>(AllocateMeshDataUnpooled(sizeof(compute_skinning::SSkinVertexIn) * m_nVerts));
+	vtx_idx*                         indices              = static_cast<vtx_idx*>(AllocateMeshDataUnpooled(sizeof(vtx_idx) * m_nInds));
+	Vec4*                            vertexDeltas         = static_cast<Vec4*>(AllocateMeshDataUnpooled(sizeof(Vec4) * mesh.m_vertexDeltas.size()));
+	uint64*                          vertexMorphsBitfield = static_cast<uint64*>(AllocateMeshDataUnpooled(sizeof(uint64) * mesh.m_verticesDeltaOffsets.size()));
+	
+	memcpy(indices, mesh.m_pIndices, sizeof(vtx_idx) * m_nInds);
+	memcpy(vertexDeltas, mesh.m_vertexDeltas.data(), sizeof(Vec4) * mesh.m_vertexDeltas.size());
+	memcpy(vertexMorphsBitfield, mesh.m_vertexMorphsBitfield.data(), sizeof(uint64) * mesh.m_vertexMorphsBitfield.size());
 
 	int32 k=0;
 	for (uint32 i=0; i<m_nInds; i+=3)
@@ -1539,8 +1553,6 @@ void CRenderMesh::ComputeSkinningCreateBindPoseAndMorphBuffers(CMesh& mesh)
 	bool haveDeltaMorphs = mesh.m_verticesDeltaOffsets.size() > 0;
 
 	// filling up arrays of CSSkinVertexIn
-	std::vector<compute_skinning::SSkinVertexIn> vertices;
-	vertices.resize(m_nVerts);
 	uint32 count = 0;
 	for (int32 i=0; i<m_nVerts; ++i)
 	{
@@ -1559,24 +1571,41 @@ void CRenderMesh::ComputeSkinningCreateBindPoseAndMorphBuffers(CMesh& mesh)
 	}
 	m_nMorphs = mesh.m_numMorphs;
 
-	m_computeSkinningDataSupply = gcpRendD3D->GetComputeSkinningStorage()->GetOrCreateComputeSkinningPerMeshData(this);
-	m_computeSkinningDataSupply->PushBindPoseBuffers(m_nVerts, m_nInds, adjTriangles.size(), &vertices[0], mesh.m_pIndices, &adjTriangles[0]);
-	if (mesh.m_vertexDeltas.size())
-	{
-		m_computeSkinningDataSupply->PushMorphs(mesh.m_vertexDeltas.size(), mesh.m_vertexMorphsBitfield.size(), &mesh.m_vertexDeltas[0], &mesh.m_vertexMorphsBitfield[0]);
-	}
+	m_computeSkinningDataSupply = gcpRendD3D->GetComputeSkinningStorage()->GetOrCreatePerMeshResources(this);
+
+	uint32	nVerts = m_nVerts,
+			nIndices = m_nInds,
+			nVertexDeltas = mesh.m_vertexDeltas.size(),
+			nVertexMorphsBitfield = mesh.m_vertexMorphsBitfield.size();
+
+	gcpRendD3D->ExecuteRenderThreadCommand(
+		[=]
+		{
+				m_computeSkinningDataSupply->RT_PushBindPoseBuffers(nVerts, nIndices, nIndices, vertices, indices, adjTriangles);
+				if (nVertexDeltas > 0)
+				{
+					m_computeSkinningDataSupply->RT_PushMorphs(nVertexDeltas, nVertexMorphsBitfield, vertexDeltas, vertexMorphsBitfield);
+				}
+
+				FreeMeshDataUnpooled(adjTriangles);
+				FreeMeshDataUnpooled(indices);
+				FreeMeshDataUnpooled(vertices);
+				FreeMeshDataUnpooled(vertexDeltas);
+				FreeMeshDataUnpooled(vertexMorphsBitfield);
+		}, ERenderCommandFlags::None
+	);
 }
 
-void CRenderMesh::ComputeSkinningCreateSkinningBuffers(const SVF_W4B_I4S* pBoneMapping, const SMeshBoneMapping_uint16* pExtraBoneMapping)
+void CRenderMesh::ComputeSkinningCreateSkinningBuffers(uint32 guid, const SVF_W4B_I4S* pBoneMapping, const SMeshBoneMapping_uint16* pExtraBoneMapping)
 {
 	MEMORY_SCOPE_CHECK_HEAP();
 
 	// read remapped stream
-	std::vector<compute_skinning::SSkinning> skinningVector;
-	std::vector<compute_skinning::SSkinningMap> skinningVectorMap;
+	auto skinningVector    = static_cast<compute_skinning::SSkinning*>(AllocateMeshDataUnpooled(m_nVerts * 8 * sizeof(compute_skinning::SSkinning)));
+	auto skinningVectorMap = static_cast<compute_skinning::SSkinningMap*>(AllocateMeshDataUnpooled(m_nVerts * sizeof(compute_skinning::SSkinningMap)));
+	uint32 nSkinningVectorElements = 0u, nSkinningVectorMapElements = m_nVerts;
 
 	uint offset = 0;
-	skinningVector.reserve(m_nVerts*8);
 	for (uint32 i=0; i<m_nVerts; ++i)
 	{
 		uint count = 0;
@@ -1586,8 +1615,8 @@ void CRenderMesh::ComputeSkinningCreateSkinningBuffers(const SVF_W4B_I4S* pBoneM
 			const uint8  weight = pBoneMapping[i].weights.bcolor[j];
 			if (weight > 0)
 			{
-				skinningVector.push_back(compute_skinning::SSkinning());
-				skinningVector.back().weightIndex = (weight << 24 | index);
+				skinningVector[nSkinningVectorElements++]             = compute_skinning::SSkinning();
+				skinningVector[nSkinningVectorElements-1].weightIndex = (weight << 24 | index);
 
 				++count;
 			}
@@ -1602,23 +1631,30 @@ void CRenderMesh::ComputeSkinningCreateSkinningBuffers(const SVF_W4B_I4S* pBoneM
 				const uint8  weight = pExtraBoneMapping[i].weights[j];
 				if (weight > 0)
 				{
-					skinningVector.push_back(compute_skinning::SSkinning());
-					skinningVector.back().weightIndex = (weight << 24 | index);
+					skinningVector[nSkinningVectorElements++]             = compute_skinning::SSkinning();
+					skinningVector[nSkinningVectorElements-1].weightIndex = (weight << 24 | index);
 					++count;
 				}
 			}
 		}
 
-		skinningVectorMap.push_back(compute_skinning::SSkinningMap());
-		skinningVectorMap.back().offset = offset;
-		skinningVectorMap.back().count = count;
+		skinningVectorMap[i].offset = offset;
+		skinningVectorMap[i].count = count;
 
 		offset += count;
 	}
 
 	// this can occur before or after the other call to GetOrCreateComputeSkinningPerMeshData
-	m_computeSkinningDataSupply = gcpRendD3D->GetComputeSkinningStorage()->GetOrCreateComputeSkinningPerMeshData(this);
-	m_computeSkinningDataSupply->PushWeights(skinningVector.size(), skinningVectorMap.size(), &skinningVector[0], &skinningVectorMap[0]);
+	m_computeSkinningDataSupply = gcpRendD3D->GetComputeSkinningStorage()->GetOrCreatePerMeshResources(this);
+
+	gcpRendD3D->ExecuteRenderThreadCommand(
+		[=]
+		{
+			m_computeSkinningDataSupply->GetOrCreatePerCharacterResources(guid)->RT_PushWeights(nSkinningVectorElements, nSkinningVectorMapElements, skinningVector, skinningVectorMap);
+			FreeMeshDataUnpooled(skinningVector);
+			FreeMeshDataUnpooled(skinningVectorMap);
+		}, ERenderCommandFlags::None
+	);
 }
 
 uint CRenderMesh::GetSkinningWeightCount() const
@@ -2567,7 +2603,7 @@ bool CRenderMesh::RT_CheckUpdate(CRenderMesh *pVContainer, InputLayoutHandle eVF
 
 				static ICVar* cvar_gd = gEnv->pConsole->GetCVar("r_ComputeSkinning");
 				if (cvar_gd && cvar_gd->GetIVal() && m_sType == "Character" && (pVContainer->m_nFlags & FSM_USE_COMPUTE_SKINNING))
-					pVContainer->ComputeSkinningCreateSkinningBuffers(it->pStream, it->pExtraStream);
+					pVContainer->ComputeSkinningCreateSkinningBuffers(guid, it->pStream, it->pExtraStream);
 			}
 
 			FreeMeshDataUnpooled(it->pStream);
@@ -4592,16 +4628,37 @@ void CRenderMesh::CreateRemappedBoneIndicesPair(const DynArray<JointIdType> &arr
 			}
 		}
 
-		// bone mapping for extra bones (8 weight skinning; map weights 5 to 8 from skin bone indices to skeleton bone indices)
-		if (m_pExtraBoneMapping)
+		// handle 8-weight skinning: weights 4 to 7 (i.e., extraBoneMapping)
+
+		// store original bone-ids, if not already stored - these are used later on for remapping
+		const bool areOriginalBoneIdsAlreadyStored = m_nVerts > 0 && m_nVerts == m_arrOriginalBoneIds.size();
+		if (m_pExtraBoneMapping && !areOriginalBoneIdsAlreadyStored)
 		{
-			for (int i = 0; i < vtxCount; ++i)
+			m_arrOriginalBoneIds.resize(vtxCount);
+			m_arrOriginalBoneIds.assign(m_pExtraBoneMapping, m_pExtraBoneMapping + vtxCount);
+		}
+
+		// bone mapping for extra bones (8 weight skinning; map weights 4 to 7 from skin bone indices to skeleton bone indices)
+		const bool isComputeSkinning = (m_nFlags & FSM_USE_COMPUTE_SKINNING) != 0;
+		if (isComputeSkinning)
+		{
+			if (m_pExtraBoneMapping)
 			{
-				for (int l = 0; l < 4; ++l)
-				{
-					auto& boneIdx = m_pExtraBoneMapping[i].boneIds[l];
-					boneIdx = (boneIdx == 0) ? 0 : arrRemapTable[boneIdx];
-				}
+				// remap boneIds
+				DoExtraBoneMapping(m_pExtraBoneMapping, vtxCount, arrRemapTable);
+			}
+		}
+		else // vertex skinning
+		{
+			// store actual arrRemapTable and do remapping (using the original boneIds)
+			// in case buffers are already created, they are recreated and filled with actual mapping data
+			if (!arrRemapTable.empty())
+			{
+				// needs remapping, thus, store actual remapTable and create/recreate new, remapped buffers
+				m_arrRemapTable.resize(arrRemapTable.size());
+				m_arrRemapTable.copy(0, arrRemapTable);
+				const bool doRemapping = true;
+				CreateExtraBoneMappingBuffers(m_pExtraBoneMapping, doRemapping);
 			}
 		}
 	}

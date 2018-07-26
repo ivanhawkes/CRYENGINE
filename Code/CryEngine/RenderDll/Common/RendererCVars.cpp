@@ -80,7 +80,7 @@ int CRendererCVars::CV_r_VkHardwareComputeQueue;
 int CRendererCVars::CV_r_VkHardwareCopyQueue;
 int CRendererCVars::CV_r_ReprojectOnlyStaticObjects;
 int CRendererCVars::CV_r_ReadZBufferDirectlyFromVMEM;
-int CRendererCVars::CV_r_ReverseDepth;
+int CRendererCVars::CV_r_FlushToGPU;
 
 int CRendererCVars::CV_r_EnableDebugLayer;
 int CRendererCVars::CV_r_NoDraw;
@@ -574,7 +574,9 @@ int CRendererCVars::CV_r_FogShadowsWater;
 
 int CRendererCVars::CV_r_RainDropsEffect;
 
-AllocateConstIntCVar(CRendererCVars, CV_r_RefractionPartialResolves);
+AllocateConstIntCVar(CRendererCVars, CV_r_RefractionPartialResolveMode);
+AllocateConstIntCVar(CRendererCVars, CV_r_RefractionPartialResolveMinimalResolveArea);
+AllocateConstIntCVar(CRendererCVars, CV_r_RefractionPartialResolveMaxResolveCount);
 AllocateConstIntCVar(CRendererCVars, CV_r_RefractionPartialResolvesDebug);
 
 AllocateConstIntCVar(CRendererCVars, CV_r_Batching);
@@ -596,6 +598,7 @@ int CRendererCVars::CV_r_enableauxgeom;
 #endif
 
 int CRendererCVars::CV_r_ParticleVerticePoolSize;
+int CRendererCVars::CV_r_ParticleMaxVerticePoolSize;
 int CRendererCVars::CV_r_GeomCacheInstanceThreshold;
 int CRendererCVars::CV_r_VisAreaClipLightsPerPixel;
 
@@ -976,10 +979,10 @@ void CRendererCVars::InitCVars()
 		OnChange_CV_r_ShaderTarget(CV_r_ShaderTarget);
 #endif
 #if CRY_RENDERER_VULKAN
-		CV_r_VkShaderCompiler = REGISTER_STRING("r_VkShaderCompiler", "HLSLCC", VF_DUMPTODISK,
+		CV_r_VkShaderCompiler = REGISTER_STRING("r_VkShaderCompiler", "DXC", VF_DUMPTODISK,
 			"Vulkan renderer only CVar."
 			"Sets the HLSL to SPIRV compiler to use for local/remote shader comilation ( HLSLCC/DXC/GLSLANG ).\n"
-			"Specify in system.cfg like this: r_VkShaderCompiler = \"HLSLCC\"");
+			"Specify in system.cfg like this: r_VkShaderCompiler = \"DXC\"");
 #endif
 
 	REGISTER_CVAR3("r_DeferredShadingTiled", CV_r_DeferredShadingTiled, 3, VF_DUMPTODISK,
@@ -2676,13 +2679,22 @@ void CRendererCVars::InitCVars()
 	               "Usage: r_D3D12HardwareCopyQueue [0-2]");
 
 #if (CRY_RENDERER_DIRECT3D >= 120)
-	gEnv->pConsole->GetCVar("r_D3D12HardwareComputeQueue")->SetOnChangeCallback(OnChange_CV_D3D12HardwareComputeQueue);
-	gEnv->pConsole->GetCVar("r_D3D12HardwareCopyQueue")->SetOnChangeCallback(OnChange_CV_D3D12HardwareCopyQueue);
+	if (ICVar* pVar = gEnv->pConsole->GetCVar("r_D3D12HardwareComputeQueue"))
+	{
+		pVar->AddOnChange(OnChange_CV_D3D12HardwareComputeQueue);
+	}
+	if (ICVar* pVar = gEnv->pConsole->GetCVar("r_D3D12HardwareCopyQueue"))
+	{
+		pVar->AddOnChange(OnChange_CV_D3D12HardwareCopyQueue);
+	}
 #endif
 
 	REGISTER_CVAR3("r_ReprojectOnlyStaticObjects", CV_r_ReprojectOnlyStaticObjects, 1, VF_NULL, "Forces a split in the zpass, to prevent moving object from beeing reprojected");
 	REGISTER_CVAR3("r_ReadZBufferDirectlyFromVMEM", CV_r_ReadZBufferDirectlyFromVMEM, 0, VF_NULL, "Uses direct VMEM reads instead of a staging buffer on durango for the reprojection ZBuffer");
-	REGISTER_CVAR3("r_ReverseDepth", CV_r_ReverseDepth, 1, VF_NULL, "Use 1-z depth rendering for increased depth precision");
+	REGISTER_CVAR3("r_FlushToGPU", CV_r_FlushToGPU, 1, VF_NULL,
+		"Configure gpu-work flushing behaviour"
+		"0: Flush at end-frame only"
+		"1: Flush at positions where the character of the work changes drastically (Flash vs. Scene vs. Post vs. Uploads etc.)");
 
 	REGISTER_CVAR3("r_EnableDebugLayer", CV_r_EnableDebugLayer, 0, VF_NULL, 
 		"Enable Graphics API specific debug layer"
@@ -2810,21 +2822,24 @@ void CRendererCVars::InitCVars()
 	                    "0: force off\n"
 	                    "1: on (default)\n"
 	                    "2: on (forced)");
-
-	DefineConstIntCVar3("r_RefractionPartialResolves", CV_r_RefractionPartialResolves, 2, VF_NULL,
-	                    "Do a partial screen resolve before refraction\n"
-	                    "Usage: r_RefractionPartialResolves [0/1]\n"
-	                    "0: disable \n"
-	                    "1: enable conservatively (non-optimal)\n"
-	                    "2: enable (default)");
-
+	
+	DefineConstIntCVar3("r_RefractionPartialResolveMode", CV_r_RefractionPartialResolveMode, 2, VF_NULL,
+	                    "Specifies mode of operation of partial screen resolves before refraction\n"
+	                    "Usage: r_RefractionPartialResolveMode [0/1/2]\n"
+		                "0: Static approach: Single resolve pass before transparent forward pass.\n"
+	                    "1: Simple iterative approach: Resolve pass before every refractive render items that requires resolve.\n"
+	                    "2: Topological sorting of overlaping resolve regions (default)");
+	DefineConstIntCVar3("r_RefractionPartialResolveMinimalResolveArea", CV_r_RefractionPartialResolveMinimalResolveArea, 0, VF_NULL,
+	                    "Minimal resolve area, in pixels, required to inject a partial resolve (default: 0).");
+	DefineConstIntCVar3("r_RefractionPartialResolveMaxResolveCount", CV_r_RefractionPartialResolveMaxResolveCount, 0, VF_NULL,
+	                    "Provides an upper limit on partial screen resolves per render-items list.\n"
+		                "(Unlimited if a non-positive integer is provided)");
 	DefineConstIntCVar3("r_RefractionPartialResolvesDebug", CV_r_RefractionPartialResolvesDebug, 0, VF_NULL,
 	                    "Toggle refraction partial resolves debug display\n"
-	                    "Usage: r_RefractionPartialResolvesDebug [0/1]\n"
+	                    "Usage: r_RefractionPartialResolvesDebug\n"
 	                    "0: disable \n"
-	                    "1: Additive 2d area \n"
-	                    "2: Bounding boxes \n"
-	                    "3: Alpha overlay with varying colours \n");
+	                    "1: Statistics \n"
+	                    "2: Bounding boxes \n");
 
 	DefineConstIntCVar3("r_Batching", CV_r_Batching, 1, VF_NULL,
 	                    "Enable/disable render items batching\n"
@@ -2893,7 +2908,8 @@ void CRendererCVars::InitCVars()
 	REGISTER_CVAR2("r_enableAuxGeom", &CV_r_enableauxgeom, defValAuxGeomEnable, VF_REQUIRE_APP_RESTART, "Enables aux geometry rendering.");
 #endif
 
-	REGISTER_CVAR2("r_ParticleVerticePoolSize", &CV_r_ParticleVerticePoolSize, 131072, VF_REQUIRE_APP_RESTART, "Max Number of Particle Vertices to support");
+	REGISTER_CVAR2("r_ParticleVerticePoolSize", &CV_r_ParticleVerticePoolSize, 131072, VF_REQUIRE_APP_RESTART, "Initial size Particles' buffers");
+	REGISTER_CVAR2("r_ParticleMaxVerticePoolSize", &CV_r_ParticleMaxVerticePoolSize, 131072*8, VF_REQUIRE_APP_RESTART, "Max size of Particles' buffers");
 
 	DefineConstIntCVar3("r_ParticlesDebug", CV_r_ParticlesDebug, 0, VF_NULL,
 	                    "Particles debugging\n"
@@ -3032,9 +3048,9 @@ void CRendererCVars::InitCVars()
 	REGISTER_CVAR2("d3d11_debugBreakOnce", &CV_d3d11_debugBreakOnce, 1, VF_NULL,
 	               "If enabled, D3D debug runtime break on message/error will be enabled only for 1 frame since last change.\n");
 
-	CV_d3d11_debugMuteSeverity->SetOnChangeCallback(OnChange_CV_d3d11_debugMuteMsgID);
-	CV_d3d11_debugMuteMsgID->SetOnChangeCallback(OnChange_CV_d3d11_debugMuteMsgID);
-	CV_d3d11_debugBreakOnMsgID->SetOnChangeCallback(OnChange_CV_d3d11_debugMuteMsgID);
+	CV_d3d11_debugMuteSeverity->AddOnChange(OnChange_CV_d3d11_debugMuteMsgID);
+	CV_d3d11_debugMuteMsgID->AddOnChange(OnChange_CV_d3d11_debugMuteMsgID);
+	CV_d3d11_debugBreakOnMsgID->AddOnChange(OnChange_CV_d3d11_debugMuteMsgID);
 #endif
 
 #if defined(CRY_PLATFORM_WINDOWS)

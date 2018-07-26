@@ -722,7 +722,7 @@ CVegetationInstance* CVegetationMap::CreateObjInstance(CVegetationObject* object
 	{
 		si = GetVegSector(pos);
 		if (!si)
-			return 0;
+			return nullptr;
 	}
 
 	CVegetationInstance* pInst = new CVegetationInstance;
@@ -772,6 +772,7 @@ void CVegetationMap::DeleteObjInstance(CVegetationInstance* pInst, SectorInfo* s
 	if (pInst->pRenderNode)
 	{
 		GetIEditorImpl()->GetAIManager()->OnAreaModified(pInst->pRenderNode->GetBBox());
+		GetIEditorImpl()->Get3DEngine()->OnObjectModified(pInst->pRenderNode, ERF_CASTSHADOWMAPS);
 	}
 
 	SAFE_RELEASE_NODE(pInst->pRenderNode);
@@ -2574,22 +2575,24 @@ void CVegetationMap::RepositionArea(const AABB& box, const Vec3& offset, int nRo
 						// Keep this instance in same position in tempArea
 						tempArea[sectY * m_numSectors + sectX].push_back(pInst);
 
-						//New instance with new position
+						// New instance with new position
 						auto* pSi = &tempArea[newSectorId];
-						CreateObjInstance(pInst->object, newPos, pInst, pSi);
+						auto* pNewInstance = CreateObjInstance(pInst->object, newPos, pInst, pSi);
+						RegisterInstance(pNewInstance);
 					}
 					else
 					{
-						//Move the instance to the new position in tempArea. No registration is required
+						// Move the instance to the new position in tempArea
 						RecordUndo(pInst);
 
 						pInst->pos = newPos;
 						tempArea[newSectorId].push_back(pInst);
+						RegisterInstance(pInst);
 					}
 				}
 				else
 				{
-					//Outside of AABB: just copy without modifications at the same sector
+					// Outside of AABB: just copy without modifications at the same sector
 					tempArea[sectY * m_numSectors + sectX].push_back(pInst);
 				}
 			}
@@ -2619,9 +2622,6 @@ void CVegetationMap::RepositionArea(const AABB& box, const Vec3& offset, int nRo
 	py2 = min(py2, m_numSectors - 1);
 
 	RemoveDuplVegetation(px1, py1, px2, py2);
-
-	//4. Update all vegetation in 3D Engine
-	PlaceObjectsOnTerrain();
 }
 
 void CVegetationMap::RecordUndo(CVegetationInstance* pInst)
@@ -2821,6 +2821,7 @@ void CVegetationMap::GenerateBillboards(IConsoleCmdArgs*)
 			IRenderView* pView = passInfo.GetIRenderView();
 			pView->SetCameras(&tmpCam, 1);
 
+			passInfo.GetIRenderView()->SetShaderRenderingFlags(nRenderingFlags | SHDF_NOASYNC | SHDF_BILLBOARDS);
 			gEnv->pRenderer->EF_StartEf(passInfo);
 
 			Matrix34A matTrans;
@@ -2844,7 +2845,7 @@ void CVegetationMap::GenerateBillboards(IConsoleCmdArgs*)
 
 			pView->SwitchUsageMode(IRenderView::eUsageModeWritingDone);
 
-			gEnv->pRenderer->EF_EndEf3D(nRenderingFlags | SHDF_NOASYNC | SHDF_BILLBOARDS, 0, 0, passInfo);
+			gEnv->pRenderer->EF_EndEf3D(0, 0, passInfo);
 
 			RectI rcDst;
 			rcDst.x = (j % nLine) * nSpriteResFinal;

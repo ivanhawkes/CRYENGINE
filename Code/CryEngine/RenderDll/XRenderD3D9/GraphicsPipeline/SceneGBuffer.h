@@ -11,18 +11,17 @@ struct SGraphicsPipelineStateDescription;
 
 class CSceneGBufferStage : public CGraphicsPipelineStage
 {
+public:
 	enum EPerPassTexture
 	{
 		ePerPassTexture_PerlinNoiseMap = 25,
-		ePerPassTexture_TerrainElevMap,
 		ePerPassTexture_WindGrid,
+		ePerPassTexture_TerrainElevMap,
 		ePerPassTexture_TerrainNormMap,
 		ePerPassTexture_TerrainBaseMap,
 		ePerPassTexture_NormalsFitting,
-		ePerPassTexture_DissolveNoise,
-		ePerPassTexture_SceneLinearDepth,
 
-		ePerPassTexture_Count
+		ePerPassTexture_SceneLinearDepth = 32,
 	};
 
 	enum EPass
@@ -32,7 +31,6 @@ class CSceneGBufferStage : public CGraphicsPipelineStage
 		ePass_MicroGBufferFill = 2,
 	};
 
-public:
 	CSceneGBufferStage();
 
 	void Init() final;
@@ -41,8 +39,9 @@ public:
 
 	bool IsStageActive(EShaderRenderingFlags flags) const final
 	{
-		if (flags & EShaderRenderingFlags::SHDF_FORWARD_MINIMAL)
-			return false;
+		// TODO: GBuffer shouldn't be responsible for ZPrePass
+	//	if (flags & EShaderRenderingFlags::SHDF_FORWARD_MINIMAL)
+	//		return false;
 
 		return true;
 	}

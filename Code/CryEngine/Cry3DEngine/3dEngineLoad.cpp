@@ -350,6 +350,15 @@ void C3DEngine::UnloadLevel()
 		GetRenderer()->FlushRTCommands(true, true, true);
 	}
 
+	//////////////////////////////////////////////////////////////////////////
+	// delete all rendernodes marked for deletion
+	{
+		CryComment("Deleting render nodes");
+		for (int i = 0; i < CRY_ARRAY_COUNT(m_renderNodesToDelete); ++i)
+			TickDelayedRenderNodeDeletion();
+		CryComment("done");
+	}
+
 	// release CGF and materials table
 	for (uint32 i = 0; m_pLevelStatObjTable && i < m_pLevelStatObjTable->size(); i++)
 	{
@@ -499,15 +508,6 @@ void C3DEngine::UnloadLevel()
 			tex->Release();
 
 		m_nNightMoonTexId = 0;
-	}
-
-	//////////////////////////////////////////////////////////////////////////
-	// delete all rendernodes marked for deletion
-	{
-		CryComment("Deleting render nodes");
-		for (int i=0; i<CRY_ARRAY_COUNT(m_renderNodesToDelete); ++i)
-			TickDelayedRenderNodeDeletion();
-		CryComment("done");
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -854,13 +854,16 @@ I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 			// Preload materials.
 			m_owner.GetMatMan()->PreloadDecalMaterials();
 		}
-
+#if !CRY_PLATFORM_DURANGO
 		if (IRenderer* pRenderer = m_owner.GetRenderer())
 		{
 			pRenderer->PrecachePostponedTextures();
 			// Let RT to process shaders and textures requested by preloaded materials
 			pRenderer->TryFlush();
 		}
+#else
+		m_owner.Warning("Disabling level texture precaching on Durango");
+#endif
 	}
 
 	NEXT_STEP(EStep::PreloadMergedMeshes)

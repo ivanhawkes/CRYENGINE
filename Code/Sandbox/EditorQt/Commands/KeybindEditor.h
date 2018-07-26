@@ -2,12 +2,13 @@
 
 #pragma once
 
+#include <Util/UserDataUtil.h>
 #include <QWidget>
 
 class QAdvancedTreeView;
 class CCustomCommand;
 
-class CKeybindEditor : public CDockableWidget
+class CKeybindEditor : public CDockableWidget, public CUserData
 {
 	Q_OBJECT
 
@@ -29,13 +30,13 @@ public:
 	//////////////////////////////////////////////////////////
 	// CDockableWidget implementation
 	virtual IViewPaneClass::EDockingDirection GetDockingDirection() const override { return IViewPaneClass::DOCK_FLOAT; }
-	virtual const char*                       GetPaneTitle() const override        { return "Keyboard Shortcuts"; };
+	virtual const char*                       GetPaneTitle() const override        { return "Keyboard Shortcuts"; }
 	virtual QRect                             GetPaneRect() override               { return QRect(0, 0, 800, 500); }
 	//////////////////////////////////////////////////////////
 
 	virtual void customEvent(QEvent* event) override;
 protected:
-	static void OnKeybindsChanged();
+	static void  OnKeybindsChanged();
 
 private:
 
@@ -43,7 +44,6 @@ private:
 	void OnAddCustomCommand() const;
 	void OnRemoveCustomCommand(CCustomCommand* command) const;
 
-	KeybindModel* m_model;
-	QAdvancedTreeView*    m_treeView;
+	KeybindModel*      m_model;
+	QAdvancedTreeView* m_treeView;
 };
-

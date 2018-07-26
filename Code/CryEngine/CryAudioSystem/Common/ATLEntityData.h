@@ -16,8 +16,6 @@ namespace CryAudio
  */
 namespace Impl
 {
-struct SObject3DAttributes;
-
 /**
  * An implementation may use this interface to define a class for storing implementation-specific
  * data needed for identifying and using the corresponding CryAudio::IListener object (e.g. a middleware-specific unique ID)
@@ -29,11 +27,11 @@ struct IListener
 	/** @endcond */
 
 	/**
-	 * Set the world position of the listener inside the audio middleware
-	 * @param attributes - a struct containing the audio listener's transformation and velocity
-	 * @return ERequestStatus::Success if the AudioListener's position has been successfully set, ERequestStatus::Failure otherwise
+	 * Sets the listener's transformation.
+	 * @param transformation - a class containing the listener's position and rotation
+	 * @return void
 	 */
-	virtual ERequestStatus Set3DAttributes(SObject3DAttributes const& attributes) = 0;
+	virtual void SetTransformation(CObjectTransformation const& transformation) = 0;
 };
 
 /**
@@ -159,6 +157,7 @@ struct SFileInfo
 	size_t      memoryBlockAlignment; // memory alignment to be used for storing this file's contents in memory
 	size_t      size;                 // file size
 	char const* szFileName;           // file name
+	char const* szFilePath;           // file path
 	bool        bLocalized;           // is the file localized
 	IFile*      pImplData;            // pointer to the implementation-specific data needed for this AudioFileEntry
 };
@@ -177,7 +176,7 @@ struct IStandaloneFile
 
 /**
  * An implementation may use this interface to define a class for storing implementation-specific
- * data needed for identifying and using the corresponding audio object (e.g. a middleware-specific unique ID)
+ * data needed for identifying and using the corresponding object (e.g. a middleware-specific unique ID)
  */
 struct IObject
 {
@@ -187,88 +186,83 @@ struct IObject
 
 	/**
 	 * Performs actions that need to be executed regularly on an AudioObject. Called with every tick of the audio thread.
-	 * @return ERequestStatus::Success if the object has been successfully updated, ERequestStatus::Failure otherwise.
+	 * @return void
 	 */
-	virtual ERequestStatus Update() = 0;
+	virtual void Update() = 0;
 
 	/**
-	 * Set the 3D attributes of the audio object
-	 * @param attributes   - a struct containing the audio object's transformation and velocity
-	 * @return ERequestStatus::Success if the AudioObject's position has been successfully set, ERequestStatus::Failure otherwise
+	 * Set the the object's transformation.
+	 * @param transformation - a class containing the object's position and rotation
+	 * @return void
 	 */
-	virtual ERequestStatus Set3DAttributes(SObject3DAttributes const& attributes) = 0;
+	virtual void SetTransformation(CObjectTransformation const& transformation) = 0;
 
 	/**
-	 * Set the provided value for the specified environment on the audio object
+	 * Set the provided value for the specified environment on the object.
 	 * @param pIEnvironment - implementation-specific environment to set
-	 * @param amount        - the fade value for the provided IEnvironment, 0.0f means no effect at all, 1.0f corresponds to the full effect
-	 * @return ERequestStatus::Success if the provided the value has been successfully set, ERequestStatus::Failure otherwise
+	 * @param amount - the fade value for the provided IEnvironment, 0.0f means no effect at all, 1.0f corresponds to the full effect
+	 * @return void
 	 */
-	virtual ERequestStatus SetEnvironment(IEnvironment const* const pIEnvironment, float const amount) = 0;
+	virtual void SetEnvironment(IEnvironment const* const pIEnvironment, float const amount) = 0;
 
 	/**
-	 * Set the provided parameter to the specified value on the audio object
+	 * Set the provided parameter to the specified value on the object.
 	 * @param pIParameter - implementation-specific parameter to set
-	 * @param value       - the value to set the parameter to
-	 * @return ERequestStatus::Success if the provided value has been successfully set on the passed IAudioParameter, ERequestStatus::Failure otherwise
-	 * @see ExecuteTrigger, SetSwitchState, SetEnvironment, SetListener3DAttributes
+	 * @param value - the value to set the parameter to
+	 * @return void
 	 */
-	virtual ERequestStatus SetParameter(IParameter const* const pIParameter, float const value) = 0;
+	virtual void SetParameter(IParameter const* const pIParameter, float const value) = 0;
 
 	/**
-	 * Set the provided state (on a switch) on the audio object
+	 * Set the provided state (on a switch) on the object.
 	 * @param pISwitchState - implementation-specific state to set
-	 * @return ERequestStatus::Success if the provided ISwitchState has been successfully set, ERequestStatus::Failure otherwise
-	 * @see ExecuteTrigger, SetParameter, SetEnvironment, Set3DAttributes
+	 * @return void
 	 */
-	virtual ERequestStatus SetSwitchState(ISwitchState const* const pISwitchState) = 0;
+	virtual void SetSwitchState(ISwitchState const* const pISwitchState) = 0;
 
 	/**
-	 * Set the provided Obstruction and Occlusion values
-	 * @param obstruction - the obstruction value to be set; it describes how much the direct sound path from the AudioObject to the Listener is obstructed
-	 * @param occlusion   - the occlusion value to be set; it describes how much all sound paths (direct and indirect) are obstructed
-	 * @return ERequestStatus::Success if the provided the values been successfully set, ERequestStatus::Failure otherwise
-	 * @see SetEnvironment
+	 * Set the provided obstruction and occlusion values.
+	 * @param obstruction - the obstruction value to be set, it describes how much the direct sound path from the object to the listener is obstructed
+	 * @param occlusion - the occlusion value to be set, it describes how much all sound paths (direct and indirect) are obstructed
+	 * @return void
 	 */
-	virtual ERequestStatus SetObstructionOcclusion(float const obstruction, float const occlusion) = 0;
+	virtual void SetObstructionOcclusion(float const obstruction, float const occlusion) = 0;
 
 	/**
-	 * Activate a trigger on this audio object
+	 * Activate a trigger on this object.
 	 * @param pITrigger - implementation-specific trigger to activate
-	 * @param pIEvent   - implementation-specific event corresponding to this particular trigger activation
-	 * @return ERequestStatus::Success if the ITrigger has been successfully activated by the audio middleware, ERequestStatus::Failure otherwise
-	 * @see SetParameter, SetSwitchState
+	 * @param pIEvent - implementation-specific event corresponding to this particular trigger activation
+	 * @return ERequestStatus - indicates the outcome of underlying process
 	 */
 	virtual ERequestStatus ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent) = 0;
 
 	/**
-	 * Stop all triggers currently active on the audio object
-	 * @return ERequestStatus::Success if all of the triggers have been successfully stopped, ERequestStatus::Failure otherwise
-	 * @see ExecuteTrigger
+	 * Stop all triggers currently active on the object.
+	 * @return void
 	 */
-	virtual ERequestStatus StopAllTriggers() = 0;
+	virtual void StopAllTriggers() = 0;
 
 	/**
-	 * Play a stand alone audio file
-	 * @param pIStandaloneFile         - stand alone file to play
-	 * @return ERequestStatus::Success if the file started playback, ERequestStatus::Failure otherwise.
+	 * Play a stand alone file.
+	 * @param pIStandaloneFile - file to play
+	 * @return ERequestStatus - indicates the outcome of underlying process
 	 * @see StopFile
 	 */
 	virtual ERequestStatus PlayFile(IStandaloneFile* const pIStandaloneFile) = 0;
 
 	/**
-	 * Stop currently playing standalone file
-	 * @param pIStandaloneFile - file to stop playing
-	 * @return ERequestStatus::Success if the file stopped, is stopping or is not playing anymore, ERequestStatus::Failure otherwise.
+	 * Stop a stand alone file.
+	 * @param pIStandaloneFile - file to stop
+	 * @return ERequestStatus - indicates the outcome of underlying process
 	 * @see PlayFile
 	 */
 	virtual ERequestStatus StopFile(IStandaloneFile* const pIStandaloneFile) = 0;
 
 	/**
-	 * Sets this audio object's name.
-	 * Is only used during production whenever an entity's name is changed to adjust corresponding audio objects as well.
-	 * @param szName - name to set.
-	 * @return ERequestStatus::Success if the object was renamed successfully, ERequestStatus::Failure otherwise.
+	 * Sets this object's name.
+	 * Is only used during production whenever an entity's name is changed to adjust corresponding objects as well.
+	 * @param szName - name to set
+	 * @return ERequestStatus - indicates the outcome of underlying process
 	 */
 	virtual ERequestStatus SetName(char const* const szName) = 0;
 };

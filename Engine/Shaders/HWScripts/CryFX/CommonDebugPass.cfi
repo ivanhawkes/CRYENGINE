@@ -1,7 +1,6 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 SCENE_DEPTH_MAP
-DISSOLVE_NOISE_MAP
 
 struct vert2fragDebug
 {
@@ -56,7 +55,7 @@ vert2fragDebug Common_DebugPassVS(app2vertDebug IN_common)
 	return OUT;            
 }
 
-Texture2D   texelPerMeterTex         : register(t33)                                   = "%ENGINE%/EngineAssets/Textures/TexelsPerMeterGrad.dds";
+Texture2D texelPerMeterTex : register(t33) = "%ENGINE%/EngineAssets/Textures/TexelsPerMeterGrad.dds";
 
 pixout Common_DebugPassPS(vert2fragDebug IN)
 {
@@ -70,11 +69,7 @@ pixout Common_DebugPassPS(vert2fragDebug IN)
 	alphatested = (alpha - alphaTest) < 0.0f; //need to perform texkill just like in regular passes
 #endif 
 
-	bool dissolved = false;
-#if %_RT_DISSOLVE
-	half fNoise = GetDissolveTex(dissolveNoiseTex, IN.baseTC.xy*6.h).x;
-	dissolved = (fNoise - Get_SPI_Dissolve()) < 0.0f;
-#endif
+	bool dissolved = TestDissolve(Get_SPI_Dissolve(), IN.WPos.xy, 33) < 0.0f;
 
 #if %_RT_ALPHATEST || %_RT_DISSOLVE
 	clip((alphatested || dissolved) ? -1 : +1);
@@ -117,7 +112,7 @@ pixout Common_DebugPassPS(vert2fragDebug IN)
 	// We are passing the actual texture coordinate here for use in alpha testing
 	OUT.Color = float4(IN.baseTC.x, IN.baseTC.y, 0, 0);
 #elif %_RT_SAMPLE2 // DebugDraw Pass
-	OUT.Color = float4(PerInstanceCustomData1.rgb, 1.0f); // SilhouetteColor contains custom debug color
+	OUT.Color = float4(CD_CustomData1.rgb, 1.0f); // SilhouetteColor contains custom debug color
 #endif
 
 	// Selection Pass
@@ -128,7 +123,7 @@ pixout Common_DebugPassPS(vert2fragDebug IN)
 	#define HIDDEN_FLAG      (1 << 2)
 
   // write the selection ID to our color with some possible modifications
-  uint selectionID = asuint(PerInstanceCustomData2.x);
+  uint selectionID = asuint(CD_CustomData2.x);
 
   // now we need to compare the scene's depth to the fragment's depth. We do that here instead of after rendering, so precision is maintained better
   float fGeomDepth = IN.WPos.w * CV_NearFarClipDist.w;

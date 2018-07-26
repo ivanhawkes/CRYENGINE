@@ -140,6 +140,10 @@ bool CEntityLoadManager::ParseEntities(XmlNodeRef& entitiesNode, bool bIsLoading
 	// Entity loading is deferred so we can allocate a giant buffer for all saved entities and their components
 	// This way we have them close to each other in memory, and save tons of small allocations.
 	std::vector<SEntityLoadParams> loadParameterStorage;
+	loadParameterStorage.reserve(entityCount);
+
+	g_pIEntitySystem->ReserveStaticEntityIds(entityCount);
+
 	size_t requiredAllocationSize = 0;
 
 	for (int i = 0; i < entityCount; ++i)
@@ -156,7 +160,10 @@ bool CEntityLoadManager::ParseEntities(XmlNodeRef& entitiesNode, bool bIsLoading
 				INDENT_LOG_DURING_SCOPE(true, "Parsing entity '%s'", entityNode->getAttr("Name"));
 
 				loadParameterStorage.emplace_back();
-				if (!ExtractEntityLoadParams(entityNode, loadParameterStorage.back(), segmentOffset, true))
+				SEntityLoadParams& loadParams = loadParameterStorage.back();
+				loadParams.networkIdentifier = static_cast<IEntitySystem::StaticEntityNetworkIdentifier>(i);
+
+				if (!ExtractEntityLoadParams(entityNode, loadParams, segmentOffset, true))
 				{
 					loadParameterStorage.pop_back();
 
@@ -165,7 +172,7 @@ bool CEntityLoadManager::ParseEntities(XmlNodeRef& entitiesNode, bool bIsLoading
 				}
 				else
 				{
-					requiredAllocationSize += loadParameterStorage.back().allocationSize;
+					requiredAllocationSize += loadParams.allocationSize;
 				}
 			}
 		}
@@ -183,10 +190,11 @@ bool CEntityLoadManager::ParseEntities(XmlNodeRef& entitiesNode, bool bIsLoading
 
 	for (SEntityLoadParams& entityLoadParams : loadParameterStorage)
 	{
-		EntityId usingId = 0;
+		SYNCHRONOUS_LOADING_TICK();
 
 		new(pBuffer) CEntity;
 
+		EntityId usingId = INVALID_ENTITYID;
 		if (!CreateEntity(reinterpret_cast<CEntity*>(pBuffer), entityLoadParams, usingId, bIsLoadingLevelFile))
 		{
 			string sName = entityLoadParams.spawnParams.entityNode->getAttr("Name");
@@ -248,8 +256,8 @@ bool CEntityLoadManager::ExtractCommonEntityLoadParams(XmlNodeRef& entityNode, S
 		spawnParams.qRotation = rot;
 		spawnParams.vScale = scale;
 
-		spawnParams.id = 0;
-		entityNode->getAttr("EntityId", spawnParams.id);
+		// Entity identifiers are never reused across sessions
+		spawnParams.id = INVALID_ENTITYID;
 		entityNode->getAttr("EntityGuid", spawnParams.guid);
 
 		int castShadowMinSpec = CONFIG_LOW_SPEC;
@@ -398,13 +406,7 @@ bool CEntityLoadManager::CreateEntity(XmlNodeRef& entityNode, SEntitySpawnParams
 	loadParams.spawnParams = pParams;
 	loadParams.spawnParams.entityNode = entityNode;
 
-	if ((loadParams.spawnParams.id == 0) &&
-	    ((loadParams.spawnParams.pClass->GetFlags() & ECLF_DO_NOT_SPAWN_AS_STATIC) == 0))
-	{
-		// If ID is not set we generate a static ID.
-		loadParams.spawnParams.id = g_pIEntitySystem->GenerateEntityId(true);
-	}
-	return(CreateEntity(nullptr, loadParams, outUsingId, true));
+	return CreateEntity(nullptr, loadParams, outUsingId, false);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -413,28 +415,19 @@ bool CEntityLoadManager::CreateEntity(CEntity* pPreallocatedEntity, SEntityLoadP
 	CRY_ASSERT_MESSAGE(loadParams.spawnParams.pClass != nullptr, "Create Entity was called without an entity class! This will lead to a crash!");
 	MEMSTAT_CONTEXT_FMT(EMemStatContextTypes::MSC_Entity, 0, "Entity %s", loadParams.spawnParams.pClass->GetName());
 
-	bool bResult = true;
-	outUsingId = 0;
+	outUsingId = INVALID_ENTITYID;
 
 	XmlNodeRef& entityNode = loadParams.spawnParams.entityNode;
 	SEntitySpawnParams& spawnParams = loadParams.spawnParams;
 
-	CryGUID entityGuid = spawnParams.guid;
-	if (entityNode)
-	{
-		// Only runtime prefabs should have GUID id's
-		const char* entityGuidStr = entityNode->getAttr("Id");
-		if (entityGuidStr[0] != '\0')
-		{
-			entityGuid = CryGUID::FromString(entityGuidStr);
-		}
-	}
-
-	CEntity* pSpawnedEntity = static_cast<CEntity*>(g_pIEntitySystem->SpawnPreallocatedEntity(pPreallocatedEntity, spawnParams, false));
-
-	if (bResult && pSpawnedEntity)
+	if (CEntity* pSpawnedEntity = static_cast<CEntity*>(g_pIEntitySystem->SpawnPreallocatedEntity(pPreallocatedEntity, spawnParams, false)))
 	{
 		g_pIEntitySystem->AddEntityToLayer(spawnParams.sLayerName, pSpawnedEntity->GetId());
+
+		if (bIsLoadingLevellFile)
+		{
+			g_pIEntitySystem->AddStaticEntityId(pSpawnedEntity->GetId(), loadParams.networkIdentifier);
+		}
 
 		pSpawnedEntity->SetLoadedFromLevelFile(bIsLoadingLevellFile);
 
@@ -569,11 +562,9 @@ bool CEntityLoadManager::CreateEntity(CEntity* pPreallocatedEntity, SEntityLoadP
 			}
 		}
 
-		const bool bInited = g_pIEntitySystem->InitEntity(pSpawnedEntity, spawnParams);
-		if (!bInited)
+		if (!g_pIEntitySystem->InitEntity(pSpawnedEntity, spawnParams))
 		{
-			// Failed to initialise an entity, need to bail or we'll crash
-			return true;
+			return false;
 		}
 
 		if (entityNode)
@@ -625,16 +616,13 @@ bool CEntityLoadManager::CreateEntity(CEntity* pPreallocatedEntity, SEntityLoadP
 			if (bHiddenInGame)
 				pSpawnedEntity->Hide(true);
 		}
+
+		outUsingId = pSpawnedEntity->GetId();
+		return true;
 	}
 
-	if (!bResult)
-	{
-		EntityWarning("[CEntityLoadManager::CreateEntity] Entity Load Failed: %s (%s)", spawnParams.sName, spawnParams.pClass->GetName());
-	}
-
-	outUsingId = (pSpawnedEntity ? pSpawnedEntity->GetId() : 0);
-
-	return bResult;
+	EntityWarning("[CEntityLoadManager::CreateEntity] Entity Load Failed: %s (%s)", spawnParams.sName, spawnParams.pClass->GetName());
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////

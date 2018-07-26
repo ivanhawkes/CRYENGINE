@@ -42,6 +42,57 @@ FMOD_RESULT F_CALLBACK EventCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_
 }
 
 //////////////////////////////////////////////////////////////////////////
+FMOD_RESULT F_CALLBACK ProgrammerSoundCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE* pEventInst, void* pInOutParameters)
+{
+	if (pEventInst != nullptr)
+	{
+		auto const pEventInstance = reinterpret_cast<FMOD::Studio::EventInstance*>(pEventInst);
+		CEvent* pEvent = nullptr;
+		FMOD_RESULT fmodResult = pEventInstance->getUserData(reinterpret_cast<void**>(&pEvent));
+		ASSERT_FMOD_OK;
+
+		if ((pEvent != nullptr) && (pEvent->GetTrigger() != nullptr))
+		{
+			if (type == FMOD_STUDIO_EVENT_CALLBACK_CREATE_PROGRAMMER_SOUND)
+			{
+				CRY_ASSERT_MESSAGE(pInOutParameters != nullptr, "pInOutParameters is null pointer");
+				auto const pInOutProperties = reinterpret_cast<FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES*>(pInOutParameters);
+				char const* const szKey = pEvent->GetTrigger()->GetKey().c_str();
+
+				FMOD_STUDIO_SOUND_INFO soundInfo;
+				fmodResult = CObjectBase::s_pSystem->getSoundInfo(szKey, &soundInfo);
+				ASSERT_FMOD_OK;
+
+				FMOD::Sound* pSound = nullptr;
+				FMOD_MODE const mode = FMOD_CREATECOMPRESSEDSAMPLE | FMOD_NONBLOCKING | FMOD_3D | soundInfo.mode;
+				fmodResult = CStandaloneFileBase::s_pLowLevelSystem->createSound(soundInfo.name_or_data, mode, &soundInfo.exinfo, &pSound);
+				ASSERT_FMOD_OK;
+
+				pInOutProperties->sound = reinterpret_cast<FMOD_SOUND*>(pSound);
+				pInOutProperties->subsoundIndex = soundInfo.subsoundindex;
+			}
+			else if (type == FMOD_STUDIO_EVENT_CALLBACK_DESTROY_PROGRAMMER_SOUND)
+			{
+				CRY_ASSERT_MESSAGE(pInOutParameters != nullptr, "pInOutParameters is null pointer");
+				auto const pInOutProperties = reinterpret_cast<FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES*>(pInOutParameters);
+
+				auto* pSound = reinterpret_cast<FMOD::Sound*>(pInOutProperties->sound);
+
+				fmodResult = pSound->release();
+				ASSERT_FMOD_OK;
+			}
+			else if ((type == FMOD_STUDIO_EVENT_CALLBACK_START_FAILED) || (type == FMOD_STUDIO_EVENT_CALLBACK_STOPPED))
+			{
+				ASSERT_FMOD_OK;
+				gEnv->pAudioSystem->ReportFinishedEvent(pEvent->GetATLEvent(), true);
+			}
+		}
+	}
+
+	return FMOD_OK;
+}
+
+//////////////////////////////////////////////////////////////////////////
 CObjectBase::CObjectBase()
 {
 	ZeroStruct(m_attributes);
@@ -102,7 +153,6 @@ bool CObjectBase::SetEvent(CEvent* const pEvent)
 	if (pEvent->PrepareForOcclusion())
 	{
 		m_events.push_back(pEvent);
-		FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
 
 		FMOD::Studio::EventInstance* const pEventInstance = pEvent->GetInstance();
 		CRY_ASSERT_MESSAGE(pEventInstance != nullptr, "Event instance doesn't exist.");
@@ -110,7 +160,7 @@ bool CObjectBase::SetEvent(CEvent* const pEvent)
 		CRY_ASSERT_MESSAGE(pTrigger != nullptr, "Trigger doesn't exist.");
 
 		FMOD::Studio::EventDescription* pEventDescription = nullptr;
-		fmodResult = pEventInstance->getDescription(&pEventDescription);
+		FMOD_RESULT fmodResult = pEventInstance->getDescription(&pEventDescription);
 		ASSERT_FMOD_OK;
 
 		if (g_triggerToParameterIndexes.find(pTrigger) != g_triggerToParameterIndexes.end())
@@ -218,7 +268,7 @@ void CObjectBase::RemoveEnvironment(CEnvironment const* const pEnvironment)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObjectBase::Update()
+void CObjectBase::Update()
 {
 	if (!m_pendingEvents.empty())
 	{
@@ -260,15 +310,13 @@ ERequestStatus CObjectBase::Update()
 			++iter;
 		}
 	}
-
-	return ERequestStatus::Success;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObjectBase::Set3DAttributes(SObject3DAttributes const& attributes)
+void CObjectBase::SetTransformation(CObjectTransformation const& transformation)
 {
 	FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
-	FillFmodObjectPosition(attributes, m_attributes);
+	FillFmodObjectPosition(transformation, m_attributes);
 
 	for (auto const pEvent : m_events)
 	{
@@ -280,8 +328,6 @@ ERequestStatus CObjectBase::Set3DAttributes(SObject3DAttributes const& attribute
 	{
 		pFile->Set3DAttributes(m_attributes);
 	}
-
-	return ERequestStatus::Success;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -318,7 +364,16 @@ ERequestStatus CObjectBase::ExecuteTrigger(ITrigger const* const pITrigger, IEve
 					fmodResult = pEventDescription->createInstance(&pInstance);
 					ASSERT_FMOD_OK;
 					pEvent->SetInstance(pInstance);
-					fmodResult = pEvent->GetInstance()->setCallback(EventCallback, FMOD_STUDIO_EVENT_CALLBACK_START_FAILED | FMOD_STUDIO_EVENT_CALLBACK_STOPPED);
+
+					if (pTrigger->HasProgrammerSound())
+					{
+						fmodResult = pEvent->GetInstance()->setCallback(ProgrammerSoundCallback);
+					}
+					else
+					{
+						fmodResult = pEvent->GetInstance()->setCallback(EventCallback, FMOD_STUDIO_EVENT_CALLBACK_START_FAILED | FMOD_STUDIO_EVENT_CALLBACK_STOPPED);
+					}
+
 					ASSERT_FMOD_OK;
 					fmodResult = pEvent->GetInstance()->setUserData(pEvent);
 					ASSERT_FMOD_OK;
@@ -398,7 +453,7 @@ ERequestStatus CObjectBase::ExecuteTrigger(ITrigger const* const pITrigger, IEve
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObjectBase::StopAllTriggers()
+void CObjectBase::StopAllTriggers()
 {
 	FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
 
@@ -407,8 +462,6 @@ ERequestStatus CObjectBase::StopAllTriggers()
 		fmodResult = pEvent->GetInstance()->stop(FMOD_STUDIO_STOP_IMMEDIATE);
 		ASSERT_FMOD_OK;
 	}
-
-	return ERequestStatus::Success;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -423,11 +476,13 @@ ERequestStatus CObjectBase::PlayFile(IStandaloneFile* const pIStandaloneFile)
 
 		CRY_ASSERT_MESSAGE(std::find(m_pendingFiles.begin(), m_pendingFiles.end(), pStandaloneFile) == m_pendingFiles.end(), "standalone file was already in the pending standalone files list");
 		m_pendingFiles.push_back(pStandaloneFile);
-
 		return ERequestStatus::Success;
 	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Invalid standalone file pointer passed to the Fmod implementation of PlayFile.");
+	}
 
-	Cry::Audio::Log(ELogType::Error, "Invalid standalone file pointer passed to the Fmod implementation of PlayFile.");
 	return ERequestStatus::Failure;
 }
 
@@ -473,9 +528,8 @@ void CObjectBase::StopEvent(uint32 const id)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CGlobalObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
+void CGlobalObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
 {
-	ERequestStatus result = ERequestStatus::Failure;
 	CEnvironment const* const pEnvironment = static_cast<CEnvironment const* const>(pIEnvironment);
 
 	if (pEnvironment != nullptr)
@@ -487,21 +541,16 @@ ERequestStatus CGlobalObject::SetEnvironment(IEnvironment const* const pIEnviron
 				pObject->SetEnvironment(pEnvironment, amount);
 			}
 		}
-
-		result = ERequestStatus::Success;
 	}
 	else
 	{
 		Cry::Audio::Log(ELogType::Error, "Invalid Environment pointer passed to the Fmod implementation of SetEnvironment");
 	}
-
-	return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CGlobalObject::SetParameter(IParameter const* const pIParameter, float const value)
+void CGlobalObject::SetParameter(IParameter const* const pIParameter, float const value)
 {
-	ERequestStatus result = ERequestStatus::Failure;
 	CParameter const* const pParameter = static_cast<CParameter const* const>(pIParameter);
 
 	if (pParameter != nullptr)
@@ -513,19 +562,16 @@ ERequestStatus CGlobalObject::SetParameter(IParameter const* const pIParameter, 
 				pObject->SetParameter(pParameter, value);
 			}
 		}
-		result = ERequestStatus::Success;
 	}
 	else
 	{
 		Cry::Audio::Log(ELogType::Error, "Invalid parameter pointer passed to the Fmod implementation of SetParameter");
 	}
-
-	return result;
 }
+
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CGlobalObject::SetSwitchState(ISwitchState const* const pISwitchState)
+void CGlobalObject::SetSwitchState(ISwitchState const* const pISwitchState)
 {
-	ERequestStatus result = ERequestStatus::Failure;
 	CSwitchState const* const pSwitchState = static_cast<CSwitchState const* const>(pISwitchState);
 
 	if (pSwitchState != nullptr)
@@ -537,28 +583,22 @@ ERequestStatus CGlobalObject::SetSwitchState(ISwitchState const* const pISwitchS
 				pObject->SetSwitchState(pISwitchState);
 			}
 		}
-
-		result = ERequestStatus::Success;
 	}
 	else
 	{
 		Cry::Audio::Log(ELogType::Error, "Invalid switch pointer passed to the Fmod implementation of SetSwitchState");
 	}
-
-	return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CGlobalObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
+void CGlobalObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
 {
 	Cry::Audio::Log(ELogType::Error, "Trying to set occlusion and obstruction values on the global audio object!");
-	return ERequestStatus::Failure;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
+void CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
 {
-	ERequestStatus result = ERequestStatus::Success;
 	CEnvironment const* const pEnvironment = static_cast<CEnvironment const* const>(pIEnvironment);
 
 	if (pEnvironment != nullptr)
@@ -589,16 +629,12 @@ ERequestStatus CObject::SetEnvironment(IEnvironment const* const pIEnvironment, 
 	else
 	{
 		Cry::Audio::Log(ELogType::Error, "Invalid IEnvironment pointer passed to the Fmod implementation of SetEnvironment");
-		result = ERequestStatus::Failure;
 	}
-
-	return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::SetParameter(IParameter const* const pIParameter, float const value)
+void CObject::SetParameter(IParameter const* const pIParameter, float const value)
 {
-	ERequestStatus result = ERequestStatus::Success;
 	CParameter const* const pParameter = static_cast<CParameter const* const>(pIParameter);
 
 	if (pParameter != nullptr)
@@ -696,16 +732,12 @@ ERequestStatus CObject::SetParameter(IParameter const* const pIParameter, float 
 	else
 	{
 		Cry::Audio::Log(ELogType::Error, "Invalid AudioObjectData or ParameterData passed to the Fmod implementation of SetParameter");
-		result = ERequestStatus::Failure;
 	}
-
-	return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::SetSwitchState(ISwitchState const* const pISwitchState)
+void CObject::SetSwitchState(ISwitchState const* const pISwitchState)
 {
-	ERequestStatus result = ERequestStatus::Success;
 	CSwitchState const* const pSwitchState = static_cast<CSwitchState const* const>(pISwitchState);
 
 	if (pSwitchState != nullptr)
@@ -803,14 +835,11 @@ ERequestStatus CObject::SetSwitchState(ISwitchState const* const pISwitchState)
 	else
 	{
 		Cry::Audio::Log(ELogType::Error, "Invalid switch pointer passed to the Fmod implementation of SetSwitchState");
-		result = ERequestStatus::Failure;
 	}
-
-	return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
+void CObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
 {
 	for (auto const pEvent : m_events)
 	{
@@ -819,8 +848,6 @@ ERequestStatus CObject::SetObstructionOcclusion(float const obstruction, float c
 
 	m_obstruction = obstruction;
 	m_occlusion = occlusion;
-
-	return ERequestStatus::Success;
 }
 } // namespace Fmod
 } // namespace Impl

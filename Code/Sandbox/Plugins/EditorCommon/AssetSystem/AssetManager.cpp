@@ -23,51 +23,50 @@
 
 namespace Private_AssetManager
 {
-	using FileToAssetMap = std::unordered_map<string, CAsset*, stl::hash_stricmp<string>, stl::hash_stricmp<string>>;
+using FileToAssetMap = std::unordered_map<string, CAsset*, stl::hash_stricmp<string>, stl::hash_stricmp<string>>;
 
-	void DeleteAssetFilesFromMap(FileToAssetMap& fileToAssetMap, CAsset* pAsset, bool shouldDeleteMetadataFile = true)
+void DeleteAssetFilesFromMap(FileToAssetMap& fileToAssetMap, CAsset* pAsset, bool shouldDeleteMetadataFile = true)
+{
+	if (shouldDeleteMetadataFile)
 	{
-		if (shouldDeleteMetadataFile)
-		{
-			fileToAssetMap.erase(pAsset->GetMetadataFile());
-		}
-		for (auto const& file : pAsset->GetFiles())
-		{
-			fileToAssetMap.erase(file);
-		}
+		fileToAssetMap.erase(pAsset->GetMetadataFile());
 	}
+	for (auto const& file : pAsset->GetFiles())
+	{
+		fileToAssetMap.erase(file);
+	}
+}
 
-	void AddAssetFilesToMap(FileToAssetMap& fileToAssetMap, CAsset* pAsset, bool shouldAddMetadataFile = true)
+void AddAssetFilesToMap(FileToAssetMap& fileToAssetMap, CAsset* pAsset, bool shouldAddMetadataFile = true)
+{
+	if (shouldAddMetadataFile)
 	{
-		if (shouldAddMetadataFile)
-		{
-			fileToAssetMap[pAsset->GetMetadataFile()] = pAsset;
-		}
-		for (auto const& file : pAsset->GetFiles())
-		{
-			fileToAssetMap[file] = pAsset;
-		}
+		fileToAssetMap[pAsset->GetMetadataFile()] = pAsset;
 	}
+	for (auto const& file : pAsset->GetFiles())
+	{
+		fileToAssetMap[file] = pAsset;
+	}
+}
 
-	void InitializeFileToAssetMap(FileToAssetMap& fileToAssetMap, const std::vector<CAsset*>& assets)
+void InitializeFileToAssetMap(FileToAssetMap& fileToAssetMap, const std::vector<CAsset*>& assets)
+{
+	// going once through the list of all assets in the beginning is probably not that expensive
+	// comparing to penalty that we can incur by rehashing the whole table if the proper number
+	// of elements is not reserved upfront. Doing some king of heuristic would be imprecise here.
+	int numFiles = 0;
+	for (auto pAsset : assets)
 	{
-		// going once through the list of all assets in the beginning is probably not that expensive
-		// comparing to penalty that we can incur by rehashing the whole table if the proper number
-		// of elements is not reserved upfront. Doing some king of heuristic would be imprecise here.
-		int numFiles = 0;
-		for (auto pAsset : assets)
-		{
-			numFiles += pAsset->GetFilesCount() + 1;
-		}
-		const auto allocNum = numFiles * 1.1; // buffer of 10%
-		fileToAssetMap.reserve(allocNum);
+		numFiles += pAsset->GetFilesCount() + 1;
 	}
+	const auto allocNum = numFiles * 1.1;   // buffer of 10%
+	fileToAssetMap.reserve(allocNum);
+}
 }
 
 const std::pair<const char*, const char*> CAssetManager::m_knownAliases[] =
 {
-	{ "%engine%", "Engine" }
-};
+	{ "%engine%", "Engine" } };
 
 CAssetManager* CAssetManager::s_instance = nullptr;
 
@@ -96,6 +95,7 @@ void CAssetManager::Init()
 
 	UpdateAssetTypes();
 	UpdateAssetImporters();
+	UpdateAssetConverters();
 	RegisterAssetResourceSelectors();
 
 	m_assetModel->Init();
@@ -112,6 +112,28 @@ void CAssetManager::Init()
 		"Value of 1 enables asset pickers for recommended types."
 		"Value of 2 enables asset pickers for all types."
 		"Any other value disables asset pickers for all types.");
+
+	GetIEditor()->GetGlobalBroadcastManager()->Connect(BroadcastEvent::AboutToQuit, [this](BroadcastEvent& event)
+	{
+		CRY_ASSERT(event.type() == BroadcastEvent::AboutToQuit);
+		
+		std::vector<string> changedFiles;
+		for (CAsset* pAsset : m_assets)
+		{
+			if (pAsset->IsModified() && !pAsset->IsBeingEdited())
+			{
+				changedFiles.push_back(pAsset->GetName());
+			}
+		}
+		if (!changedFiles.empty())
+		{
+			AboutToQuitEvent& aboutToQuitEvent = static_cast<AboutToQuitEvent&>(event);
+			aboutToQuitEvent.AddChangeList("Asset browser", changedFiles);
+
+			event.ignore();
+		}
+		
+	}, (uintptr_t)this);
 }
 
 CAssetType* CAssetManager::FindAssetType(const char* name) const
@@ -147,6 +169,24 @@ CAssetImporter* CAssetManager::GetAssetImporter(const string& ext, const string&
 		}
 	}
 	return nullptr;
+}
+
+CAssetConverter* CAssetManager::GetAssetConverter(const QMimeData& data) const
+{
+	for (CAssetConverter* converter : m_assetConverters)
+	{
+		if (converter->CanConvert(data))
+		{
+			return converter;
+		}
+	}
+
+	return nullptr;
+}
+
+bool CAssetManager::HasAssetConverter(const QMimeData& data) const
+{
+	return GetAssetConverter(data) != nullptr;
 }
 
 CAsset* CAssetManager::FindAssetForMetadata(const char* szFilePath) const
@@ -268,7 +308,7 @@ void CAssetManager::MergeAssets(std::vector<CAsset*> assets)
 	ICryPak* const pPak = GetISystem()->GetIPak();
 
 	size_t count = assets.size();
-	for (size_t i = 0; i < count; )
+	for (size_t i = 0; i < count;)
 	{
 		CAsset* const pOther = FindAssetForMetadata(assets[i]->GetMetadataFile());
 		if (pOther)
@@ -403,7 +443,7 @@ bool CAssetManager::HasSharedSourceFile(const CAsset& asset) const
 		return false;
 	}
 
-	// It could be possible that the source file of this asset is a regular asset file of another asset. 
+	// It could be possible that the source file of this asset is a regular asset file of another asset.
 	// For example this is so for substance instance asset.
 	if (FindAssetForFile(asset.GetSourceFile()))
 	{
@@ -455,18 +495,13 @@ std::vector<CAssetPtr> CAssetManager::GetAssetsFromDirectory(const string& direc
 		{
 			assets.emplace_back(pAsset);
 		}
-	};
+	}
+	;
 	return assets;
 }
 
 void CAssetManager::AppendContextMenuActions(CAbstractMenu& menu, const std::vector<CAsset*>& assets, const std::shared_ptr<IUIContext>& context) const
 {
-	if (menu.FindSectionByName("Assets") == CAbstractMenu::eSections_Default)
-	{
-		int section = menu.GetNextEmptySection();
-		menu.SetSectionName(section, "Assets");
-	}
-
 	signalContextMenuRequested(menu, assets, context);
 }
 
@@ -486,9 +521,9 @@ void CAssetManager::UpdateAssetTypes()
 	{
 		auto isLowerCase = [](const string& s)
 		{
-			string lower = s;
-			lower.MakeLower();
-			return s == lower;
+		 string lower = s;
+		 lower.MakeLower();
+		 return s == lower;
 		};
 
 		auto endsWithCryasset = [](const string& s)
@@ -571,6 +606,16 @@ void CAssetManager::UpdateAssetImporters()
 	//! TODO: Validate asset importers.
 }
 
+void CAssetManager::UpdateAssetConverters()
+{
+	std::vector<IClassDesc*> classes;
+	GetIEditor()->GetClassFactory()->GetClassesBySystemID(ESYSTEM_CLASS_ASSET_COVERTER, classes);
+
+	m_assetConverters.clear();
+	m_assetConverters.reserve(classes.size());
+	std::transform(classes.begin(), classes.end(), std::back_inserter(m_assetConverters), [](const IClassDesc* x) { return (CAssetConverter*)x; });
+}
+
 void CAssetManager::RegisterAssetResourceSelectors()
 {
 	m_resourceSelectors.clear();
@@ -587,12 +632,12 @@ void CAssetManager::RegisterAssetResourceSelectors()
 	}
 }
 
-std::vector<std::pair<CAsset*,int32>> CAssetManager::GetReverseDependencies(const CAsset& asset) const
+std::vector<std::pair<CAsset*, int32>> CAssetManager::GetReverseDependencies(const CAsset& asset) const
 {
-	MAKE_SURE(asset.GetFile(0), return{});
+	MAKE_SURE(asset.GetFile(0), return {});
 
 	std::vector<SAssetDependencyInfo> dependencyInfos = m_pDependencyTracker.get()->GetReverseDependencies(asset.GetFile(0));
-	std::vector<std::pair<CAsset*,int32>> dependencies;
+	std::vector<std::pair<CAsset*, int32>> dependencies;
 	dependencies.reserve(dependencyInfos.size());
 
 	for (const auto& item : dependencyInfos)
@@ -612,13 +657,13 @@ std::vector<CAsset*> CAssetManager::GetReverseDependencies(const std::vector<CAs
 	std::vector<CAsset*> ordered(assets);
 	std::sort(ordered.begin(), ordered.end());
 	std::unordered_set<CAsset*> set;
-	for( CAsset* pAsset : ordered)
+	for (CAsset* pAsset : ordered)
 	{
 		if (!pAsset)
 		{
 			continue;
 		}
-		std::vector<std::pair<CAsset*,int32>> tmp = GetReverseDependencies(*pAsset);
+		std::vector<std::pair<CAsset*, int32>> tmp = GetReverseDependencies(*pAsset);
 		std::transform(tmp.begin(), tmp.end(), std::inserter(set, set.begin()), [](auto& x)
 		{
 			return x.first;
@@ -658,13 +703,13 @@ bool CAssetManager::HasAnyReverseDependencies(const std::vector<CAsset*>& assets
 	{
 		if (!pAsset)
 		{
-			return false;
+		  return false;
 		}
 
 		std::vector<std::pair<CAsset*, int32>> dependencyInfos(GetReverseDependencies(*pAsset));
 		if (dependencyInfos.empty())
 		{
-			return false;
+		  return false;
 		}
 
 		// The given assets are not considered as dependent assets.
@@ -674,7 +719,6 @@ bool CAssetManager::HasAnyReverseDependencies(const std::vector<CAsset*>& assets
 		});
 	});
 }
-
 
 const char* CAssetManager::GetAliasName(const char* alias) const
 {
@@ -699,7 +743,7 @@ std::vector<const char*> CAssetManager::GetAliases() const
 void CAssetManager::GenerateCryassetsAsync(const std::function<void()>& finalize)
 {
 	using namespace AssetManagerHelpers;
-	
+
 	m_isScanning = true;
 
 	ThreadingUtils::Async([this, finalize]()
@@ -710,14 +754,14 @@ void CAssetManager::GenerateCryassetsAsync(const std::function<void()>& finalize
 
 		if (GetIEditor()->IsMainFrameClosing())
 		{
-			return;
+		  return;
 		}
 
 		ThreadingUtils::PostOnMainThread([this, finalize]()
 		{
 			if (GetIEditor()->IsMainFrameClosing())
 			{
-				return;
+			  return;
 			}
 
 			m_isScanning = false;
@@ -726,7 +770,7 @@ void CAssetManager::GenerateCryassetsAsync(const std::function<void()>& finalize
 
 			if (finalize)
 			{
-				finalize();
+			  finalize();
 			}
 		});
 	});
@@ -744,11 +788,11 @@ void CAssetManager::SaveAll(std::function<void(float)> progress)
 		CAssetPtr& pAsset = m_assets[i];
 
 		// TODO: not all asset editors maintain the IsModified() state properly.
-		if (/* pAsset->IsModified() &&*/ pAsset->GetCurrentEditor())
+		if (pAsset->IsModified())
 		{
-			pAsset->GetCurrentEditor()->Save();
 			progress(float(i) / n);
 		}
+		pAsset->Save();
 	}
 	progress(1.0f);
 }
@@ -764,5 +808,3 @@ void CAssetManager::SaveBackup(const string& backupFolder)
 		}
 	}
 }
-
-

@@ -16,10 +16,7 @@ namespace CryAudio
 //////////////////////////////////////////////////////////////////////////
 CEventManager::~CEventManager()
 {
-	if (m_pIImpl != nullptr)
-	{
-		Release();
-	}
+	CRY_ASSERT_MESSAGE(m_constructedEvents.empty(), "There are still events during CEventManager destruction!");
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -29,10 +26,19 @@ void CEventManager::Init(uint32 const poolSize)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CEventManager::SetImpl(Impl::IImpl* const pIImpl)
+void CEventManager::OnAfterImplChanged()
 {
-	m_pIImpl = pIImpl;
 	CRY_ASSERT(m_constructedEvents.empty());
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CEventManager::ReleaseImplData()
+{
+	for (auto const pEvent : m_constructedEvents)
+	{
+		g_pIImpl->DestructEvent(pEvent->m_pImplData);
+		pEvent->Release();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -42,26 +48,20 @@ void CEventManager::Release()
 	// know which event types the new middleware backend will support so
 	// the existing ones have to be destroyed now and new ones created
 	// after the switch.
-	if (!m_constructedEvents.empty())
+	for (auto const pEvent : m_constructedEvents)
 	{
-		for (auto const pEvent : m_constructedEvents)
-		{
-			m_pIImpl->DestructEvent(pEvent->m_pImplData);
-			pEvent->Release();
-			delete pEvent;
-		}
-
-		m_constructedEvents.clear();
+		CRY_ASSERT_MESSAGE(pEvent->m_pImplData == nullptr, "An event cannot have valid impl data during CEventManager::Release!");
+		delete pEvent;
 	}
 
-	m_pIImpl = nullptr;
+	m_constructedEvents.clear();
 }
 
 //////////////////////////////////////////////////////////////////////////
 CATLEvent* CEventManager::ConstructEvent()
 {
 	auto const pEvent = new CATLEvent;
-	pEvent->m_pImplData = m_pIImpl->ConstructEvent(*pEvent);
+	pEvent->m_pImplData = g_pIImpl->ConstructEvent(*pEvent);
 	m_constructedEvents.push_back(pEvent);
 
 	return pEvent;
@@ -89,7 +89,7 @@ void CEventManager::DestructEvent(CATLEvent* const pEvent)
 		}
 	}
 
-	m_pIImpl->DestructEvent(pEvent->m_pImplData);
+	g_pIImpl->DestructEvent(pEvent->m_pImplData);
 	pEvent->Release();
 	delete pEvent;
 }
@@ -112,39 +112,36 @@ void CEventManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerP
 
 	for (auto const pEvent : m_constructedEvents)
 	{
-		if (pEvent->m_pTrigger != nullptr)
+		Vec3 const& position = pEvent->m_pAudioObject->GetTransformation().GetPosition();
+		float const distance = position.GetDistance(listenerPosition);
+
+		if (g_cvars.m_debugDistance <= 0.0f || (g_cvars.m_debugDistance > 0.0f && distance < g_cvars.m_debugDistance))
 		{
-			Vec3 const& position = pEvent->m_pAudioObject->GetTransformation().GetPosition();
-			float const distance = position.GetDistance(listenerPosition);
+			char const* const szTriggerName = pEvent->GetTriggerName();
+			CryFixedStringT<MaxControlNameLength> lowerCaseTriggerName(szTriggerName);
+			lowerCaseTriggerName.MakeLower();
+			bool const draw = ((lowerCaseSearchString.empty() || (lowerCaseSearchString == "0")) || (lowerCaseTriggerName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos));
 
-			if (g_cvars.m_debugDistance <= 0.0f || (g_cvars.m_debugDistance > 0.0f && distance < g_cvars.m_debugDistance))
+			if (draw)
 			{
-				char const* const szTriggerName = pEvent->m_pTrigger->m_name.c_str();
-				CryFixedStringT<MaxControlNameLength> lowerCaseTriggerName(szTriggerName);
-				lowerCaseTriggerName.MakeLower();
-				bool const draw = ((lowerCaseSearchString.empty() || (lowerCaseSearchString == "0")) || (lowerCaseTriggerName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos));
+				float const* pColor = Debug::g_managerColorItemInactive.data();
 
-				if (draw)
+				if (pEvent->IsPlaying())
 				{
-					float const* pColor = Debug::g_managerColorItemInactive.data();
-
-					if (pEvent->IsPlaying())
-					{
-						pColor = Debug::g_managerColorItemActive.data();
-					}
-					else if (pEvent->m_state == EEventState::Loading)
-					{
-						pColor = Debug::g_managerColorItemLoading.data();
-					}
-					else if (pEvent->m_state == EEventState::Virtual)
-					{
-						pColor = Debug::g_managerColorItemVirtual.data();
-					}
-
-					auxGeom.Draw2dLabel(posX, posY, Debug::g_managerFontSize, pColor, false, "%s on %s", szTriggerName, pEvent->m_pAudioObject->m_name.c_str());
-
-					posY += Debug::g_managerLineHeight;
+					pColor = Debug::g_managerColorItemActive.data();
 				}
+				else if (pEvent->m_state == EEventState::Loading)
+				{
+					pColor = Debug::g_managerColorItemLoading.data();
+				}
+				else if (pEvent->m_state == EEventState::Virtual)
+				{
+					pColor = Debug::g_managerColorItemVirtual.data();
+				}
+
+				auxGeom.Draw2dLabel(posX, posY, Debug::g_managerFontSize, pColor, false, "%s on %s", szTriggerName, pEvent->m_pAudioObject->m_name.c_str());
+
+				posY += Debug::g_managerLineHeight;
 			}
 		}
 	}

@@ -261,7 +261,7 @@ int CGBindCallback(const VOID* arg1, const VOID* arg2)
 	return 0;
 }
 
-const char* szNamesCB[CB_NUM] = { "PER_BATCH", "PER_INSTANCE", "PER_FRAME", "PER_MATERIAL", "PER_LIGHT", "PER_SHADOWGEN", "SKIN_DATA", "INSTANCE_DATA" };
+const char* szNamesCB[CB_NUM] = { "PER_BATCH", "PER_MATERIAL" };
 
 void CHWShader_D3D::mfCreateBinds(std::vector<SCGBind> &binds, const void* pConstantTable, std::size_t nSize)
 {
@@ -279,7 +279,7 @@ void CHWShader_D3D::mfCreateBinds(std::vector<SCGBind> &binds, const void* pCons
 			continue;
 		int nCB;
 		if (!strcmp("$Globals", SBDesc.Name))
-			nCB = CB_PER_BATCH;
+			nCB = CB_PER_DRAW;
 		else
 			for (nCB = 0; nCB < CB_NUM; nCB++)
 			{
@@ -392,7 +392,7 @@ void CHWShader_D3D::mfGatherFXParameters(SHWSInstance* pInst, std::vector<SCGBin
 			SCGBind* pB = &pInst->m_pBindVars[i];
 			if (pB->m_dwBind & (SHADER_BIND_SAMPLER | SHADER_BIND_TEXTURE))
 				continue;
-			if (pB->m_dwCBufSlot < 0 || pB->m_dwCBufSlot > 2)
+			if (pB->m_dwCBufSlot < 0 || pB->m_dwCBufSlot > CB_NUM)
 				continue;
 			for (j = 0; j < Group.Params[0].size(); j++)
 			{
@@ -402,8 +402,7 @@ void CHWShader_D3D::mfGatherFXParameters(SHWSInstance* pInst, std::vector<SCGBin
 			}
 			if (j != Group.Params[0].size())
 				continue;
-			if (pB->m_dwCBufSlot < 3)
-				pInst->m_nMaxVecs[pB->m_dwCBufSlot] = max(pB->m_dwBind + pB->m_nParameters, pInst->m_nMaxVecs[pB->m_dwCBufSlot]);
+			pInst->m_nMaxVecs[pB->m_dwCBufSlot] = max(pB->m_dwBind + pB->m_nParameters, pInst->m_nMaxVecs[pB->m_dwCBufSlot]);
 		}
 	}
 	if (Group.Params[0].size())
@@ -419,7 +418,7 @@ void CHWShader_D3D::mfGatherFXParameters(SHWSInstance* pInst, std::vector<SCGBin
 		gRenDev->m_cEF.mfCheckObjectDependParams(Group.Params[0], Group.Params[1], pSH->m_eSHClass, pFXShader);
 	}
 
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < CB_NUM; i++)
 	{
 		if (Group.Params[i].size())
 		{
@@ -2211,6 +2210,10 @@ SDeviceShaderEntry CHWShader_D3D::mfGetCacheItem(CShader* pFX, const char *name,
 	const CDirEntry* de = rfOpenGuard.getHandle()->mfGetEntry(name, &bAsync);
 	if (de)
 	{
+		// Validate
+		if (mfValidateCache(*cache) != cacheValidationResult::ok)
+			return {};
+
 		m_pCurInst->m_bAsyncActivating = false;
 		auto entity = mfShaderEntryFromCache(pFX, *de, rfOpenGuard, *cache);
 		if (cache->GetType() == cacheSource::user)
@@ -2480,7 +2483,7 @@ bool SDiskShaderCache::mfOptimiseCacheFile(SOptimiseStats* pStats)
 		iLog->Log(" Optimising shaders resource '%s' (%" PRISIZE_T " items)...", m_pRes->mfGetFileName(), Data.size() - 1);
 
 		m_pRes->mfClose();
-		m_pRes->mfOpen(RA_CREATE | (CParserBin::m_bEndians ? RA_ENDIANS : 0), &gRenDev->m_cEF.m_ResLookupDataMan[static_cast<int>(cacheSource::user)]);
+		m_pRes->mfOpen(RA_CREATE | (CParserBin::m_bEndians ? RA_ENDIANS : 0), &gRenDev->m_cEF.m_ResLookupDataMan[static_cast<int>(GetType())]);
 
 		float fVersion = FX_CACHE_VER;
 		uint32 nMinor = (int)(((float)fVersion - (float)(int)fVersion) * 10.1f);

@@ -104,6 +104,7 @@ void MarkAsPhysThread() {
 		*g_lastPtr = MAX_PHYS_THREADS; *ptr = 0;
 		TLS_SET(g_pidxPhysThread, g_lastPtr=ptr);
 	}
+	set_extCaller(0);
 }
 void MarkAsPhysWorkerThread(int *pidx) {
 	TLS_SET(g_pidxPhysThread, pidx);
@@ -468,7 +469,7 @@ void CPhysicalWorld::Init()
 #endif
 		m_prevGEABBox[i][0].Set(1E10f,1E10f,1E10f); m_prevGEABBox[i][1].zero();
 		m_prevGEAobjtypes[i]=m_nprevGEAEnts[i] = 0;
-		m_BBoxPlayerGroup[i][0]=m_BBoxPlayerGroup[i][1] = Vec3(1e10f);
+		MARK_UNUSED m_BBoxPlayerGroup[i][0];
 	}
 
 	for(i=0; i<EVENT_TYPES_NUM; i++) {
@@ -1376,7 +1377,10 @@ int CPhysicalWorld::DestroyPhysicalEntity(IPhysicalEntity* _pent,int mode,int bT
 		QueueData(mode);
 		return 1;
 	}
-	WriteLockCond lock0(m_lockCaller[MAX_PHYS_THREADS], m_vars.bMultithreaded && !bThreadSafe && !IsPODThread(this));
+	int lockExtThreads = (m_vars.bMultithreaded && !bThreadSafe && !IsPODThread(this))*MAX_EXT_THREADS;
+	for(int i=0; i<lockExtThreads; i++)
+		CrySpinLock(&m_lockCaller[MAX_PHYS_THREADS+i], 0, WRITE_LOCK_VAL);
+	ScopeExitCall unlockCallers([&]() { for(int i=lockExtThreads-1;i>=0;i--) CryInterlockedAdd(&m_lockCaller[MAX_PHYS_THREADS+i],-WRITE_LOCK_VAL); });
 	WriteLockCond lock(m_lockStep, m_vars.bMultithreaded && !bThreadSafe && !IsPODThread(this));
 
 	if (ppc->m_iSimClass==5) {
@@ -2336,12 +2340,12 @@ void CPhysicalWorld::ProcessNextLivingEntity(float time_interval, int bSkipFlagg
 			do {
 				do {
 					ReadLock lockr(m_lockPlayerGroups);
-					for(i=0; i<m_nWorkerThreads+FIRST_WORKER_THREAD && (i==iCaller || !AABB_overlap(m_BBoxPlayerGroup[i],BBox)); i++);
+					for(i=0; i<m_nWorkerThreads+FIRST_WORKER_THREAD && (i==iCaller || is_unused(m_BBoxPlayerGroup[i][0]) || !AABB_overlap(m_BBoxPlayerGroup[i],BBox)); i++);
 					if (i>=m_nWorkerThreads+FIRST_WORKER_THREAD)
 						break;
 				} while(true);
 				{ WriteLock lockw(m_lockPlayerGroups);
-					for(i=0; i<m_nWorkerThreads+FIRST_WORKER_THREAD && (i==iCaller || !AABB_overlap(m_BBoxPlayerGroup[i],BBox)); i++);
+					for(i=0; i<m_nWorkerThreads+FIRST_WORKER_THREAD && (i==iCaller || is_unused(m_BBoxPlayerGroup[i][0]) || !AABB_overlap(m_BBoxPlayerGroup[i],BBox)); i++);
 					if (i>=m_nWorkerThreads+FIRST_WORKER_THREAD) {
 						m_BBoxPlayerGroup[iCaller][0] = BBox[0];
 						m_BBoxPlayerGroup[iCaller][1] = BBox[1];
@@ -2358,7 +2362,7 @@ void CPhysicalWorld::ProcessNextLivingEntity(float time_interval, int bSkipFlagg
 		}	while (pent=pent->m_next);
 		if (m_nWorkerThreads>0) {
 			WriteLock lock(m_lockPlayerGroups);
-			m_BBoxPlayerGroup[iCaller][0]=m_BBoxPlayerGroup[iCaller][1] = Vec3(1e10f);
+			MARK_UNUSED m_BBoxPlayerGroup[iCaller][0];
 		}
 	} while(true);
 }
@@ -3897,7 +3901,7 @@ pexpl->explDir = m_lastExplDir;	}
 			pents[nents]->ApplyVolumetricPressure(explLoc.epicenterImp,kr,pexpl->rmin);
 
 		m_pExplVictims[m_nExplVictims] = pents[nents];
-		m_pExplVictimsFrac[m_nExplVictims++] = sumV>0 ? sumFrac/sumV : 1.0f;
+		m_pExplVictimsFrac[m_nExplVictims++] = sumV>0 ? sumFrac/sumV : 0.0f;
 		if (bEntChanged && pents[nents]->UpdateStructure(0.01f,pexpl,-1,gravity) || bMarkDeforming)
 			MarkEntityAsDeforming(pents[nents]);
 	}

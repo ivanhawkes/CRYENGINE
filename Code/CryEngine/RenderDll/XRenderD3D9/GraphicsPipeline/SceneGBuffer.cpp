@@ -133,7 +133,11 @@ bool CSceneGBufferStage::CreatePipelineState(const SGraphicsPipelineStateDescrip
 	{
 		psoDesc.m_RenderState = ReverseDepthHelper::ConvertDepthFunc(psoDesc.m_RenderState);
 	}
+
 	psoDesc.m_pRenderPass = pSceneRenderPass->GetRenderPass();
+
+	if (!psoDesc.m_pRenderPass)
+		return false;
 
 	outPSO = GetDeviceObjectFactory().CreateGraphicsPSO(psoDesc);
 	return outPSO != nullptr;
@@ -188,13 +192,12 @@ bool CSceneGBufferStage::SetAndBuildPerPassResources(bool bOnInit)
 			gEnv->p3DEngine->GetITerrain()->GetAtlasTexId(nTerrainTex0, nTerrainTex1, nTerrainTex2);
 
 		m_perPassResources.SetTexture(ePerPassTexture_PerlinNoiseMap, CRendererResources::s_ptexPerlinNoiseMap, EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_WindGrid, CRendererResources::s_ptexWindGrid, EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_TerrainElevMap, CTexture::GetByID(nTerrainTex2), EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_TerrainNormMap, CTexture::GetByID(nTerrainTex1), EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_TerrainBaseMap, CTexture::GetByID(nTerrainTex0), EDefaultResourceViews::sRGB, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_NormalsFitting, CRendererResources::s_ptexNormalsFitting, EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_DissolveNoise, CRendererResources::s_ptexDissolveNoiseMap, EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
-		m_perPassResources.SetTexture(ePerPassTexture_SceneLinearDepth, CRendererResources::s_ptexLinearDepth, EDefaultResourceViews::Default, EShaderStage_AllWithoutCompute);
+		m_perPassResources.SetTexture(ePerPassTexture_WindGrid, CRendererResources::s_ptexWindGrid, EDefaultResourceViews::Default, EShaderStage_Vertex);
+		m_perPassResources.SetTexture(ePerPassTexture_TerrainElevMap, CTexture::GetByID(nTerrainTex2), EDefaultResourceViews::Default, EShaderStage_Vertex);
+		m_perPassResources.SetTexture(ePerPassTexture_TerrainNormMap, CTexture::GetByID(nTerrainTex1), EDefaultResourceViews::Default, EShaderStage_Pixel);
+		m_perPassResources.SetTexture(ePerPassTexture_TerrainBaseMap, CTexture::GetByID(nTerrainTex0), EDefaultResourceViews::sRGB, EShaderStage_Pixel);
+		m_perPassResources.SetTexture(ePerPassTexture_NormalsFitting, CRendererResources::s_ptexNormalsFitting, EDefaultResourceViews::Default, EShaderStage_Pixel);
+		m_perPassResources.SetTexture(ePerPassTexture_SceneLinearDepth, CRendererResources::s_ptexLinearDepth, EDefaultResourceViews::Default, EShaderStage_Pixel);
 	}
 
 	// constant buffers
@@ -219,68 +222,80 @@ bool CSceneGBufferStage::SetAndBuildPerPassResources(bool bOnInit)
 
 void CSceneGBufferStage::Update()
 {
+	CRenderView* pRenderView = RenderView();
+
+	CStandardGraphicsPipeline* p = static_cast<CStandardGraphicsPipeline*>(&GetGraphicsPipeline());
+	EShaderRenderingFlags flags = (EShaderRenderingFlags)p->GetRenderFlags();
+	const bool isForwardMinimal = (flags & SHDF_FORWARD_MINIMAL) != 0;
+
 	SetAndBuildPerPassResources(false);
 
-	CTexture* pZTexture = RenderView()->GetDepthTarget();
+	{
+		CTexture* pZTexture = pRenderView->GetDepthTarget();
 
-	// Depth pre-pass
-	m_depthPrepass.SetRenderTargets(
-		// Depth
-		pZTexture,
-		// Color 0
-		NULL
-	);
+		// Depth pre-pass
+		m_depthPrepass.SetRenderTargets(
+			// Depth
+			pZTexture,
+			// Color 0
+			NULL
+		);
+	}
 
-	CTexture* pSceneSpecular = CRendererResources::s_ptexSceneSpecular;
+	if (!isForwardMinimal)
+	{
+		CTexture* pZTexture = pRenderView->GetDepthTarget();
+		CTexture* pSceneSpecular = CRendererResources::s_ptexSceneSpecular;
 #if defined(DURANGO_USE_ESRAM)
-	pSceneSpecular = CRendererResources::s_ptexSceneSpecularESRAM;
+		pSceneSpecular = CRendererResources::s_ptexSceneSpecularESRAM;
 #endif
 
-	// Opaque Pass
-	m_opaquePass.SetRenderTargets(
-		// Depth
-		pZTexture,
-		// Color 0
-		CRendererResources::s_ptexSceneNormalsMap,
-		// Color 1
-		CRendererResources::s_ptexSceneDiffuse,
-		// Color 2
-		pSceneSpecular
-	);
+		// Opaque Pass
+		m_opaquePass.SetRenderTargets(
+			// Depth
+			pZTexture,
+			// Color 0
+			CRendererResources::s_ptexSceneNormalsMap,
+			// Color 1
+			CRendererResources::s_ptexSceneDiffuse,
+			// Color 2
+			pSceneSpecular
+		);
 
-	// Opaque with Velocity Pass
-	m_opaqueVelocityPass.SetRenderTargets(
-		// Depth
-		pZTexture,
-		// Color 0
-		CRendererResources::s_ptexSceneNormalsMap,
-		// Color 1
-		CRendererResources::s_ptexSceneDiffuse,
-		// Color 2
-		pSceneSpecular,
-		// Color 3
-		CRendererResources::s_ptexVelocityObjects[0]
-	);
+		// Opaque with Velocity Pass
+		m_opaqueVelocityPass.SetRenderTargets(
+			// Depth
+			pZTexture,
+			// Color 0
+			CRendererResources::s_ptexSceneNormalsMap,
+			// Color 1
+			CRendererResources::s_ptexSceneDiffuse,
+			// Color 2
+			pSceneSpecular,
+			// Color 3
+			CRendererResources::s_ptexVelocityObjects[0]
+		);
 
-	// Overlay Pass
-	m_overlayPass.SetRenderTargets(
-		// Depth
-		pZTexture,
-		// Color 0
-		CRendererResources::s_ptexSceneNormalsMap,
-		// Color 1
-		CRendererResources::s_ptexSceneDiffuse,
-		// Color 2
-		pSceneSpecular
-	);
+		// Overlay Pass
+		m_overlayPass.SetRenderTargets(
+			// Depth
+			pZTexture,
+			// Color 0
+			CRendererResources::s_ptexSceneNormalsMap,
+			// Color 1
+			CRendererResources::s_ptexSceneDiffuse,
+			// Color 2
+			pSceneSpecular
+		);
 
-	// Micro GBuffer Pass
-	m_microGBufferPass.SetRenderTargets(
-		// Depth
-		pZTexture,
-		// Color 0
-		CRendererResources::s_ptexSceneNormalsMap
-	);
+		// Micro GBuffer Pass
+		m_microGBufferPass.SetRenderTargets(
+			// Depth
+			pZTexture,
+			// Color 0
+			CRendererResources::s_ptexSceneNormalsMap
+		);
+	}
 }
 
 void CSceneGBufferStage::Prepare(bool bPostLinearize)
@@ -307,30 +322,23 @@ void CSceneGBufferStage::ExecuteDepthPrepass()
 {
 	CRenderView* pRenderView = RenderView();
 	
+	ERenderListID efListNearest = EFSLIST_NEAREST_OBJECTS;
+	ERenderListID efList = EFSLIST_INVALID;
+
 	if (CRenderer::CV_r_DeferredShadingTiled == 4 && !CRenderer::CV_r_GraphicsPipelineMobile)
-	{
-		m_depthPrepass.BeginExecution();
-
-		m_depthPrepass.SetupPassContext(m_stageID, ePass_DepthPrepass, TTYPE_ZPREPASS, FB_ZPREPASS);
-		m_depthPrepass.DrawRenderItems(pRenderView, EFSLIST_NEAREST_OBJECTS);
-
-		m_depthPrepass.SetupPassContext(m_stageID, ePass_DepthPrepass, TTYPE_ZPREPASS, FB_ZPREPASS | FB_GENERAL);
-		m_depthPrepass.DrawRenderItems(pRenderView, EFSLIST_GENERAL);
-
-		m_depthPrepass.EndExecution();
-	}
+		efList = EFSLIST_GENERAL;
 	else if (CRenderer::CV_r_usezpass == 2)
-	{
-		m_depthPrepass.BeginExecution();
+		efList = EFSLIST_ZPREPASS;
 
-		m_depthPrepass.SetupPassContext(m_stageID, ePass_DepthPrepass, TTYPE_ZPREPASS, FB_ZPREPASS);
-		m_depthPrepass.DrawRenderItems(pRenderView, EFSLIST_NEAREST_OBJECTS);
+	m_depthPrepass.BeginExecution();
 
-		m_depthPrepass.SetupPassContext(m_stageID, ePass_DepthPrepass, TTYPE_ZPREPASS, FB_ZPREPASS | FB_GENERAL);
-		m_depthPrepass.DrawRenderItems(pRenderView, EFSLIST_ZPREPASS);
+	m_depthPrepass.SetupPassContext(m_stageID, ePass_DepthPrepass, TTYPE_ZPREPASS, FB_ZPREPASS);
+	m_depthPrepass.DrawRenderItems(pRenderView, efListNearest);
 
-		m_depthPrepass.EndExecution();
-	}
+	m_depthPrepass.SetupPassContext(m_stageID, ePass_DepthPrepass, TTYPE_ZPREPASS, FB_ZPREPASS | FB_GENERAL);
+	m_depthPrepass.DrawRenderItems(pRenderView, efList);
+
+	m_depthPrepass.EndExecution();
 }
 
 void CSceneGBufferStage::ExecuteSceneOpaque()
@@ -457,10 +465,9 @@ void CSceneGBufferStage::ExecuteMicroGBuffer()
 
 	m_microGBufferPass.SetViewport(GetViewport());
 
-	const bool bReverseDepth = true;
-	CClearSurfacePass::Execute(RenderView()->GetDepthTarget(), CLEAR_ZBUFFER | CLEAR_STENCIL, bReverseDepth ? 0.0f : 1.0f, 1);
+	CClearSurfacePass::Execute(RenderView()->GetDepthTarget(), CLEAR_ZBUFFER | CLEAR_STENCIL, Clr_FarPlane_Rev.r, STENCIL_VALUE_OUTDOORS);
 
-	m_microGBufferPass.SetFlags(bReverseDepth ? CSceneRenderPass::ePassFlags_ReverseDepth : CSceneRenderPass::ePassFlags_None);
+	m_microGBufferPass.SetFlags(CSceneRenderPass::ePassFlags_ReverseDepth);
 
 	Prepare(false);
 	
@@ -492,18 +499,15 @@ void CSceneGBufferStage::Execute()
 
 	{
 		// Clear depth (stencil initialized to STENCIL_VALUE_OUTDOORS)
-		bool bReverseDepth = true;
-
 		if (CVrProjectionManager::Instance()->GetProjectionType() == CVrProjectionManager::eVrProjection_LensMatched)
 		{
 			// use inverse depth here
-			bReverseDepth = !bReverseDepth;
-			CClearSurfacePass::Execute(pZTexture, CLEAR_ZBUFFER | CLEAR_STENCIL, bReverseDepth ? 0.0f : 1.0f, STENCIL_VALUE_OUTDOORS);
+			CClearSurfacePass::Execute(pZTexture, CLEAR_ZBUFFER | CLEAR_STENCIL, 1.0f - Clr_FarPlane_Rev.r, STENCIL_VALUE_OUTDOORS);
 			CVrProjectionManager::Instance()->ExecuteLensMatchedOctagon(pRenderView->GetDepthTarget());
 		}
 		else
 		{
-			CClearSurfacePass::Execute(pZTexture, CLEAR_ZBUFFER | CLEAR_STENCIL, bReverseDepth ? 0.0f : 1.0f, STENCIL_VALUE_OUTDOORS);
+			CClearSurfacePass::Execute(pZTexture, CLEAR_ZBUFFER | CLEAR_STENCIL, 0.0f + Clr_FarPlane_Rev.r, STENCIL_VALUE_OUTDOORS);
 		}
 
 		// Clear velocity target
@@ -579,6 +583,13 @@ void CSceneGBufferStage::ExecuteMinimumZpass()
 	passFlags |= CSceneRenderPass::ePassFlags_ReverseDepth;
 	m_depthPrepass.SetFlags(passFlags | CSceneRenderPass::ePassFlags_RenderNearest);
 
+	{
+		auto& RESTRICT_REFERENCE commandList = GetDeviceObjectFactory().GetCoreCommandList();
+
+		m_depthPrepass.PrepareRenderPassForUse(commandList);
+	}
+
+	// TODO: Fold into "ExecuteDepthPrepass();"
 	{
 		rendItemDrawer.InitDrawSubmission();
 

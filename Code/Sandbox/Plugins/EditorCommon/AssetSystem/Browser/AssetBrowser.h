@@ -8,21 +8,22 @@
 #include "EditorFramework/Editor.h"
 #include "ProxyModels/ItemModelAttribute.h"
 
-class QSplitter;
-class QThumbnailsView;
-class QAdvancedTreeView;
-class QFilteringPanel;
-class QAttributeFilterProxyModel;
-class QItemSelectionModel;
-class QToolButton;
-class QMenu;
 class CAsset;
-class CAssetType;
 class CAssetDropHandler;
-class CAssetFoldersView;
 class CAssetFolderFilterModel;
+class CAssetFoldersView;
+class CAssetType;
 class CBreadcrumbsBar;
 class CLineEditDelegate;
+class QAdvancedTreeView;
+class QAttributeFilterProxyModel;
+class QFilteringPanel;
+class QItemSelectionModel;
+class QMenu;
+class QSplitter;
+class QThumbnailsView;
+class QTimer;
+class QToolButton;
 
 //Thumbnails should now be used, leaving for now in case it is temporarily useful
 #define ASSET_BROWSER_USE_PREVIEW_WIDGET 0
@@ -50,6 +51,7 @@ public:
 	virtual QVariantMap GetLayout() const override;
 
 	void                GrabFocusSearchBar() { OnFind(); }
+	QFilteringPanel*    GetFilterPanel();
 
 	enum ViewMode
 	{
@@ -76,6 +78,8 @@ protected:
 	virtual void dragEnterEvent(QDragEnterEvent* pEvent) override;
 	virtual void dropEvent(QDropEvent* pEvent) override;
 	virtual void dragMoveEvent(QDragMoveEvent* pEvent) override;
+	virtual void dragLeaveEvent(QDragLeaveEvent* pEvent) override;
+
 	virtual void mouseReleaseEvent(QMouseEvent* pEvent) override;
 
 	//! Returns whether there is a folder under the mouse cursor. If there is, \p folder is assigned its path.
@@ -92,9 +96,12 @@ protected:
 	// The widget has to be visible.
 	void         ScrollToSelected();
 
+	bool         ValidatePath(const QString);
+
 	virtual void OnDoubleClick(CAsset* pAsset);
 	virtual void OnDoubleClick(const QString& folder);
-	bool         ValidatePath(const QString);
+
+	virtual void UpdatePreview(const QModelIndex& currentIndex);
 private:
 
 	void               InitNewNameDelegates();
@@ -120,6 +127,8 @@ private:
 	void ProcessSelection(QVector<CAsset*>& assets, QStringList& folders) const;
 
 	void OnContextMenu();
+	void AppendFilterDependenciesActions(CAbstractMenu* pAbstractMenu, const CAsset* pAsset);
+
 	void OnFolderSelectionChanged(const QStringList& selectedFolders);
 	void OnDoubleClick(const QModelIndex& index);
 	void OnCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
@@ -138,7 +147,6 @@ private:
 
 	void GenerateThumbnailsAsync(const QString& folder, const std::function<void()>& finalize = std::function<void()>());
 
-	void UpdatePreview(const QModelIndex& currentIndex);
 	void UpdateModels();
 	void UpdateNavigation(bool clearHistory);
 	void UpdateBreadcrumbsBar(const QString& path);
@@ -149,37 +157,39 @@ private:
 	// CEditor impl
 	bool OnFind() override;
 	bool OnDelete() override;
+	bool OnOpen() override;
 	//////////////////////////////////////////////////////////////////////////
 
 	//ui components
-	QAdvancedTreeView* m_detailsView;
-	QThumbnailsView* m_thumbnailView;
-	std::unique_ptr<CLineEditDelegate> m_detailsViewNewNameDelegate; // Note that delegates are not owned by view.
-	std::unique_ptr<CLineEditDelegate> m_thumbnailViewNewNameDelegate;
-	QItemSelectionModel* m_selection;
-	QSplitter* m_mainViewSplitter;
-	QFilteringPanel* m_filterPanel;
-	QSplitter* m_foldersSplitter;
-	CAssetFoldersView* m_foldersView;
+	QAdvancedTreeView*                          m_detailsView;
+	QThumbnailsView*                            m_thumbnailView;
+	std::unique_ptr<CLineEditDelegate>          m_detailsViewNewNameDelegate; // Note that delegates are not owned by view.
+	std::unique_ptr<CLineEditDelegate>          m_thumbnailViewNewNameDelegate;
+	QItemSelectionModel*                        m_selection;
+	QSplitter*                                  m_mainViewSplitter;
+	QFilteringPanel*                            m_filterPanel;
+	QSplitter*                                  m_foldersSplitter;
+	CAssetFoldersView*                          m_foldersView;
 	std::unique_ptr<QAttributeFilterProxyModel> m_pAttributeFilterProxyModel;
-	std::unique_ptr<CAssetFolderFilterModel> m_pFolderFilterModel;
-	std::unique_ptr<CAssetDropHandler> m_pAssetDropHandler;
-	QToolButton* m_backButton;
-	QToolButton* m_forwardButton;
-	CBreadcrumbsBar* m_breadcrumbs;
+	std::unique_ptr<CAssetFolderFilterModel>    m_pFolderFilterModel;
+	std::unique_ptr<CAssetDropHandler>          m_pAssetDropHandler;
+	QToolButton*                                m_backButton;
+	QToolButton*                                m_forwardButton;
+	CBreadcrumbsBar*                            m_breadcrumbs;
 	QLabel* m_multipleFoldersLabel;
-	QButtonGroup* m_viewModeButtons;
-	std::unique_ptr<CAbstractMenu> m_thumbnailSizeMenu;
+	QButtonGroup*                               m_viewModeButtons;
+	std::unique_ptr<CAbstractMenu>              m_thumbnailSizeMenu;
 
 	//state variables
-	ViewMode m_viewMode;
-	bool m_recursiveView;
-	bool m_recursiveSearch;
+	ViewMode             m_viewMode;
+	bool                 m_recursiveView;
+	bool                 m_recursiveSearch;
 	QVector<QStringList> m_navigationHistory;
-	int m_navigationIndex;             //-1 is "all assets"
-	bool m_dontPushNavHistory;         //true when folder changes are triggered by back/forward buttons
+	int                  m_navigationIndex;    //-1 is "all assets"
+	bool                 m_dontPushNavHistory; //true when folder changes are triggered by back/forward buttons
 
 #if ASSET_BROWSER_USE_PREVIEW_WIDGET
-	QContainer* m_previewWidget;
+	QContainer*             m_previewWidget;
 #endif
+	std::unique_ptr<QTimer> m_pQuickEditTimer;
 };

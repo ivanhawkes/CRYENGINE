@@ -38,24 +38,13 @@ public:
 	virtual bool OnInputEvent(SInputEvent const& event) override;
 	// ~IInputEventListener
 
-	void           Initialize(CSystem* const pSystem);
-	bool           ShutDown();
-	void           ProcessRequest(CAudioRequest& request);
-	void           Update(float const deltaTime);
-
-	bool           CanProcessRequests() const { return (m_flags& EInternalStates::AudioMiddlewareShuttingDown) == 0; }
-
-	ERequestStatus ParseControlsData(char const* const szFolderPath, EDataScope const dataScope);
-	ERequestStatus ClearControlsData(EDataScope const dataScope);
-	ERequestStatus ParsePreloadsData(char const* const szFolderPath, EDataScope const dataScope);
-	ERequestStatus ClearPreloadsData(EDataScope const dataScope);
-
-	void           NotifyListener(CAudioRequest const& request);
-
-	void           IncrementGlobalObjectSyncCallbackCounter();
-	void           DecrementGlobalObjectSyncCallbackCounter();
-
-	char const*    GetConfigPath() const;
+	void        Initialize(CSystem* const pSystem);
+	bool        ShutDown();
+	void        ProcessRequest(CAudioRequest& request);
+	void        Update(float const deltaTime);
+	bool        CanProcessRequests() const { return (m_flags& EInternalStates::AudioMiddlewareShuttingDown) == 0; }
+	void        NotifyListener(CAudioRequest const& request);
+	char const* GetConfigPath() const;
 
 private:
 
@@ -69,9 +58,10 @@ private:
 	ERequestStatus RefreshAudioSystem(char const* const szLevelName);
 	void           SetImplLanguage();
 	void           CreateInternalControls();
+	void           ClearInternalControls();
 	void           SetCurrentEnvironmentsOnObject(CATLAudioObject* const pObject, EntityId const entityToIgnore);
 
-	void           CreateInternalTrigger(char const* const szTriggerName, ControlId const triggerId, CATLTriggerImpl const* const pTriggerImpl);
+	void           CreateInternalTrigger(char const* const szTriggerName, ControlId const triggerId, CATLTriggerImpl const* const pTriggerConnection);
 	void           CreateInternalSwitch(char const* const szSwitchName, ControlId const switchId, std::vector<char const*> const& stateNames);
 
 	// ATLObject containers
@@ -81,25 +71,22 @@ private:
 	AudioPreloadRequestLookup m_preloadRequests;
 	AudioEnvironmentLookup    m_environments;
 
-	CATLAudioObject*          m_pGlobalAudioObject = nullptr;
-
 	// Components
-	CAudioStandaloneFileManager m_audioStandaloneFileMgr;
-	CEventManager               m_eventMgr;
-	CObjectManager              m_objectMgr;
-	CAudioListenerManager       m_audioListenerMgr;
-	CFileCacheManager           m_fileCacheMgr;
-	CAudioEventListenerManager  m_audioEventListenerMgr;
-	CAudioXMLProcessor          m_xmlProcessor;
+	CFileManager               m_fileMgr;
+	CEventManager              m_eventMgr;
+	CObjectManager             m_objectMgr;
+	CAudioListenerManager      m_audioListenerMgr;
+	CFileCacheManager          m_fileCacheMgr;
+	CAudioEventListenerManager m_audioEventListenerMgr;
+	CAudioXMLProcessor         m_xmlProcessor;
 
-	SInternalControls           m_internalControls;
+	SInternalControls          m_internalControls;
 
-	uint32                      m_objectPoolSize = 0;
-	uint32                      m_eventPoolSize = 0;
+	uint32                     m_objectPoolSize = 0;
+	uint32                     m_eventPoolSize = 0;
 
 	// Utility members
 	EInternalStates                    m_flags = EInternalStates::None;
-	Impl::IImpl*                       m_pIImpl = nullptr;
 	SImplInfo                          m_implInfo;
 	CryFixedStringT<MaxFilePathLength> m_configPath;
 

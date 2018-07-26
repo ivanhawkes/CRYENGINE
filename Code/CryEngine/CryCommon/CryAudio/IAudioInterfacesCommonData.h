@@ -7,6 +7,7 @@
 #include "../CryCore/smartptr.h"
 #include "../CryCore/Platform/platform.h"
 #include "../CryCore/CryEnumMacro.h"
+#include "../CryCore/CryCrc32.h"
 
 #define AUDIO_SYSTEM_DATA_ROOT "audio"
 
@@ -43,10 +44,79 @@ static constexpr uint16 MaxMiscStringLength = 512;
 static constexpr uint32 InvalidCRC32 = 0xFFFFffff;
 static constexpr float FloatEpsilon = 1.0e-3f;
 
-// Forward declarations.
-struct IObject;
-class CATLEvent;
-class CATLStandaloneFile;
+static constexpr char const* s_szRelativeVelocityTrackingSwitchName = "relative_velocity_tracking";
+static constexpr char const* s_szRelativeVelocityParameterName = "relative_velocity";
+static constexpr char const* s_szAbsoluteVelocityTrackingSwitchName = "absolute_velocity_tracking";
+static constexpr char const* s_szAbsoluteVelocityParameterName = "absolute_velocity";
+static constexpr char const* s_szLoseFocusTriggerName = "lose_focus";
+static constexpr char const* s_szGetFocusTriggerName = "get_focus";
+static constexpr char const* s_szMuteAllTriggerName = "mute_all";
+static constexpr char const* s_szUnmuteAllTriggerName = "unmute_all";
+static constexpr char const* s_szPauseAllTriggerName = "pause_all";
+static constexpr char const* s_szResumeAllTriggerName = "resume_all";
+static constexpr char const* s_szDoNothingTriggerName = "do_nothing";
+static constexpr char const* s_szOcclCalcSwitchName = "occlusion_calculation_type";
+static constexpr char const* s_szIgnoreStateName = "ignore";
+static constexpr char const* s_szAdaptiveStateName = "adaptive";
+static constexpr char const* s_szLowStateName = "low";
+static constexpr char const* s_szMediumStateName = "medium";
+static constexpr char const* s_szHighStateName = "high";
+static constexpr char const* s_szOnStateName = "on";
+static constexpr char const* s_szOffStateName = "off";
+static constexpr char const* s_szGlobalPreloadRequestName = "global_audio_system_preload";
+
+static constexpr char const* s_szDefaultLibraryName = "default_controls";
+static constexpr char const* s_szRootNodeTag = "AudioSystemData";
+static constexpr char const* s_szEditorDataTag = "EditorData";
+static constexpr char const* s_szTriggersNodeTag = "Triggers";
+static constexpr char const* s_szParametersNodeTag = "Parameters";
+static constexpr char const* s_szSwitchesNodeTag = "Switches";
+static constexpr char const* s_szPreloadsNodeTag = "Preloads";
+static constexpr char const* s_szEnvironmentsNodeTag = "Environments";
+
+static constexpr char const* s_szTriggerTag = "Trigger";
+static constexpr char const* s_szParameterTag = "Parameter";
+static constexpr char const* s_szSwitchTag = "Switch";
+static constexpr char const* s_szStateTag = "State";
+static constexpr char const* s_szEnvironmentTag = "Environment";
+static constexpr char const* s_szPreloadRequestTag = "PreloadRequest";
+static constexpr char const* s_szPlatformTag = "Platform";
+static constexpr char const* s_szEventTag = "Event";
+
+static constexpr char const* s_szNameAttribute = "name";
+static constexpr char const* s_szVersionAttribute = "version";
+static constexpr char const* s_szTypeAttribute = "type";
+static constexpr char const* s_szRadiusAttribute = "radius";
+
+static constexpr char const* s_szDataLoadType = "autoload";
+
+static constexpr char const* s_szConfigFolderName = "ace";
+static constexpr char const* s_szAssetsFolderName = "assets";
+static constexpr char const* s_szLevelsFolderName = "levels";
+
+/**
+ * A utility function to convert a string value to an Id.
+ * @param szSource - string to convert
+ * @return a 32bit CRC computed on the lower case version of the passed string
+ */
+static constexpr IdType StringToId(char const* const szSource)
+{
+	return static_cast<IdType>(CCrc32::ComputeLowercase_CompileTime(szSource));
+}
+
+static constexpr ControlId RelativeVelocityTrackingSwitchId = StringToId(s_szRelativeVelocityTrackingSwitchName);
+static constexpr ControlId AbsoluteVelocityTrackingSwitchId = StringToId(s_szAbsoluteVelocityTrackingSwitchName);
+static constexpr ControlId DoNothingTriggerId = StringToId(s_szDoNothingTriggerName);
+static constexpr ControlId OcclusionCalcSwitchId = StringToId(s_szOcclCalcSwitchName);
+static constexpr SwitchStateId IgnoreStateId = StringToId(s_szIgnoreStateName);
+static constexpr SwitchStateId AdaptiveStateId = StringToId(s_szAdaptiveStateName);
+static constexpr SwitchStateId LowStateId = StringToId(s_szLowStateName);
+static constexpr SwitchStateId MediumStateId = StringToId(s_szMediumStateName);
+static constexpr SwitchStateId HighStateId = StringToId(s_szHighStateName);
+static constexpr SwitchStateId OnStateId = StringToId(s_szOnStateName);
+static constexpr SwitchStateId OffStateId = StringToId(s_szOffStateName);
+static constexpr PreloadRequestId GlobalPreloadRequestId = StringToId(s_szGlobalPreloadRequestName);
+static constexpr LibraryId DefaultLibraryId = StringToId(s_szDefaultLibraryName);
 
 /**
  * @enum CryAudio::ERequestFlags
@@ -145,12 +215,11 @@ public:
 		       m_up.IsEquivalent(transformation.GetColumn2(), epsilon);
 	}
 
-	void                                SetPosition(Vec3 const& position) { m_position = position; }
-	ILINE Vec3 const&                   GetPosition() const               { return m_position; }
-	ILINE Vec3 const&                   GetForward() const                { return m_forward; }
-	ILINE Vec3 const&                   GetUp() const                     { return m_up; }
+	ILINE Vec3 const&                   GetPosition() const { return m_position; }
+	ILINE Vec3 const&                   GetForward() const  { return m_forward; }
+	ILINE Vec3 const&                   GetUp() const       { return m_up; }
 
-	static CObjectTransformation const& GetEmptyObject()                  { static CObjectTransformation const emptyInstance; return emptyInstance; }
+	static CObjectTransformation const& GetEmptyObject()    { static CObjectTransformation const emptyInstance; return emptyInstance; }
 
 private:
 
@@ -162,10 +231,10 @@ private:
 struct SRequestUserData
 {
 	explicit SRequestUserData(
-	  ERequestFlags const flags_ = ERequestFlags::None,
-	  void* const pOwner_ = nullptr,
-	  void* const pUserData_ = nullptr,
-	  void* const pUserDataOwner_ = nullptr)
+		ERequestFlags const flags_ = ERequestFlags::None,
+		void* const pOwner_ = nullptr,
+		void* const pUserData_ = nullptr,
+		void* const pUserDataOwner_ = nullptr)
 		: flags(flags_)
 		, pOwner(pOwner_)
 		, pUserData(pUserData_)
@@ -205,9 +274,9 @@ struct STriggerData
 struct SPlayFileInfo
 {
 	explicit SPlayFileInfo(
-	  char const* const _szFile,
-	  bool const _bLocalized = true,
-	  ControlId const _usedPlaybackTrigger = InvalidControlId)
+		char const* const _szFile,
+		bool const _bLocalized = true,
+		ControlId const _usedPlaybackTrigger = InvalidControlId)
 		: szFile(_szFile)
 		, bLocalized(_bLocalized)
 		, usedTriggerForPlayback(_usedPlaybackTrigger)

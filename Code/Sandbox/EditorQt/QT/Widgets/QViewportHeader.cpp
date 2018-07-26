@@ -18,9 +18,6 @@
 #include "Commands/QPythonAction.h"
 #include "QT/QToolTabManager.h"
 #include "QControls.h"
-
-#include <CryCore/SFunctor.h>
-
 #include <QToolButton>
 #include <QPushButton>
 #include <QWidget>
@@ -568,14 +565,11 @@ QViewportHeader::QViewportHeader(CLevelEditorViewport* pViewport)
 
 QViewportHeader::~QViewportHeader()
 {
-	ICVar* pCVar = gEnv->pConsole->GetCVar("r_displayInfo");
-	pCVar->RemoveOnChangeFunctor(m_displayInfoFuncIdx);
 	GetIEditorImpl()->GetLevelEditorSharedState()->signalEditToolChanged.DisconnectObject(this);
 	GetIEditorImpl()->UnregisterNotifyListener(this);
 	gViewportPreferences.signalSettingsChanged.DisconnectById((uintptr_t)this);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void QViewportHeader::SetViewportFOV(float fov)
 {
 	if (m_viewport && m_viewport->IsRenderViewport())

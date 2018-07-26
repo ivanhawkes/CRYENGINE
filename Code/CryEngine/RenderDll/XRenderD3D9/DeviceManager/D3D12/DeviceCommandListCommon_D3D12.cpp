@@ -5,13 +5,15 @@
 #include "DevicePSO_D3D12.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool CDeviceTimestampGroup::s_reservedGroups[4] = { false, false, false, false };
+bool CDeviceTimestampGroup::s_reservedGroups[MAX_FRAMES_IN_FLIGHT] = { false, false, false, false };
 
 CDeviceTimestampGroup::CDeviceTimestampGroup()
 	: m_numTimestamps(0)
 	, m_groupIndex(0xFFFFFFFF)
 	, m_fence(0)
 	, m_frequency(0)
+	, m_measurable(false)
+	, m_measured(false)
 {
 	m_timeValues.fill(0);
 }
@@ -43,24 +45,33 @@ void CDeviceTimestampGroup::Init()
 void CDeviceTimestampGroup::BeginMeasurement()
 {
 	m_numTimestamps = 0;
+	m_frequency = 0;
+	m_measurable = false;
+	m_measured = false;
 }
 
 void CDeviceTimestampGroup::EndMeasurement()
 {
-	GetDeviceObjectFactory().IssueFence(m_fence);
+	auto* pDX12Device = GetDeviceObjectFactory().GetDX12Device();
+	auto* pDX12Scheduler = GetDeviceObjectFactory().GetDX12Scheduler();
+	auto* pDX12CmdList = GetDeviceObjectFactory().GetCoreCommandList().GetDX12CommandList();
 
-	CCryDX12DeviceContext* m_pDeviceContext = (CCryDX12DeviceContext*)gcpRendD3D->GetDeviceContext().GetRealDeviceContext();
-	m_frequency = m_pDeviceContext->GetTimestampFrequency();
+	pDX12Device->IssueTimestampResolve(pDX12CmdList, m_groupIndex * kMaxTimestamps, m_numTimestamps);
+	m_fence = (DeviceFenceHandle)pDX12Scheduler->InsertFence();
+
+	m_measurable = true;
 }
 
-uint32 CDeviceTimestampGroup::IssueTimestamp(void* pCommandList)
+uint32 CDeviceTimestampGroup::IssueTimestamp(CDeviceCommandList* pCommandList)
 {
+	// Passing a nullptr means we want to use the current core command-list
+	auto* pDX12Device = GetDeviceObjectFactory().GetDX12Device();
+	auto* pDX12CmdList = (pCommandList ? *pCommandList : GetDeviceObjectFactory().GetCoreCommandList()).GetDX12CommandList();
+
 	assert(m_numTimestamps < kMaxTimestamps);
 
-	uint32 timestampIndex = m_groupIndex * kMaxTimestamps + m_numTimestamps;
-
-	CCryDX12DeviceContext* m_pDeviceContext = (CCryDX12DeviceContext*)gcpRendD3D->GetDeviceContext().GetRealDeviceContext();
-	m_pDeviceContext->InsertTimestamp(timestampIndex, 0, pCommandList ? reinterpret_cast<CDeviceCommandList*>(pCommandList)->GetDX12CommandList() : nullptr);
+	const uint32 timestampIndex = m_groupIndex * kMaxTimestamps + m_numTimestamps;
+	pDX12Device->InsertTimestamp(pDX12CmdList, timestampIndex);
 
 	++m_numTimestamps;
 	return timestampIndex;
@@ -68,17 +79,21 @@ uint32 CDeviceTimestampGroup::IssueTimestamp(void* pCommandList)
 
 bool CDeviceTimestampGroup::ResolveTimestamps()
 {
-	if (m_numTimestamps == 0)
+	if (!m_measurable)
+		return false;
+	if (m_measured || m_numTimestamps == 0)
 		return true;
 
-	if (GetDeviceObjectFactory().SyncFence(m_fence, false, true) != S_OK)
+	auto* pDX12Device = GetDeviceObjectFactory().GetDX12Device();
+	auto* pDX12Scheduler = GetDeviceObjectFactory().GetDX12Scheduler();
+
+	if (pDX12Scheduler->TestForFence(m_fence) != S_OK)
 		return false;
 
-	CCryDX12DeviceContext* m_pDeviceContext = (CCryDX12DeviceContext*)gcpRendD3D->GetDeviceContext().GetRealDeviceContext();
-	m_pDeviceContext->ResolveTimestamps();
-	m_pDeviceContext->QueryTimestamps(m_groupIndex * kMaxTimestamps, m_numTimestamps, &m_timeValues[0]);
+	m_frequency = pDX12Device->GetTimestampFrequency();
+	pDX12Device->QueryTimestamps(m_groupIndex * kMaxTimestamps, m_numTimestamps, &m_timeValues[0]);
 
-	return true;
+	return m_measured = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,20 +122,6 @@ void CDeviceCommandListImpl::EndProfilerEvent(const char* label)
 
 void CDeviceCommandListImpl::ClearStateImpl(bool bOutputMergerOnly) const
 {
-	// TODO: remove when r_GraphicsPipeline=0 algorithms don't exist anymore (and no emulated device-context is used)
-	CD3D9Renderer* const __restrict rd = gcpRendD3D;
-
-	if (rd->GetDeviceContext().IsValid())
-	{
-		D3DDepthSurface* pDSV = 0;
-		D3DSurface*      pRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = { 0 };
-		D3DUAV*          pUAVs[D3D11_PS_CS_UAV_REGISTER_COUNT] = { 0 };
-
-		if (bOutputMergerOnly)
-			rd->GetDeviceContext().OMSetRenderTargets/*AndUnorderedAccessViews*/(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, pRTVs, pDSV/*, 0, D3D11_PS_CS_UAV_REGISTER_COUNT, pUAVs, nullptr*/);
-		else
-			rd->GetDeviceContext().ClearState();
-	}
 }
 
 void CDeviceCommandListImpl::CeaseCommandListEvent(int nPoolId)

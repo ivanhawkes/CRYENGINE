@@ -7,6 +7,7 @@
 #include "Common/SceneRenderPass.h"
 #include "Common/FullscreenPass.h"
 #include "Common/UtilityPasses.h"
+#include "SceneGBuffer.h"
 
 class CRESky;
 class CREHDRSky;
@@ -22,16 +23,14 @@ public:
 
 	enum EPerPassTexture
 	{
-		ePerPassTexture_PerlinNoiseMap = 25,
-		ePerPassTexture_TerrainElevMap,
-		ePerPassTexture_WindGrid,
-		ePerPassTexture_TerrainNormMap,
-		ePerPassTexture_TerrainBaseMap,
-		ePerPassTexture_NormalsFitting,
-		ePerPassTexture_DissolveNoise,
-		ePerPassTexture_SceneLinearDepth,
+		ePerPassTexture_PerlinNoiseMap   = CSceneGBufferStage::ePerPassTexture_PerlinNoiseMap,
+		ePerPassTexture_TerrainElevMap   = CSceneGBufferStage::ePerPassTexture_TerrainElevMap,
+		ePerPassTexture_WindGrid         = CSceneGBufferStage::ePerPassTexture_WindGrid,
+		ePerPassTexture_TerrainNormMap   = CSceneGBufferStage::ePerPassTexture_TerrainNormMap,
+		ePerPassTexture_TerrainBaseMap   = CSceneGBufferStage::ePerPassTexture_TerrainBaseMap,
+		ePerPassTexture_NormalsFitting   = CSceneGBufferStage::ePerPassTexture_NormalsFitting,
 
-		ePerPassTexture_Count
+		ePerPassTexture_SceneLinearDepth = CSceneGBufferStage::ePerPassTexture_SceneLinearDepth,
 	};
 
 public:
@@ -39,6 +38,7 @@ public:
 	{
 		ePass_Forward = 0,
 		ePass_ForwardRecursive,
+		ePass_ForwardMobile
 	};
 
 public:
@@ -51,7 +51,7 @@ public:
 	bool         CreatePipelineState(const SGraphicsPipelineStateDescription& desc,
 	                                 CDeviceGraphicsPSOPtr& outPSO,
 	                                 EPass passId = ePass_Forward,
-	                                 std::function<void(CDeviceGraphicsPSODesc& psoDesc, const SGraphicsPipelineStateDescription& desc)> customState = nullptr);
+	                                 const std::function<void(CDeviceGraphicsPSODesc& psoDesc, const SGraphicsPipelineStateDescription& desc)> &customState = nullptr);
 
 	void         ExecuteOpaque();
 	void         ExecuteTransparentBelowWater();
@@ -60,6 +60,7 @@ public:
 	void         ExecuteTransparentLoRes(int subRes);
 	void         ExecuteAfterPostProcessHDR();
 	void         ExecuteAfterPostProcessLDR();
+	void         ExecuteMobile();
 	void         ExecuteMinimum(CTexture* pColorTex, CTexture* pDepthTex);
 
 	void         SetSkyRE(CRESky* pSkyRE, CREHDRSky* pHDRSkyRE);
@@ -81,11 +82,14 @@ private:
 	_smart_ptr<CTexture> m_pSkyMoonTex;
 
 	CDeviceResourceLayoutPtr m_pOpaqueResourceLayout;
+	CDeviceResourceLayoutPtr m_pOpaqueResourceLayoutMobile;
 	CDeviceResourceLayoutPtr m_pTransparentResourceLayout;
 	CDeviceResourceLayoutPtr m_pEyeOverlayResourceLayout;
 
 	CDeviceResourceSetDesc   m_opaquePassResources;
 	CDeviceResourceSetPtr    m_pOpaquePassResourceSet;
+	CDeviceResourceSetDesc   m_opaquePassResourcesMobile;
+	CDeviceResourceSetPtr    m_pOpaquePassResourceSetMobile;
 	CDeviceResourceSetDesc   m_transparentPassResources;
 	CDeviceResourceSetPtr    m_pTransparentPassResourceSet;
 	CDeviceResourceSetDesc   m_eyeOverlayPassResources;
@@ -93,6 +97,7 @@ private:
 	CConstantBufferPtr       m_pPerPassCB;
 
 	CSceneRenderPass         m_forwardOpaquePass;
+	CSceneRenderPass         m_forwardOpaquePassMobile;
 	CSceneRenderPass         m_forwardOverlayPass;
 	CSceneRenderPass         m_forwardTransparentBWPass;
 	CSceneRenderPass         m_forwardTransparentAWPass;

@@ -806,9 +806,6 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	 */
 
 	const uint8 nMaterialLayers = IRenderNode::GetMaterialLayers();
-	const auto& shaderItem = GetMaterial()->GetShaderItem();
-	const bool isRefractive = shaderItem.m_pShader && !!(shaderItem.m_pShader->GetFlags() & (EF_REFRACTIVE | EF_FORCEREFRACTIONUPDATE));
-
 	Matrix34 transformMatrix = m_Matrix;
 	const Vec3 vCamPos = passInfo.GetCamera().GetPosition();
 	bool isNearestObject = (GetRndFlags() & ERF_FOB_NEAREST) != 0;
@@ -833,7 +830,7 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	}
 
 	CRenderObject* pObj = nullptr;
-	if (m_pFoliage || m_pDeform || (m_dwRndFlags & ERF_HUD) || isNearestObject || isRefractive)
+	if (m_pFoliage || m_pDeform || (m_dwRndFlags & ERF_HUD) || isNearestObject)
 	{
 		// Foliage and deform do not support permanent render objects
 		// HUD is managed in custom render-lists and also doesn't support it
@@ -958,19 +955,15 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	else
 		pObj->m_ObjFlags &= ~FOB_AFTER_WATER;
 
-	if (GetRndFlags() & ERF_RECVWIND)
+	if ((GetRndFlags() & ERF_RECVWIND) && GetCVars()->e_VegetationBending)
 	{
-		if (GetCVars()->e_VegetationBending)
-		{
-			pObj->m_vegetationBendingData.scale = 0.1f; // this is default value for vegetation if bending in veg group is set to 1
-			pObj->m_vegetationBendingData.verticalRadius = m_pStatObj->m_fRadiusVert;
-			pObj->m_ObjFlags |= FOB_BENDED | FOB_DYNAMIC_OBJECT;
-		}
-		else
-		{
-			pObj->m_vegetationBendingData.scale = 0.0f;
-			pObj->m_vegetationBendingData.verticalRadius = 0.0f;
-		}
+		// this is default value for vegetation if bending in veg group is set to 1
+		pObj->SetBendingData({ 0.1f, m_pStatObj->m_fRadiusVert }, passInfo);
+		pObj->m_ObjFlags |= FOB_BENDED | FOB_DYNAMIC_OBJECT;
+	}
+	else
+	{
+		pObj->SetBendingData({ 0.0f, 0.0f }, passInfo);
 	}
 
 	//IFoliage* pFoliage = GetFoliage(-1);

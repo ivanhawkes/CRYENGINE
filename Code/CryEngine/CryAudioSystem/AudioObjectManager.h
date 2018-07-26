@@ -2,17 +2,18 @@
 
 #pragma once
 
-#include "ATLEntities.h"
-#include <CryAudio/IAudioInterfacesCommonData.h>
+#include "GlobalTypedefs.h"
+
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+struct IRenderAuxGeom;
+#endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
 namespace CryAudio
 {
 class CATLAudioObject;
-
-namespace Impl
-{
-struct SObject3DAttributes;
-}
+class CATLStandaloneFile;
+class CATLEvent;
+class CAudioRequest;
 
 class CObjectManager final
 {
@@ -29,9 +30,10 @@ public:
 	CObjectManager& operator=(CObjectManager&&) = delete;
 
 	void            Init(uint32 const poolSize);
-	void            SetImpl(Impl::IImpl* const pIImpl);
+	void            OnAfterImplChanged();
+	void            ReleaseImplData();
 	void            Release();
-	void            Update(float const deltaTime, Impl::SObject3DAttributes const& listenerAttributes);
+	void            Update(float const deltaTime, CObjectTransformation const& listenerTransformation, Vec3 const& listenerVelocity);
 	void            RegisterObject(CATLAudioObject* const pObject);
 
 	void            ReportStartedEvent(CATLEvent* const pEvent);
@@ -46,13 +48,13 @@ public:
 	size_t                    GetNumActiveAudioObjects() const;
 	ConstructedObjects const& GetAudioObjects() const { return m_constructedObjects; }
 	void                      DrawPerObjectDebugInfo(
-	  IRenderAuxGeom& auxGeom,
-	  Vec3 const& listenerPos,
-	  AudioTriggerLookup const& triggers,
-	  AudioParameterLookup const& parameters,
-	  AudioSwitchLookup const& switches,
-	  AudioPreloadRequestLookup const& preloadRequests,
-	  AudioEnvironmentLookup const& environments) const;
+		IRenderAuxGeom& auxGeom,
+		Vec3 const& listenerPos,
+		AudioTriggerLookup const& triggers,
+		AudioParameterLookup const& parameters,
+		AudioSwitchLookup const& switches,
+		AudioPreloadRequestLookup const& preloadRequests,
+		AudioEnvironmentLookup const& environments) const;
 	void DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerPosition, float const posX, float posY) const;
 
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
@@ -61,7 +63,6 @@ private:
 
 	bool HasActiveData(CATLAudioObject const* const pAudioObject) const;
 
-	Impl::IImpl*       m_pIImpl = nullptr;
 	ConstructedObjects m_constructedObjects;
 };
 } // namespace CryAudio

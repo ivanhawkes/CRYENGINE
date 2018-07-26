@@ -17,8 +17,13 @@ public:
 	void BeginMeasurement();
 	void EndMeasurement();
 
-	uint32 IssueTimestamp(void* pCommandList);
+	uint32 IssueTimestamp(CDeviceCommandList* pCommandList);
 	bool ResolveTimestamps();
+
+	uint64 GetTime(uint32 timestamp)
+	{
+		return m_timeValues[timestamp];
+	}
 	
 	float GetTimeMS(uint32 timestamp0, uint32 timestamp1)
 	{
@@ -27,13 +32,17 @@ public:
 	}
 
 protected:
-	uint32                                    m_numTimestamps;
+	uint32                                   m_numTimestamps;
 	
-	std::array<ID3D11Query*, kMaxTimestamps>  m_timestampQueries;
-	ID3D11Query*                              m_pDisjointQuery;
+	std::array<ID3D11Query*, kMaxTimestamps> m_timestampQueries;
+	ID3D11Query*                             m_pDisjointQuery;
 
-	UINT64                                    m_frequency;
-	std::array<uint64, kMaxTimestamps>        m_timeValues;
+	UINT64                                   m_frequency;
+	std::array<uint64, kMaxTimestamps>       m_timeValues;
+
+
+	bool                                     m_measurable : 1;
+	bool                                     m_measured   : 1;
 };
 
 #else
@@ -64,7 +73,7 @@ public:
 		// Empty on purpose
 	}
 
-	uint32 IssueTimestamp(void* pCommandList)
+	uint32 IssueTimestamp(CDeviceCommandList* pCommandList)
 	{
 		if (m_timestampIndex < kMaxTimestamps)
 		{
@@ -83,6 +92,11 @@ public:
 			return gpuLastExecuted > m_lastIssued;
 		}
 		return true; // Nothing was issued
+	}
+
+	uint64 GetTime(uint32 timestamp)
+	{
+		return m_timeValues[timestamp];
 	}
 
 	float GetTimeMS(uint32 timestamp0, uint32 timestamp1)

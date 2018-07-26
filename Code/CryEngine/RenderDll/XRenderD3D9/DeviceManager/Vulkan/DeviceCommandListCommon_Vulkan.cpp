@@ -28,6 +28,8 @@ CDeviceTimestampGroup::CDeviceTimestampGroup()
 	: m_numTimestamps(0)
 	, m_queryPool(VK_NULL_HANDLE)
 	, m_fence(0)
+	, m_measurable(false)
+	, m_measured(false)
 {}
 
 CDeviceTimestampGroup::~CDeviceTimestampGroup()
@@ -61,22 +63,26 @@ void CDeviceTimestampGroup::Init()
 
 void CDeviceTimestampGroup::BeginMeasurement()
 {
+	m_numTimestamps = 0;
+	m_measurable = false;
+	m_measured = false;
+
 	CDeviceCommandListRef coreCommandList = GetDeviceObjectFactory().GetCoreCommandList();
 	vkCmdResetQueryPool(coreCommandList.GetVKCommandList()->GetVkCommandList(), m_queryPool, 0, kMaxTimestamps);
-
-	m_numTimestamps = 0;
 }
 
 void CDeviceTimestampGroup::EndMeasurement()
 {
 	GetDeviceObjectFactory().IssueFence(m_fence);
+
+	m_measurable = true;
 }
 
-uint32 CDeviceTimestampGroup::IssueTimestamp(void* pCommandList)
+uint32 CDeviceTimestampGroup::IssueTimestamp(CDeviceCommandList* pCommandList)
 {
 	CRY_ASSERT(m_numTimestamps < kMaxTimestamps);
 
-	CDeviceCommandListRef deviceCommandList = pCommandList ? *reinterpret_cast<CDeviceCommandList*>(pCommandList) : GetDeviceObjectFactory().GetCoreCommandList();
+	CDeviceCommandListRef deviceCommandList = pCommandList ? *pCommandList : GetDeviceObjectFactory().GetCoreCommandList();
 	vkCmdWriteTimestamp(deviceCommandList.GetVKCommandList()->GetVkCommandList(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPool, m_numTimestamps);
 
 	return m_numTimestamps++;
@@ -84,16 +90,17 @@ uint32 CDeviceTimestampGroup::IssueTimestamp(void* pCommandList)
 
 bool CDeviceTimestampGroup::ResolveTimestamps()
 {
-	if (m_numTimestamps == 0)
+	if (!m_measurable)
+		return false;
+	if (m_measured || m_numTimestamps == 0)
 		return true;
 
-	if (GetDeviceObjectFactory().SyncFence(m_fence, false, true) == S_OK)
-	{
-		if (vkGetQueryPoolResults(GetDevice()->GetVkDevice(), m_queryPool, 0, m_numTimestamps, sizeof(m_timestampData), m_timestampData.data(), sizeof(uint64), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS)
-			return true;
-	}
-
-	return false;
+	if (GetDeviceObjectFactory().SyncFence(m_fence, false, true) != S_OK)
+		return false;
+	if (vkGetQueryPoolResults(GetDevice()->GetVkDevice(), m_queryPool, 0, m_numTimestamps, sizeof(m_timestampData), m_timestampData.data(), sizeof(uint64), VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+		return false;
+	
+	return m_measured = true;
 }
 
 float CDeviceTimestampGroup::GetTimeMS(uint32 timestamp0, uint32 timestamp1)
@@ -885,6 +892,12 @@ void CDeviceCopyCommandInterfaceImpl::CopyImage(CImageResource* pSrc, CImageReso
 	uint32_t dstX = mapping.DestinationOffset.Left;
 	uint32_t dstY = mapping.DestinationOffset.Top;
 	uint32_t dstZ = mapping.DestinationOffset.Front;
+	
+	UINT          CopyFlags          = mapping.Flags;
+	VkImageLayout prevSrcLayout      = pSrc->GetLayout();
+	VkAccessFlags prevSrcAccessFlags = pSrc->GetAccess();
+	VkImageLayout prevDstLayout      = pDst->GetLayout();
+	VkAccessFlags prevDstAccessFlags = pDst->GetAccess();
 
 	uint32_t srcBlockWidth = 1, srcBlockHeight = 1, srcBlockBytes;
 	uint32_t dstBlockWidth = 1, dstBlockHeight = 1, dstBlockBytes;
@@ -980,6 +993,26 @@ void CDeviceCopyCommandInterfaceImpl::CopyImage(CImageResource* pSrc, CImageReso
 
 	vkCmdCopyImage(GetVKCommandList()->GetVkCommandList(), pSrc->GetHandle(), pSrc->GetLayout(), pDst->GetHandle(), pDst->GetLayout(), mipIndex, batch);
 	GetVKCommandList()->m_nCommands += CLCOUNT_COPY;
+
+	const bool revertstate = !!(CopyFlags & DX12_COPY_REVERTSTATE_MARKER);
+	if (revertstate)
+	{
+		for (auto& layout : { &prevSrcLayout, &prevDstLayout })
+		{
+			if (*layout == VK_IMAGE_LAYOUT_UNDEFINED || *layout == VK_IMAGE_LAYOUT_PREINITIALIZED)
+				*layout = VK_IMAGE_LAYOUT_GENERAL;
+		}
+
+		if (pSrc == pDst)
+		{
+			RequestTransition(pSrc, prevSrcLayout, prevSrcAccessFlags);
+		}
+		else
+		{
+			RequestTransition(pSrc, prevSrcLayout, prevSrcAccessFlags);
+			RequestTransition(pDst, prevDstLayout, prevDstAccessFlags);
+		}
+	}
 }
 
 bool CDeviceCopyCommandInterfaceImpl::FillBuffer(const void* pSrc, CBufferResource* pDst, const SResourceMemoryMapping& mapping)

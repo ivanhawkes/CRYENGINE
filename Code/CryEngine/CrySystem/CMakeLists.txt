@@ -419,12 +419,10 @@ add_sources("CrySystem_uber_8.cpp"
 		"JobManager/JobManager.cpp"
 		"JobManager/JobManager.h"
 		"JobManager/JobStructs.h"
+		"JobManager/JobSystemTests.cpp"
 	SOURCE_GROUP "JobManager\\\\BlockingBackend"
 		"JobManager/BlockingBackend/BlockingBackEnd.cpp"
 		"JobManager/BlockingBackend/BlockingBackEnd.h"
-	SOURCE_GROUP "JobManager\\\\FallbackBackend"
-		"JobManager/FallbackBackend/FallbackBackend.cpp"
-		"JobManager/FallbackBackend/FallBackBackend.h"
 	SOURCE_GROUP "JobManager\\\\ThreadBackEnd"
 		"JobManager/PCBackEnd/ThreadBackEnd.cpp"
 		"JobManager/PCBackEnd/ThreadBackEnd.h"
@@ -471,6 +469,14 @@ add_sources("CrySystem_uber_9.cpp"
 	SOURCE_GROUP "ZLibDecompressor"
 		"ZLibDecompressor.h"
 		"ZLibDecompressor.cpp"
+)
+
+add_sources("CrySystem_uber_10.cpp"
+	PROJECTS CrySystem
+	SOURCE_GROUP "Reflection"
+		"Reflection/FundamentalTypes.cpp"
+		"Reflection/MathTypes.cpp"
+		"Reflection/CommonTypes.cpp"
 )
 
 add_sources("NoUberFile"
