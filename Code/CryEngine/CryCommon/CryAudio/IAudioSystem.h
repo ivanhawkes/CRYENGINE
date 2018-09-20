@@ -36,6 +36,7 @@ class CATLStandaloneFile;
 namespace Impl
 {
 struct IImpl;
+struct ITriggerInfo;
 } // namespace Impl
 
 /**
@@ -80,29 +81,6 @@ enum class EDataScope : EnumFlagsType
 };
 
 /**
- * @enum CryAudio::EOcclusionType
- * @brief A strongly typed enum class representing different audio occlusion types that can be set on audio objects.
- * @var CryAudio::EOcclusionType::None
- * @var CryAudio::EOcclusionType::Ignore
- * @var CryAudio::EOcclusionType::Adaptive
- * @var CryAudio::EOcclusionType::Low
- * @var CryAudio::EOcclusionType::Medium
- * @var CryAudio::EOcclusionType::High
- * @var CryAudio::EOcclusionType::Count
- */
-enum class EOcclusionType : EnumFlagsType
-{
-	None,     /**< Used to initialize variables of this type and to determine whether the variable was properly handled. */
-	Ignore,   /**< The audio object does not calculate occlusion against level geometry. */
-	Adaptive, /**< The audio object switches between occlusion types depending on its distance to the audio listener. */
-	Low,      /**< The audio object uses a coarse grained occlusion plane for calculation. */
-	Medium,   /**< The audio object uses a medium grained occlusion plane for calculation. */
-	High,     /**< The audio object uses a fine grained occlusion plane for calculation. */
-	Count,    /**< Used to initialize arrays to this size. */
-};
-CRY_CREATE_ENUM_FLAG_OPERATORS(EOcclusionType);
-
-/**
  * @enum CryAudio::ELogType
  * @brief A strongly typed enum class representing different audio specific log types.
  * @var CryAudio::ELogType::None
@@ -118,6 +96,28 @@ enum class ELogType : EnumFlagsType
 	Warning, /**< The message will be displayed in orange color. */
 	Error,   /**< The message will be displayed in red color. */
 	Always,  /**< The message will be displayed in standard color and always printed regardless of verbosity level. */
+};
+
+/**
+ * @enum CryAudio::EDefaultTriggerType
+ * @brief A strongly typed enum class representing different default audio trigger types.
+ * @var CryAudio::EDefaultTriggerType::None
+ * @var CryAudio::EDefaultTriggerType::LoseFocus
+ * @var CryAudio::EDefaultTriggerType::GetFocus
+ * @var CryAudio::EDefaultTriggerType::MuteAll
+ * @var CryAudio::EDefaultTriggerType::UnmuteAll
+ * @var CryAudio::EDefaultTriggerType::PauseAll
+ * @var CryAudio::EDefaultTriggerType::ResumeAll
+ */
+enum class EDefaultTriggerType : EnumFlagsType
+{
+	None,      /**< Used to initialize variables of this type and to determine whether the variable was properly handled. */
+	LoseFocus, /**< Specifies to use the lose_focus default trigger. */
+	GetFocus,  /**< Specifies to use the get_focus default trigger. */
+	MuteAll,   /**< Specifies to use the mute_all default trigger. */
+	UnmuteAll, /**< Specifies to use the unmute_all default trigger. */
+	PauseAll,  /**< Specifies to use the pause_all default trigger. */
+	ResumeAll, /**< Specifies to use the resume_all default trigger. */
 };
 
 struct SRequestInfo
@@ -348,6 +348,22 @@ struct IAudioSystem
 	virtual void ReportFinishedEvent(CATLEvent& event, bool const bSuccess, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
+	 * Used by audio middleware implementations to inform the AudioSystem that an event was virtualized.
+	 * @param event - reference to the instance of the event that was virtualized.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 */
+	virtual void ReportVirtualizedEvent(CATLEvent& event, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
+	 * Used by audio middleware implementations to inform the AudioSystem that an event was physicalized.
+	 * @param event - reference to the instance of the event that was physicalized.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 */
+
+	virtual void ReportPhysicalizedEvent(CATLEvent& event, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+	/**
 	 * Used to instruct the AudioSystem that it should stop all playing sounds.
 	 * @param userData - optional struct used to pass additional data to the internal request.
 	 * @return void
@@ -381,6 +397,24 @@ struct IAudioSystem
 	 * @see PreloadSingleRequest
 	 */
 	virtual void UnloadSingleRequest(PreloadRequestId const id, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
+	 * Loads a setting.
+	 * @param id - ID of the setting in question.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 * @see UnloadSetting
+	 */
+	virtual void LoadSetting(ControlId const id, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
+	 * Unloads a setting.
+	 * @param id - ID of thes etting in question.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 * @see LoadSetting
+	 */
+	virtual void UnloadSetting(ControlId const id, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
 	 * Reloads all of the audio controls and their connections.
@@ -426,11 +460,12 @@ struct IAudioSystem
 	/**
 	 * Constructs an instance of an audio listener.
 	 * Note: Retrieving a listener this way requires the instance to be freed via ReleaseListener once not needed anymore!
+	 * @param transformation - transformation of the listener to be created.
 	 * @param szName - optional name of the listener to be created.
 	 * @return Pointer to a freshly constructed CryAudio::IListener instance.
 	 * @see ReleaseListener
 	 */
-	virtual IListener* CreateListener(char const* const szName = nullptr) = 0;
+	virtual IListener* CreateListener(CObjectTransformation const& transformation, char const* const szName = nullptr) = 0;
 
 	/**
 	 * Destructs the passed audio listener instance.
@@ -475,28 +510,6 @@ struct IAudioSystem
 	virtual void GetTriggerData(ControlId const triggerId, STriggerData& triggerData) = 0;
 
 	/**
-	 * This method is called by the LevelSystem whenever a level is loaded.
-	 * It allows the AudioSystem to handle its data accordingly.
-	 * @param szLevelName - name of the level that is being loaded.
-	 * @return void
-	 */
-	virtual void OnLoadLevel(char const* const szLevelName) = 0;
-
-	/**
-	 * This method is called by the LevelSystem whenever a level is unloaded.
-	 * It allows the AudioSystem to handle its data accordingly.
-	 * @return void
-	 */
-	virtual void OnUnloadLevel() = 0;
-
-	/**
-	 * This method is called whenever the language is changed.
-	 * It allows the AudioSystem to reload language specific data.
-	 * @return void
-	 */
-	virtual void OnLanguageChanged() = 0;
-
-	/**
 	 * Retrieve information about the current middleware implementation.
 	 * @param[out] implInfo - a reference to an instance of SImplInfo
 	 * @return void
@@ -511,6 +524,25 @@ struct IAudioSystem
 	 * @return void
 	 */
 	virtual void Log(ELogType const type, char const* const szFormat, ...) = 0;
+
+	//////////////////////////////////////////////////////////////////////////
+	// NOTE: The methods below are ONLY USED when INCLUDE_AUDIO_PRODUCTION_CODE is defined!
+	//////////////////////////////////////////////////////////////////////////
+
+	/**
+	 * Constructs a trigger from the givene info struct and executes it on the preview object.
+	 * @param triggerInfo - info struct to construct a trigger.
+	 * @return void
+	 * @see StopPreviewTrigger
+	 */
+	virtual void ExecutePreviewTrigger(Impl::ITriggerInfo const& triggerInfo) = 0;
+
+	/**
+	 * Stops the active trigger on the preview object.
+	 * @return void
+	 * @see ExecutePreviewTrigger
+	 */
+	virtual void StopPreviewTrigger() = 0;
 	// </interfuscator:shuffle>
 };
 } // namespace CryAudio

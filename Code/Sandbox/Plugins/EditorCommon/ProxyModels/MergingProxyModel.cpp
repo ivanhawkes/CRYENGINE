@@ -141,8 +141,16 @@ public:
 		}
 		else if (proxyRow == m_pModel->rowCount(proxyParent))
 		{
-			auto mapping = GetMappingFromProxy(proxyParent);
-			*sourceParent = *mapping;
+			if (proxyParent.isValid())
+			{
+				auto mapping = GetMappingFromProxy(proxyParent);
+				*sourceParent = *mapping;
+			}
+			else
+			{
+				*sourceParent = QModelIndex();
+			}
+
 			if (sourceParent->isValid())
 			{
 				*sourceModel = sourceParent->model();
@@ -1216,4 +1224,3 @@ QHash<int, QByteArray> CMergingProxyModel::roleNames() const
 }
 
 #undef reverse_foreach
-

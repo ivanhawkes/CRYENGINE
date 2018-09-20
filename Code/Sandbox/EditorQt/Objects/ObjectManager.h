@@ -2,24 +2,19 @@
 
 #pragma once
 
-#include "IObjectManager.h"
-#include "Objects/BaseObject.h"
-#include <Objects/ObjectPropertyWidget.h>
-#include "SelectionGroup.h"
-#include <CrySandbox/CrySignal.h>
+#include "Objects/SelectionGroup.h"
 #include "IEditorImpl.h"
 
-// forward declarations.
-class CGizmoManager;
-class CCameraObject;
+#include <Objects/BaseObject.h>
+#include <Objects/ObjectPropertyWidget.h>
+#include <IObjectManager.h>
+
+#include <CrySandbox/CrySignal.h>
+
 class CEntityObject;
-class CObjectArchive;
-class CObjectLayer;
-class CObjectClassDesc;
-class CWaitProgress;
-class CViewport;
-class CObjectManipulatorOwner;
 class CGeomCacheEntity;
+class CObjectLayer;
+class CWaitProgress;
 
 //////////////////////////////////////////////////////////////////////////
 // Helper class to signal when we are exporting a level to game
@@ -45,9 +40,6 @@ public:
 class CObjectManager : public IObjectManager
 {
 public:
-	//! Selection functor callback.
-	//! Callback function must return a boolean value.
-	//! Return true if selection should proceed, or false to abort object selection.
 	CObjectManager();
 	~CObjectManager();
 
@@ -103,10 +95,6 @@ public:
 
 	//! Display objects on display context.
 	void Display(CObjectRenderHelper& objRenderHelper);
-
-	//! Called when selecting without selection helpers - this is needed since
-	//! the visible object cache is normally not updated when not displaying helpers.
-	void ForceUpdateVisibleObjectCache(SDisplayContext& dc);
 
 	//! Check intersection with objects.
 	//! Find intersection with nearest to ray origin object hit by ray.
@@ -164,12 +152,21 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 	// Object Selection.
 	//////////////////////////////////////////////////////////////////////////
-	void SelectObject(CBaseObject* obj);
-	void UnselectObject(CBaseObject* obj);
-
+	//! Clear selection and select
+	void SelectObject(CBaseObject* pObject) override;
 	void SelectObjects(const std::vector<CBaseObject*>& objects) override;
+
+	//! Add objects to current selection
+	void AddObjectToSelection(CBaseObject* pObject) override;
+	void AddObjectsToSelection(const std::vector<CBaseObject*>& objects) override;
+
+	//! Remove objects from current selection
+	void UnselectObject(CBaseObject* pObject) override;
 	void UnselectObjects(const std::vector<CBaseObject*>& objects) override;
+
+	//! Toggle selected state
 	void ToggleSelectObjects(const std::vector<CBaseObject*>& objects) override;
+	//! Add and remove objects from selection
 	void SelectAndUnselectObjects(const std::vector<CBaseObject*>& selectObjects, const std::vector<CBaseObject*>& unselectObjects) override;
 	void SelectAll() override;
 
@@ -290,39 +287,38 @@ public:
 	ICharacterInstance* GetCharacterFromObject(CBaseObject* pObject);
 
 	// Called when object gets modified.
-	void                         OnObjectModified(CBaseObject* pObject, bool bDelete, bool boModifiedTransformOnly);
+	void                   OnObjectModified(CBaseObject* pObject, bool bDelete, bool boModifiedTransformOnly);
 
-	void                         UnregisterNoExported();
-	void                         RegisterNoExported();
+	void                   UnregisterNoExported();
+	void                   RegisterNoExported();
 
-	virtual void                 FindAndRenameProperty2(const char* property2Name, const string& oldValue, const string& newValue);
-	virtual void                 FindAndRenameProperty2If(const char* property2Name, const string& oldValue, const string& newValue, const char* otherProperty2Name, const string& otherValue);
+	virtual void           FindAndRenameProperty2(const char* property2Name, const string& oldValue, const string& newValue);
+	virtual void           FindAndRenameProperty2If(const char* property2Name, const string& oldValue, const string& newValue, const char* otherProperty2Name, const string& otherValue);
 
-	virtual void                 SaveEntitiesInternalState(IDataWriteStream& writer) const;
-	virtual void                 AssignLayerIDsToRenderNodes();
+	virtual void           SaveEntitiesInternalState(IDataWriteStream& writer) const;
+	virtual void           AssignLayerIDsToRenderNodes();
 
-	void                         ResolveMissingObjects();
-	void                         ResolveMissingMaterials();
+	void                   ResolveMissingObjects();
+	void                   ResolveMissingMaterials();
 
-	class CObjectPhysicsManager* GetPhysicsManager()
-	{ return m_pPhysicsManager; }
+	CObjectPhysicsManager* GetPhysicsManager()                         { return m_pPhysicsManager; }
 
-	bool         IsLoading() const                           { return m_bLoadingObjects; }
+	bool                   IsLoading() const                           { return m_bLoadingObjects; }
 
-	void         SetExportingLevel(bool bExporting) override { m_bLevelExporting = bExporting; }
-	bool         IsExportingLevelInprogress() const override { return m_bLevelExporting; }
+	void                   SetExportingLevel(bool bExporting) override { m_bLevelExporting = bExporting; }
+	bool                   IsExportingLevelInprogress() const override { return m_bLevelExporting; }
 
-	void         SetSelectionMask(int mask) const override;
+	void                   SetSelectionMask(int mask) const override;
 
-	virtual void EmitPopulateInspectorEvent() const override;
+	virtual void           EmitPopulateInspectorEvent() const override;
 
-	virtual bool IsLayerChanging() const override { return m_bLayerChanging; }
+	virtual bool           IsLayerChanging() const override { return m_bLayerChanging; }
 
 	CCrySignal<void(int)> signalSelectionMaskChanged;
 
 private:
+	friend CBaseObject;
 	friend CObjectArchive;
-	friend class CBaseObject;
 	/** Creates and serialize object from xml node.
 	   @param objectNode Xml node to serialize object info from.
 	   @param pUndoObject Pointer to deleted object for undo.
@@ -410,7 +406,7 @@ private:
 	int            m_totalObjectsToLoad;
 	//////////////////////////////////////////////////////////////////////////
 
-	class CObjectPhysicsManager* m_pPhysicsManager;
+	CObjectPhysicsManager* m_pPhysicsManager;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Numbering for names.

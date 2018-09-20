@@ -55,13 +55,18 @@ void CClipVolumesStage::Init()
 	{
 		// Stencil pass: two primitives per clip volume, both share the same constant buffer
 		{
-			CConstantBufferPtr pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SPrimitiveConstants));
+			CConstantBufferPtr pCB;
+
+			pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SPrimitiveConstants));
+			if (pCB) pCB->SetDebugName("ClipVolumes Stencil Per-Primitive CB");
 
 			m_stencilPrimitives[2 * i + 0].SetInlineConstantBuffer(eConstantBufferShaderSlot_PerPrimitive, pCB, EShaderStage_Vertex);
 			m_stencilPrimitives[2 * i + 1].SetInlineConstantBuffer(eConstantBufferShaderSlot_PerPrimitive, pCB, EShaderStage_Vertex);
 
 #ifdef FEATURE_RENDER_CLIPVOLUME_GEOMETRY_SHADER
 			pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SPrimitiveVolFogConstants));
+			if (pCB) pCB->SetDebugName("ClipVolumes Stencil-Fog Per-Primitive CB");
+
 			m_stencilPrimitivesVolFog[2 * i + 0].SetInlineConstantBuffer(eConstantBufferShaderSlot_PerPrimitive, pCB, EShaderStage_Geometry | EShaderStage_Vertex);
 			m_stencilPrimitivesVolFog[2 * i + 1].SetInlineConstantBuffer(eConstantBufferShaderSlot_PerPrimitive, pCB, EShaderStage_Geometry | EShaderStage_Vertex);
 #endif
@@ -69,7 +74,10 @@ void CClipVolumesStage::Init()
 
 		// Blend values pass: one primitive per clip volume, shared CB for vertex and pixel shader
 		{
-			CConstantBufferPtr pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SPrimitiveConstants));
+			CConstantBufferPtr pCB;
+
+			pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SPrimitiveConstants));
+			if (pCB) pCB->SetDebugName("ClipVolumes Blend Per-Primitive CB");
 
 			m_blendPrimitives[i].SetInlineConstantBuffer(eConstantBufferShaderSlot_PerPrimitive, pCB, EShaderStage_Pixel | EShaderStage_Vertex);
 		}
@@ -110,7 +118,7 @@ void CClipVolumesStage::Update()
 {
 	CRenderView* pRenderView = RenderView();
 
-	m_pBlendValuesRT = CRendererResources::s_ptexVelocity;
+	m_pBlendValuesRT = CRendererResources::s_ptexClipVolumes;
 	m_pDepthTarget = RenderView()->GetDepthTarget();
 
 	m_stencilPass.SetDepthTarget(m_pDepthTarget);
@@ -521,7 +529,7 @@ void CClipVolumesStage::PrepareVolumetricFog()
 			const int32 w = scaledWidth;
 			const int32 h = scaledHeight;
 			const int32 d = depth;
-			ETEX_Format format = eTF_D24S8;
+			const ETEX_Format format = CRendererResources::s_hwTexFormatSupport.GetClosestFormatSupported(eTF_D24S8);
 			CTexture* pTex = CTexture::GetOrCreateTextureArray("$VolFogClipVolumeStencil", w, h, d, 1, eTT_2DArray, dsFlags, format);
 
 			if (pTex == nullptr
@@ -641,7 +649,7 @@ void CClipVolumesStage::PrepareVolumetricFog()
 				m_pClipVolumeStencilVolumeTexArray.resize(depth);
 
 				const uint32 dsFlags = commonFlags | FT_USAGE_DEPTHSTENCIL;
-				ETEX_Format depthFormat = eTF_D24S8;
+				const ETEX_Format depthFormat = CRendererResources::s_hwTexFormatSupport.GetClosestFormatSupported(eTF_D24S8);
 
 				for (uint32 i = 0; i < depth; ++i)
 				{
@@ -691,7 +699,7 @@ void CClipVolumesStage::ExecuteVolumetricFog()
 
 	if (rd->m_bVolumetricFogEnabled && bFogEnabled)
 	{
-		PROFILE_LABEL_SCOPE("CLIPVOLUMES FOR VOLUMETRIC FOG");
+		PROFILE_LABEL_SCOPE("CLIPVOLUMES_FOR_VOLUMETRIC_FOG");
 
 		const bool bReverseDepth = true;
 		const float nearDepth = bReverseDepth ? 1.0f : 0.0f;

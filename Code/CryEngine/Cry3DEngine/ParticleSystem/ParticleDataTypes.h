@@ -74,13 +74,12 @@ typedef SChaosKey SChaosKeyV;
 
 enum EDataDomain
 {
-	EDD_None           = 0,
+	EDD_None           = 0, // Data is per-emitter or global
 
-	EDD_PerParticle    = 1, // Data is per particle
-	EDD_PerInstance    = 2, // Data is per sub-emitter
+	EDD_PerInstance    = 1, // Data is per sub-emitter
+	EDD_PerParticle    = 2, // Data is per particle
 
 	EDD_HasUpdate      = 4, // Data is updated per-frame, has additional init-value element
-	EDD_NeedsClear     = 8, // Data requires clearing after editing
 
 	EDD_ParticleUpdate = EDD_PerParticle | EDD_HasUpdate,
 	EDD_InstanceUpdate = EDD_PerInstance | EDD_HasUpdate
@@ -152,7 +151,7 @@ ILINE EParticleDataType InitType(EParticleDataType type)
 }
 
 //! DataType implemented as a DynamicEnum, with SDataInfo
-template<typename T, EDataDomain Domain = EDD_PerParticle>
+template<typename T>
 struct TDataType: EParticleDataType
 {
 	using EParticleDataType::EParticleDataType;
@@ -192,6 +191,57 @@ inline cstr SkipPrefix(cstr name)
 			return name + i + 1;
 	return name;
 }
+
+// Store usage of particle data types
+struct SUseData
+{
+	TDynArray<uint> offsets;        // Offset of data type if used, ~0 if not
+	uint            totalSize = 0;  // Total size of data per-particle
+
+	SUseData()
+		: offsets(EParticleDataType::size(), ~0)
+	{
+	}
+	bool Used(EParticleDataType type) const
+	{
+		return offsets[type] != ~0;
+	}
+	void AddData(EParticleDataType type)
+	{
+		if (!Used(type))
+		{
+			uint dim = type.info().dimension;
+			uint size = Align(type.info().typeSize, 4);
+			for (uint i = 0; i < dim; ++i)
+			{
+				offsets[type + i] = totalSize;
+				totalSize += size;
+			}
+		}
+	}
+};
+
+using PUseData = std::shared_ptr<SUseData>;
+inline PUseData NewUseData() { return std::make_shared<SUseData>(); }
+
+struct SUseDataRef
+{
+	TConstArray<uint> offsets;
+	uint              totalSize = 0;
+	PUseData          pRefData;
+
+	SUseDataRef() 
+	{}
+	SUseDataRef(const PUseData& pUseData)
+		: offsets(pUseData->offsets)
+		, totalSize(pUseData->totalSize)
+		, pRefData(pUseData)
+	{}
+	bool Used(EParticleDataType type) const
+	{
+		return offsets[type] != ~0;
+	}
+};
 
 // Standard data types
 extern TDataType<TParticleId>

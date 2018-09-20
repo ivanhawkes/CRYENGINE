@@ -2,10 +2,12 @@
 
 #include "StdAfx.h"
 #include "UVGizmo.h"
-#include "QViewport.h"
+
 #include "UVMappingEditorCommon.h"
-#include "DisplayViewportAdapter.h"
-#include "Grid.h"
+
+#include <Preferences/SnappingPreferences.h>
+#include <DisplayViewportAdapter.h>
+#include <QViewport.h>
 
 namespace Designer {
 namespace UVMapping
@@ -109,7 +111,7 @@ bool UVGizmo::HitTest(QViewport* viewport, int x, int y, CLevelEditorSharedState
 	if (!m_bVisible)
 		return false;
 
-	HitContext hc;
+	HitContext hc(nullptr); //viewport does not contain helper settings
 	CDisplayViewportAdapter viewAdapter(viewport);
 	hc.view = &viewAdapter;
 	hc.camera = viewport->Camera();
@@ -328,4 +330,3 @@ void UVGizmo::RemoveCallback(IGizmoTransform* pGizmoTransform)
 
 }
 }
-

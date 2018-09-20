@@ -2,15 +2,16 @@
 
 #include "StdAfx.h"
 #include "ExtrudeTool.h"
-#include "ViewManager.h"
-#include "Core/Model.h"
+
 #include "Core/Helper.h"
-#include "Util/HeightManipulator.h"
 #include "Util/ExtrusionSnappingHelper.h"
-#include "DesignerEditor.h"
+#include "Util/HeightManipulator.h"
 #include "Util/OffsetManipulator.h"
-#include "Objects/DisplayContext.h"
-#include "Util/MFCUtil.h"
+#include "DesignerEditor.h"
+
+#include <Util/MFCUtil.h>
+
+#include <Viewport.h>
 
 namespace Designer
 {
@@ -580,4 +581,3 @@ void ExtrudeTool::OnEditorNotifyEvent(EEditorNotifyEvent event)
 
 REGISTER_DESIGNER_TOOL_WITH_PROPERTYTREE_PANEL_AND_COMMAND(eDesigner_Extrude, eToolGroup_Edit, "Extrude", ExtrudeTool,
                                                            extrude, "runs extrude tool", "designer.extrude")
-

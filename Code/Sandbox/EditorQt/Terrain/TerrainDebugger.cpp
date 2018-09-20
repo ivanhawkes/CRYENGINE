@@ -1,7 +1,6 @@
 #include "StdAfx.h"
 #include "Terrain/TerrainManager.h"
 #include <FilePathUtil.h>
-#include <QtUtil.h>
 
 namespace Private_TerrainDumper
 {
@@ -99,4 +98,4 @@ void DumpTerrainData()
 
 } // namespace Private_TerrainDumper
 
-REGISTER_EDITOR_COMMAND(Private_TerrainDumper::DumpTerrainData, editor, dump_terrain_resources, CCommandDescription("Dump terrain layers to <project folder>/user/Dump/Terrain/"));
+//REGISTER_EDITOR_COMMAND(Private_TerrainDumper::DumpTerrainData, editor, dump_terrain_resources, CCommandDescription("Dump terrain layers to <project folder>/user/Dump/Terrain/"));

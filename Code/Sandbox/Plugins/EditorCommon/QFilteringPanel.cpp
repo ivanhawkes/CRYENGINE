@@ -1,30 +1,26 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#include <StdAfx.h>
+#include "StdAfx.h"
 #include "QFilteringPanel.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QGridLayout>
-#include <QToolButton>
-#include <QLineEdit>
-#include <QCheckBox>
-#include <QTimer>
-#include <QScrollArea>
-#include <QLabel>
-#include <QSplitter>
-#include <QAbstractItemView>
-#include <QListView>
-#include <QHeaderView>
 
-#include "QControls.h"
-#include "QSearchBox.h"
+#include "EditorFramework/PersonalizationManager.h"
 #include "Controls/QMenuComboBox.h"
 #include "Controls/QPopupWidget.h"
-#include "QAdvancedTreeView.h"
-#include "CryIcon.h"
-#include "ProxyModels/FavoritesHelper.h"
-#include "QtUtil.h"
 #include "Menu/MenuWidgetBuilders.h"
+#include "ProxyModels/FavoritesHelper.h"
+#include "QAdvancedTreeView.h"
+#include "QSearchBox.h"
+#include "QtUtil.h"
+
+#include <QAbstractItemView>
+#include <QCheckBox>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QSplitter>
+#include <QTimer>
+#include <QToolButton>
+#include <QVBoxLayout>
 
 class QFilteringPanel::CSavedFiltersModel : public QAbstractListModel
 {
@@ -34,7 +30,6 @@ public:
 	{
 		Update();
 	}
-
 
 	void Update()
 	{
@@ -142,21 +137,18 @@ QFilteringPanel::CSavedFiltersWidget::CSavedFiltersWidget(QFilteringPanel* paren
 	auto saveButton = new QToolButton();
 	saveButton->setIcon(CryIcon("icons:General/Save_as.ico"));
 	saveButton->setText(tr("Save Filter"));
-	saveButton->setToolTip(tr("Save Filter"));
 	saveButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	connect(saveButton, &QToolButton::clicked, [this]() { OnSaveCurrentFilter(); });
 
 	auto loadButton = new QToolButton();
 	loadButton->setIcon(CryIcon("icons:General/Save_To_Disc.ico"));
 	loadButton->setText(tr("Load Filter"));
-	loadButton->setToolTip(tr("Load Filter"));
 	loadButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	connect(loadButton, &QToolButton::clicked, [this]() { OnLoadSelectedFilter(); });
 
 	auto deleteButton = new QToolButton();
 	deleteButton->setIcon(CryIcon("icons:General/Close.ico"));
 	deleteButton->setText(tr("Delete Filter"));
-	deleteButton->setToolTip(tr("Delete Filter"));
 	deleteButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	connect(deleteButton, &QToolButton::clicked, [this]() { OnDeleteSelectedFilter(); });
 
@@ -511,15 +503,21 @@ QFilteringPanel::QFilteringPanel(const char* uniqueName, QAttributeFilterProxyMo
 
 	m_addFilterButton = new QToolButton();
 	m_addFilterButton->setIcon(CryIcon("icons:General/Element_Add.ico"));
-	m_addFilterButton->setText(tr("Add Filter"));
-	m_addFilterButton->setToolTip(tr("Add Filter"));
+	m_addFilterButton->setText(tr("Add Criterion"));
 	m_addFilterButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	connect(m_addFilterButton, &QToolButton::clicked, [this](){ AddFilter(); });
 
 	m_saveLoadButton = new QToolButton();
 	m_saveLoadButton->setIcon(CryIcon("icons:General/Save_as.ico"));
-	m_saveLoadButton->setToolTip(tr("Save/Load Filters"));
+	m_saveLoadButton->setText(tr("Save/Load Filter"));
+	m_saveLoadButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	connect(m_saveLoadButton, &QToolButton::clicked, [this]() { ShowSavedFilters(); });
+
+	QToolButton* pClearCriteria = new QToolButton();
+	pClearCriteria->setIcon(CryIcon("icons:General/Element_Clear.ico"));
+	pClearCriteria->setText(tr("Clear Criteria"));
+	pClearCriteria->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	connect(pClearCriteria, &QToolButton::clicked, this, &QFilteringPanel::Clear);
 
 	m_favoritesButton = new QToolButton();
 	m_favoritesButton->setIcon(FavoritesHelper::GetFavoriteIcon(false));
@@ -563,7 +561,8 @@ QFilteringPanel::QFilteringPanel(const char* uniqueName, QAttributeFilterProxyMo
 	m_optionsLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 	m_optionsLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
 	m_optionsLayout->addWidget(m_addFilterButton, 0, 0, Qt::AlignLeft);
-	m_optionsLayout->addWidget(m_saveLoadButton, 0, 1, Qt::AlignLeft);
+	m_optionsLayout->addWidget(pClearCriteria, 0, 1, Qt::AlignLeft);
+	m_optionsLayout->addWidget(m_saveLoadButton, 0, 2, Qt::AlignLeft);
 
 	m_pFiltersLayout = new QVBoxLayout();
 	m_pFiltersLayout->setContentsMargins(0, 0, 0, 0);
@@ -683,11 +682,18 @@ void QFilteringPanel::FillMenu(CAbstractMenu* pMenu, const QString& submenuName)
 		});
 	}
 
+	// If there are filters then add a section for clearing the current criteria
 	if (filters.empty())
-	{ 
+	{
 		QAction* const pAction = pMenu->CreateAction(tr("No Saved Filters"), section);
 		pAction->setEnabled(false);
 	}
+
+	section = pMenu->GetNextEmptySection();
+
+	QAction* pClearCriteria = pMenu->CreateAction("Clear Criteria", section);
+	pClearCriteria->setIcon(CryIcon("icons:General/Element_Clear.ico"));
+	connect(pClearCriteria, &QAction::triggered, this, &QFilteringPanel::Clear);
 }
 
 bool QFilteringPanel::IsFilterSet(const QString& filterName) const
@@ -1066,4 +1072,3 @@ void QFilteringPanel::OnSearch()
 	m_pModel->InvalidateFilter();
 	signalOnFiltered();
 }
-

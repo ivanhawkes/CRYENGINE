@@ -7,17 +7,19 @@
 #include "RenderDisplayContext.h"
 #include "RenderOutput.h"
 
-static inline std::string GenerateUniqueTextureName(const std::string &prefix, uint32 id)
+std::string GenerateUniqueTextureName(const std::string prefix, uint32 id, const std::string name)
 {
-	return prefix + "-" + std::to_string(id);
+	return prefix + "-" + std::to_string(id) + (name.empty() ? "" : "-" + name);
 }
 
-void CRenderDisplayContext::BeginRendering(bool isHighDynamicRangeEnabled)
+void CRenderDisplayContext::BeginRendering()
 {
 	// Toggle HDR/LDR output selection
-	if (m_bHDRRendering != isHighDynamicRangeEnabled)
+	if (false)
 	{
-		m_bHDRRendering = isHighDynamicRangeEnabled;
+		AllocateColorTarget();
+		AllocateDepthTarget();
+
 		m_pRenderOutput->ChangeOutputResolution(
 			m_pRenderOutput->GetOutputResolution()[0],
 			m_pRenderOutput->GetOutputResolution()[1]
@@ -27,7 +29,6 @@ void CRenderDisplayContext::BeginRendering(bool isHighDynamicRangeEnabled)
 
 void CRenderDisplayContext::EndRendering()
 {
-	m_bHDRRendering = false;
 }
 
 bool CRenderDisplayContext::IsEditorDisplay() const 
@@ -48,12 +49,14 @@ void CRenderDisplayContext::SetDisplayResolutionAndRecreateTargets(uint32_t disp
 
 	m_viewport = vp;
 
-	if (m_DisplayWidth == displayWidth && m_DisplayHeight == displayHeight)
+	if (m_DisplayWidth  == displayWidth &&
+	    m_DisplayHeight == displayHeight)
 		return;
 
-	m_DisplayWidth = displayWidth;
+	m_DisplayWidth  = displayWidth;
 	m_DisplayHeight = displayHeight;
-	if (m_DisplayWidth && m_DisplayHeight)
+
+	if (m_DisplayHeight)
 		m_aspectRatio = (float)m_DisplayWidth / (float)m_DisplayHeight;
 
 	AllocateColorTarget();
@@ -66,39 +69,42 @@ void CRenderDisplayContext::ChangeDisplayResolution(uint32_t displayWidth, uint3
 
 	m_pRenderOutput->InitializeDisplayContext();
 	m_pRenderOutput->ReinspectDisplayContext();
+	m_pRenderOutput->m_hasBeenCleared = 0;
 }
 
+//////////////////////////////////////////////////////////////////////////
 void CRenderDisplayContext::AllocateColorTarget()
 {
-	const ETEX_Format eHDRFormat = CRenderer::CV_r_HDRTexFormat == 0 ? eTF_R11G11B10F : eTF_R16G16B16A16F;
+	m_pColorTarget = nullptr;
+	if (!NeedsTempColor())
+		return;
+
+	const ETEX_Format eCFormat = GetColorFormat();
 	const ColorF clearValue = Clr_Empty;
 
 	// NOTE: Actual device texture allocation happens just before rendering.
 	const uint32 renderTargetFlags = FT_NOMIPS | FT_DONT_STREAM | FT_USAGE_RENDERTARGET;
-	const std::string uniqueTexName = GenerateUniqueTextureName("$HDR-Overlay", m_uniqueId);
+	const std::string uniqueTexName = GenerateUniqueTextureName(CImageExtensionHelper::IsDynamicRange(eCFormat) ? "$HDR-Overlay" : "$LDR-Overlay", m_uniqueId, m_name);
 
 	m_pColorTarget = nullptr;
-	m_pColorTarget.Assign_NoAddRef(CTexture::GetOrCreateRenderTarget(uniqueTexName.c_str(), m_DisplayWidth, m_DisplayHeight, clearValue, eTT_2D, renderTargetFlags, eHDRFormat));
+	m_pColorTarget.Assign_NoAddRef(CTexture::GetOrCreateRenderTarget(uniqueTexName.c_str(), m_DisplayWidth, m_DisplayHeight, clearValue, eTT_2D, renderTargetFlags, eCFormat));
 }
 
+//////////////////////////////////////////////////////////////////////////
 void CRenderDisplayContext::AllocateDepthTarget()
 {
 	m_pDepthTarget = nullptr;
 	if (!NeedsDepthStencil())
 		return;
 
-	const ETEX_Format eZFormat =
-		gRenDev->GetDepthBpp() == 32 ? eTF_D32FS8 :
-		gRenDev->GetDepthBpp() == 24 ? eTF_D24S8  :
-		gRenDev->GetDepthBpp() ==  8 ? eTF_D16S8  : eTF_D16;
-
-	const float  clearDepth   = Clr_FarPlane_Rev.r;
-	const uint8  clearStencil = Val_Stencil;
+	const ETEX_Format eZFormat = GetDepthFormat();
+	const float  clearDepth   = 0.f;
+	const uint   clearStencil = 0;
 	const ColorF clearValues  = ColorF(clearDepth, FLOAT(clearStencil), 0.f, 0.f);
 
 	// Create the native resolution depth stencil buffer for overlay rendering if needed
 	const uint32 renderTargetFlags = FT_NOMIPS | FT_DONT_STREAM | FT_USAGE_DEPTHSTENCIL;
-	const std::string uniqueOverlayTexName = GenerateUniqueTextureName("$Z-Overlay", m_uniqueId);
+	const std::string uniqueOverlayTexName = GenerateUniqueTextureName("$Z-Overlay", m_uniqueId, m_name);
 
 	m_pDepthTarget = nullptr;
 	m_pDepthTarget.Assign_NoAddRef(CTexture::GetOrCreateDepthStencil(uniqueOverlayTexName.c_str(), m_DisplayWidth, m_DisplayHeight, clearValues, eTT_2D, renderTargetFlags, eZFormat));
@@ -111,13 +117,13 @@ void CRenderDisplayContext::ReleaseResources()
 	m_pColorTarget = nullptr;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 
-void CSwapChainBackedRenderDisplayContext::CreateSwapChain(HWND hWnd, bool vsync)
+void CSwapChainBackedRenderDisplayContext::CreateSwapChain(HWND hWnd, bool isFullscreen, bool vsync)
 {
 	CRY_ASSERT(hWnd);
 	m_hWnd = hWnd;
+	m_fullscreen = isFullscreen;
 
 #if !CRY_PLATFORM_CONSOLE
 	CreateOutput();
@@ -125,8 +131,8 @@ void CSwapChainBackedRenderDisplayContext::CreateSwapChain(HWND hWnd, bool vsync
 		m_pOutput,
 		GetDisplayResolution().x,
 		GetDisplayResolution().y,
-		IsMainContext(),
 		IsFullscreen(),
+		IsMainContext(),
 		vsync);
 	m_bVSync = vsync;
 #endif
@@ -147,7 +153,7 @@ void CSwapChainBackedRenderDisplayContext::CreateSwapChain(HWND hWnd, bool vsync
 #endif
 
 	// Create the output
-	ChangeOutputIfNecessary(m_fullscreen, vsync);
+	ChangeOutputIfNecessary(IsFullscreen(), vsync);
 }
 
 void CSwapChainBackedRenderDisplayContext::ShutDown()
@@ -188,6 +194,11 @@ void CSwapChainBackedRenderDisplayContext::ReleaseResources()
 	}
 
 	m_bSwapProxy = true;
+}
+
+ETEX_Format CSwapChainBackedRenderDisplayContext::GetBackBufferFormat() const
+{
+	return DeviceFormats::ConvertToTexFormat(m_swapChain.GetSurfaceDesc().Format);
 }
 
 void CSwapChainBackedRenderDisplayContext::ReleaseBackBuffers()
@@ -231,7 +242,7 @@ void CSwapChainBackedRenderDisplayContext::AllocateBackBuffers()
 	const uint32 renderTargetFlags = FT_NOMIPS | FT_DONT_STREAM | FT_USAGE_RENDERTARGET;
 	const uint32 displayWidth = m_DisplayWidth;
 	const uint32 displayHeight = m_DisplayHeight;
-	const ETEX_Format displayFormat = DeviceFormats::ConvertToTexFormat(m_swapChain.GetSurfaceDesc().Format);
+	const ETEX_Format displayFormat = GetBackBufferFormat();
 
 	char str[40];
 
@@ -257,11 +268,11 @@ void CSwapChainBackedRenderDisplayContext::AllocateBackBuffers()
 	// ------------------------------------------------------------------------------
 	for (int i = 0, n = indices; i < n; ++i)
 	{
+		sprintf(str, "$SwapChainBackBuffer %d:Buffer %d", m_uniqueId, i);
+
 		// Prepare back-buffer texture(s)
 		if (!m_backBuffersArray[i])
 		{
-			sprintf(str, "$SwapChainBackBuffer %d:Buffer %d", m_uniqueId, i);
-
 			m_backBuffersArray[i] = nullptr;
 			m_backBuffersArray[i].Assign_NoAddRef(CTexture::GetOrCreateTextureObject(str, displayWidth, displayHeight, 1, eTT_2D, renderTargetFlags, displayFormat));
 			m_backBuffersArray[i]->SRGBRead(DeviceFormats::ConvertToSRGB(DeviceFormats::ConvertFromTexFormat(displayFormat)) == m_swapChain.GetSurfaceDesc().Format);
@@ -283,6 +294,8 @@ void CSwapChainBackedRenderDisplayContext::AllocateBackBuffers()
 			const auto &layout = m_backBuffersArray[i]->GetLayout();
 			m_backBuffersArray[i]->Invalidate(displayWidth, displayHeight, displayFormat);
 			m_backBuffersArray[i]->SetDevTexture(CDeviceTexture::Associate(layout, pBackBuffer));
+
+			SetDebugName(pBackBuffer, str);
 
 			// Guarantee that the back-buffers are cleared on first use (e.g. Flash alpha-blends onto the back-buffer)
 			// NOTE: GNM requires shaders to be initialized before issuing any draws/clears/copies/resolves. This is not yet the case here.
@@ -363,6 +376,10 @@ void CSwapChainBackedRenderDisplayContext::ChangeOutputIfNecessary(bool isFullsc
 		isWindowOnExistingOutputMonitor = outputDesc.Monitor == hMonitor;
 #endif
 
+#if CRY_PLATFORM_ANDROID
+	isWindowOnExistingOutputMonitor = true;
+#endif
+
 	// Recreate output only if the window has been moved to another monitor
 	if (!isWindowOnExistingOutputMonitor)
 		CreateOutput();
@@ -382,7 +399,7 @@ void CSwapChainBackedRenderDisplayContext::ChangeOutputIfNecessary(bool isFullsc
 		ReleaseBackBuffers();
 
 		// Swap chain needs to be recreated with the new output in mind
-		CreateSwapChain(GetWindowHandle(), m_pOutput, GetDisplayResolution().x, GetDisplayResolution().y, IsMainContext(), isFullscreen, vsync);
+		CreateSwapChain(GetWindowHandle(), m_pOutput, GetDisplayResolution().x, GetDisplayResolution().y, isFullscreen, IsMainContext(), vsync);
 
 		if (m_pOutput != nullptr)
 		{
@@ -400,8 +417,7 @@ void CSwapChainBackedRenderDisplayContext::ChangeOutputIfNecessary(bool isFullsc
 	gcpRendD3D->DevInfo().Factory()->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
 #endif
 
-	if (m_fullscreen)
-		SetFullscreenState(isFullscreen);
+	SetFullscreenState(isFullscreen);
 }
 
 void CSwapChainBackedRenderDisplayContext::ChangeDisplayResolution(uint32_t displayWidth, uint32_t displayHeight, const SRenderViewport& vp)
@@ -412,9 +428,7 @@ void CSwapChainBackedRenderDisplayContext::ChangeDisplayResolution(uint32_t disp
 	{
 		ReleaseBackBuffers();
 
-		m_swapChain.ResizeSwapChain(CRendererCVars::CV_r_MaxFrameLatency + 1, m_DisplayWidth, m_DisplayHeight, IsMainContext());
-		// NOTE: Going full-screen doesn't require freeing the back-buffers
-		SetFullscreenState(m_fullscreen);
+		m_swapChain.ResizeSwapChain(CRendererCVars::CV_r_MaxFrameLatency + 1, m_DisplayWidth, m_DisplayHeight, m_fullscreen, IsMainContext());
 
 		AllocateBackBuffers();
 
@@ -430,6 +444,7 @@ void CSwapChainBackedRenderDisplayContext::ChangeDisplayResolution(uint32_t disp
 
 		m_pRenderOutput->InitializeDisplayContext();
 		m_pRenderOutput->ReinspectDisplayContext();
+		m_pRenderOutput->m_hasBeenCleared = 0;
 
 		// Configure maximum frame latency
 #if CRY_PLATFORM_WINDOWS && CRY_RENDERER_DIRECT3D
@@ -445,34 +460,19 @@ void CSwapChainBackedRenderDisplayContext::ChangeDisplayResolution(uint32_t disp
 
 void CSwapChainBackedRenderDisplayContext::SetFullscreenState(bool isFullscreen)
 {
-	if (!m_swapChain.GetSwapChain())
-		return;
-
-	m_fullscreen = isFullscreen;
-#if (CRY_RENDERER_DIRECT3D >= 110) || (CRY_RENDERER_VULKAN >= 10)
-	if (isFullscreen)
+	if (m_fullscreen != isFullscreen)
 	{
-		DXGI_SWAP_CHAIN_DESC scDesc = m_swapChain.GetDesc();
+		m_fullscreen = isFullscreen;
 
-#if !CRY_PLATFORM_DURANGO && (CRY_RENDERER_DIRECT3D >= 120)
-		CRY_ASSERT_MESSAGE((scDesc.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) == 0, "Fullscreen does not work with Waitable SwapChain");
-#endif
+		if (m_swapChain.GetSwapChain())
+		{
+			ReleaseBackBuffers();
 
-		scDesc.BufferDesc.Width = m_DisplayWidth;
-		scDesc.BufferDesc.Height = m_DisplayHeight;
+			m_swapChain.ResizeSwapChain(CRendererCVars::CV_r_MaxFrameLatency + 1, m_DisplayWidth, m_DisplayHeight, m_fullscreen, IsMainContext(), true);
 
-#if defined(SUPPORT_DEVICE_INFO_USER_DISPLAY_OVERRIDES)
-		CSwapChain::UserOverrideDisplayProperties(scDesc.BufferDesc);
-#endif
-
-		HRESULT rr = m_swapChain.GetSwapChain()->ResizeTarget(&scDesc.BufferDesc);
-		CRY_ASSERT(SUCCEEDED(rr));
+			AllocateBackBuffers();
+		}
 	}
-	
-#if !CRY_PLATFORM_CONSOLE
-	m_swapChain.SetFullscreenState(isFullscreen, isFullscreen ? m_pOutput : nullptr);
-#endif
-#endif
 }
 
 Vec2_tpl<uint32_t> CSwapChainBackedRenderDisplayContext::FindClosestMatchingScreenResolution(const Vec2_tpl<uint32_t> &resolution) const
@@ -553,7 +553,7 @@ CTexture* CSwapChainBackedRenderDisplayContext::GetCurrentBackBuffer() const
 
 CTexture* CSwapChainBackedRenderDisplayContext::GetStorableColorOutput()
 {
-	if (IsHighDynamicRange())
+	if (NeedsTempColor())
 	{
 		CRY_ASSERT(m_pColorTarget);
 		return m_pColorTarget.get();
@@ -584,32 +584,87 @@ void CSwapChainBackedRenderDisplayContext::PostPresent()
 		m_pBackBufferProxy->RefDevTexture(pNewDeviceTex);
 
 	m_bSwapProxy = false;
+	m_pRenderOutput->m_hasBeenCleared = 0;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 
-CCustomRenderDisplayContext::CCustomRenderDisplayContext(IRenderer::SDisplayContextDescription desc, uint32 uniqueId, std::vector<TexSmartPtr> &&backBuffersArray, uint32_t initialSwapChainIndex)
-	: CRenderDisplayContext(desc, uniqueId)
+CCustomRenderDisplayContext::CCustomRenderDisplayContext(IRenderer::SDisplayContextDescription desc, std::string name, uint32 uniqueId, std::vector<TexSmartPtr> &&backBuffersArray, uint32_t initialSwapChainIndex)
+	: CRenderDisplayContext(desc, "CustomDisplay", uniqueId)
 	, m_swapChainIndex(initialSwapChainIndex)
 {
 	CRY_ASSERT(backBuffersArray.size());
+
+	const uint32 renderTargetFlags = FT_NOMIPS | FT_DONT_STREAM | FT_USAGE_RENDERTARGET;
+	const uint32 displayWidth = backBuffersArray[initialSwapChainIndex]->GetWidth();
+	const uint32 displayHeight = backBuffersArray[initialSwapChainIndex]->GetHeight();
+	const ETEX_Format displayFormat = backBuffersArray[initialSwapChainIndex]->GetDstFormat();
+
+	char str[40];
+
+	// ------------------------------------------------------------------------------
+	if (!m_pBackBufferProxy)
+	{
+		sprintf(str, "$SwapChainBackBuffer %d:Current", m_uniqueId);
+
+		m_pBackBufferProxy = nullptr;
+		m_pBackBufferProxy.Assign_NoAddRef(CTexture::GetOrCreateTextureObject(str, displayWidth, displayHeight, 1, eTT_2D, renderTargetFlags, displayFormat));
+		m_pBackBufferProxy->SRGBRead(false);
+	}
+
+	if (!m_pBackBufferProxy->GetDevTexture())
+	{
+		m_pBackBufferProxy->Invalidate(displayWidth, displayHeight, displayFormat);
+	}
+
+	CRY_ASSERT(m_pBackBufferProxy->GetWidth() == displayWidth);
+	CRY_ASSERT(m_pBackBufferProxy->GetHeight() == displayHeight);
+	CRY_ASSERT(m_pBackBufferProxy->GetSrcFormat() == displayFormat);
+	// ------------------------------------------------------------------------------
+
 	this->m_backBuffersArray = std::move(backBuffersArray);
 
-	const auto &tex = *this->m_backBuffersArray.begin();
-	this->ChangeDisplayResolution(tex->GetWidth(), tex->GetHeight());
+	// Assign first back-buffer on initialization
+	m_pBackBufferProxy->RefDevTexture(GetCurrentBackBuffer()->GetDevTexture());
+	m_bSwapProxy = false;
+
+	this->ChangeDisplayResolution(displayWidth, displayHeight);
+}
+
+void CCustomRenderDisplayContext::ShutDown()
+{
+	ReleaseResources();
+}
+
+void CCustomRenderDisplayContext::ReleaseResources()
+{
+	if (gcpRendD3D.GetDeviceContext().IsValid())
+		GetDeviceObjectFactory().GetCoreCommandList().GetGraphicsInterface()->ClearState(true);
+
+	CRenderDisplayContext::ReleaseResources();
+
+	m_pBackBufferPresented = nullptr;
+
+	if (m_pBackBufferProxy)
+	{
+		m_pBackBufferProxy->RefDevTexture(nullptr);
+		m_pBackBufferProxy = nullptr;
+	}
+
+	m_bSwapProxy = true;
 }
 
 void CCustomRenderDisplayContext::SetSwapChainIndex(uint32_t index)
 {
 	CRY_ASSERT(index < m_backBuffersArray.size());
+
 	m_swapChainIndex = index;
-	m_pRenderOutput->ReinspectDisplayContext();
+	m_bSwapProxy = true;
 }
 
 CTexture* CCustomRenderDisplayContext::GetStorableColorOutput()
 {
-	if (IsHighDynamicRange())
+	if (NeedsTempColor())
 	{
 		CRY_ASSERT(m_pColorTarget);
 		return m_pColorTarget.get();
@@ -617,10 +672,27 @@ CTexture* CCustomRenderDisplayContext::GetStorableColorOutput()
 
 	// Toggle current back-buffer if transitioning into LDR output
 	PostPresent();
-	return GetCurrentBackBuffer();
+	return m_pBackBufferProxy;
 }
 
 void CCustomRenderDisplayContext::PrePresent()
 {
 	m_pBackBufferPresented = GetCurrentBackBuffer();
+}
+
+void CCustomRenderDisplayContext::PostPresent()
+{
+	if (!m_bSwapProxy || !m_backBuffersArray.size())
+		return;
+
+	// Substitute current swap-chain back-buffer
+	CDeviceTexture* pNewDeviceTex = GetCurrentBackBuffer()->GetDevTexture();
+	CDeviceTexture* pOldDeviceTex = m_pBackBufferProxy->GetDevTexture();
+
+	// Trigger dirty-flag handling
+	if (pNewDeviceTex != pOldDeviceTex)
+		m_pBackBufferProxy->RefDevTexture(pNewDeviceTex);
+
+	m_bSwapProxy = false;
+	m_pRenderOutput->m_hasBeenCleared = 0;
 }

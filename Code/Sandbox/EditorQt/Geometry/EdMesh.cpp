@@ -2,22 +2,22 @@
 
 #include "StdAfx.h"
 #include "EdMesh.h"
-#include "Objects\DisplayContext.h"
-#include "Objects\ObjectLoader.h"
-#include "Gizmos/ITransformManipulator.h"
-#include "Viewport.h"
-#include "Util\PakFile.h"
-#include "Grid.h"
 
-#include <Cry3DEngine/I3DEngine.h>
+#include <Gizmos/ITransformManipulator.h>
+#include <Objects/DisplayContext.h>
+#include <Objects/ObjectLoader.h>
+#include <Preferences/SnappingPreferences.h>
+#include <Util/PakFile.h>
+#include <Viewport.h>
+
+#include <Cry3DEngine/CGF/CGFContent.h>
 #include <Cry3DEngine/CGF/IChunkFile.h>
+#include <Cry3DEngine/I3DEngine.h>
 #include <Cry3DEngine/IIndexedMesh.h>
 #include <CryRenderer/IRenderAuxGeom.h>
-#include <Cry3DEngine/CGF/CGFContent.h>
 
 IMPLEMENT_DYNAMIC(CEdMesh, CEdGeometry)
 
-//////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 //! Undo object for Editable Mesh.
 class CUndoEdMesh : public IUndoObject
@@ -63,7 +63,6 @@ private:
 //////////////////////////////////////////////////////////////////////////
 CEdMesh::MeshMap CEdMesh::m_meshMap;
 
-//////////////////////////////////////////////////////////////////////////
 CEdMesh::CEdMesh()
 {
 	m_pStatObj = 0;
@@ -71,7 +70,6 @@ CEdMesh::CEdMesh()
 	m_nUserCount = 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEdMesh::CEdMesh(IStatObj* pGeom)
 {
 	assert(pGeom);
@@ -84,7 +82,6 @@ CEdMesh::CEdMesh(IStatObj* pGeom)
 	m_nUserCount = 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEdMesh::~CEdMesh()
 {
 	for (auto ppIndexedMeshes = m_tempIndexedMeshes.begin(); ppIndexedMeshes != m_tempIndexedMeshes.end(); ++ppIndexedMeshes)
@@ -103,9 +100,6 @@ CEdMesh::~CEdMesh()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
-// CEdMesh implementation.
-//////////////////////////////////////////////////////////////////////////
 CEdMesh* CEdMesh::LoadMesh(const char* filename)
 {
 	if (strlen(filename) == 0)
@@ -131,19 +125,16 @@ CEdMesh* CEdMesh::LoadMesh(const char* filename)
 	return pMesh;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::AddUser()
 {
 	m_nUserCount++;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::RemoveUser()
 {
 	m_nUserCount--;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::ReloadAllGeometries()
 {
 	for (MeshMap::iterator it = m_meshMap.begin(); it != m_meshMap.end(); ++it)
@@ -159,7 +150,6 @@ void CEdMesh::ReleaseAll()
 	m_meshMap.clear();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::ReloadGeometry()
 {
 	// Reload mesh.
@@ -169,13 +159,11 @@ void CEdMesh::ReloadGeometry()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::IsSameObject(const char* filename)
 {
 	return stricmp(m_filename, filename) == 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::GetBounds(AABB& box)
 {
 	assert(m_pStatObj);
@@ -187,7 +175,6 @@ void CEdMesh::GetBounds(AABB& box)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEdGeometry* CEdMesh::Clone()
 {
 	if (m_pStatObj)
@@ -201,7 +188,6 @@ CEdGeometry* CEdMesh::Clone()
 	return NULL;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::SetFilename(const string& filename)
 {
 	if (!m_filename.IsEmpty())
@@ -210,14 +196,12 @@ void CEdMesh::SetFilename(const string& filename)
 	m_meshMap[m_filename] = this;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::Render(SRendParams& rp, const SRenderingPassInfo& passInfo)
 {
 	if (m_pStatObj)
 		m_pStatObj->Render(rp, passInfo);
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::IsDefaultObject()
 {
 	if (m_pStatObj)
@@ -225,7 +209,6 @@ bool CEdMesh::IsDefaultObject()
 	return NULL;
 }
 
-//////////////////////////////////////////////////////////////////////////
 IIndexedMesh* CEdMesh::GetIndexedMesh(size_t idx)
 {
 	if (m_tempIndexedMeshes.size() == 0 && m_pStatObj)
@@ -285,7 +268,6 @@ void CEdMesh::GetTM(Matrix34* pTM, size_t idx)
 		pTM->SetIdentity();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::UpdateIndexedMeshFromCache(bool bFast)
 {
 	// Implement
@@ -309,7 +291,6 @@ void CEdMesh::UpdateIndexedMeshFromCache(bool bFast)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::StartSubObjSelection(const Matrix34& nodeWorldTM, int elemType, int nFlags)
 {
 	IIndexedMesh* pIndexedMesh = GetIndexedMesh();
@@ -336,7 +317,6 @@ bool CEdMesh::StartSubObjSelection(const Matrix34& nodeWorldTM, int elemType, in
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::UpdateSubObjCache()
 {
 	Matrix34& wtm = m_pSubObjCache->worldTM;
@@ -344,7 +324,6 @@ void CEdMesh::UpdateSubObjCache()
 	SetWorldTM(wtm);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::EndSubObjSelection()
 {
 	if (!m_pSubObjCache)
@@ -364,7 +343,6 @@ void CEdMesh::EndSubObjSelection()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::Display(SDisplayContext& dc)
 {
 	if (!m_pSubObjCache || m_pSubObjCache->bNoDisplay)
@@ -576,7 +554,6 @@ void CEdMesh::Display(SDisplayContext& dc)
 	dc.SetState(nPrevState); // Restore render state.
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::HitTestVertex(HitContext& hit, SSubObjHitTestEnvironment& env, SSubObjHitTestResult& result)
 {
 	CTriMesh& triMesh = *m_pSubObjCache->pTriMesh;
@@ -619,7 +596,6 @@ bool CEdMesh::HitTestVertex(HitContext& hit, SSubObjHitTestEnvironment& env, SSu
 	return !result.elems.empty();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::HitTestEdge(HitContext& hit, SSubObjHitTestEnvironment& env, SSubObjHitTestResult& result)
 {
 	CTriMesh& triMesh = *m_pSubObjCache->pTriMesh;
@@ -653,7 +629,7 @@ bool CEdMesh::HitTestEdge(HitContext& hit, SSubObjHitTestEnvironment& env, SSubO
 			}
 		}
 	}
-	//////////////////////////////////////////////////////////////////////////
+
 	if (closestElem >= 0)
 	{
 		result.minDistance = minDist;
@@ -662,7 +638,6 @@ bool CEdMesh::HitTestEdge(HitContext& hit, SSubObjHitTestEnvironment& env, SSubO
 	return !result.elems.empty();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::HitTestFace(HitContext& hit, SSubObjHitTestEnvironment& env, SSubObjHitTestResult& result)
 {
 	CTriMesh& triMesh = *m_pSubObjCache->pTriMesh;
@@ -709,7 +684,7 @@ bool CEdMesh::HitTestFace(HitContext& hit, SSubObjHitTestEnvironment& env, SSubO
 			}
 		}
 	}
-	//////////////////////////////////////////////////////////////////////////
+
 	if (closestElem >= 0)
 	{
 		result.minDistance = (float)sqrt(minDist);
@@ -718,7 +693,6 @@ bool CEdMesh::HitTestFace(HitContext& hit, SSubObjHitTestEnvironment& env, SSubO
 	return !result.elems.empty();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::SelectSubObjElements(SSubObjHitTestEnvironment& env, SSubObjHitTestResult& result)
 {
 	CTriMesh& triMesh = *m_pSubObjCache->pTriMesh;
@@ -751,7 +725,6 @@ bool CEdMesh::SelectSubObjElements(SSubObjHitTestEnvironment& env, SSubObjHitTes
 	return bSelChanged;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::IsHitTestResultSelected(SSubObjHitTestResult& result)
 {
 	CTriMesh& triMesh = *m_pSubObjCache->pTriMesh;
@@ -769,7 +742,6 @@ bool CEdMesh::IsHitTestResultSelected(SSubObjHitTestResult& result)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::HitTest(HitContext& hit)
 {
 	if (hit.nSubObjFlags & SO_HIT_NO_EDIT)
@@ -957,7 +929,6 @@ bool CEdMesh::HitTest(HitContext& hit)
 	return bSelectionNotEmpty;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEdMesh::GetSelectionReferenceFrame(Matrix34& refFrame)
 {
 	if (!m_pSubObjCache)
@@ -1080,7 +1051,6 @@ bool CEdMesh::GetSelectionReferenceFrame(Matrix34& refFrame)
 	return bAnySelected;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::CopyToMesh(CTriMesh& toMesh, int nCopyFlags)
 {
 	if (!m_pSubObjCache)
@@ -1089,7 +1059,6 @@ void CEdMesh::CopyToMesh(CTriMesh& toMesh, int nCopyFlags)
 	toMesh.Copy(*m_pSubObjCache->pTriMesh, nCopyFlags);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::CopyFromMesh(CTriMesh& fromMesh, int nCopyFlags, bool bUndo)
 {
 	if (m_pSubObjCache)
@@ -1106,7 +1075,6 @@ void CEdMesh::CopyFromMesh(CTriMesh& fromMesh, int nCopyFlags, bool bUndo)
 		UpdateSubObjCache();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::SaveToCGF(const char* sFilename, CPakFile* pPakFile, IMaterial* pMaterial)
 {
 	if (m_pStatObj)
@@ -1140,7 +1108,6 @@ void CEdMesh::SaveToCGF(const char* sFilename, CPakFile* pPakFile, IMaterial* pM
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 CTriMesh* CEdMesh::GetMesh()
 {
 	if (m_pSubObjCache)
@@ -1148,7 +1115,6 @@ CTriMesh* CEdMesh::GetMesh()
 	return 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEdMesh* CEdMesh::CreateMesh(const char* name)
 {
 	IStatObj* pStatObj = gEnv->p3DEngine->CreateStatObj();
@@ -1176,7 +1142,6 @@ CEdMesh* CEdMesh::CreateMesh(const char* name)
 	return NULL;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::InvalidateMesh()
 {
 	if (m_pSubObjCache)
@@ -1185,7 +1150,6 @@ void CEdMesh::InvalidateMesh()
 		m_pStatObj->Invalidate(true);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::SetWorldTM(const Matrix34& worldTM)
 {
 	if (!m_pSubObjCache)
@@ -1194,9 +1158,7 @@ void CEdMesh::SetWorldTM(const Matrix34& worldTM)
 	m_pSubObjCache->worldTM = worldTM;
 	m_pSubObjCache->invWorldTM = worldTM.GetInverted();
 
-	//////////////////////////////////////////////////////////////////////////
 	// Transform vertices and normals to world space and store in cached mesh.
-	//////////////////////////////////////////////////////////////////////////
 	CTriMesh& triMesh = *m_pSubObjCache->pTriMesh;
 	int nVerts = triMesh.GetVertexCount();
 	triMesh.ReallocStream(CTriMesh::WS_POSITIONS, nVerts);
@@ -1206,7 +1168,6 @@ void CEdMesh::SetWorldTM(const Matrix34& worldTM)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEdMesh::DebugDraw(const SGeometryDebugDrawInfo& info)
 {
 	if (m_pStatObj)

@@ -3,87 +3,50 @@
 #pragma once
 
 #include "IEditor.h"
-#include <CryInput/IInput.h>
-#include <CryCore/Containers/CryListenerSet.h>
-#include "Version.h"
 #include "Util/XmlTemplate.h"
+#include "Version.h"
+
+#include <CryCore/Containers/CryListenerSet.h>
 #include <CryMath/Cry_Geo.h>
-#include "IUndoManager.h"
 
 #define GET_PLUGIN_ID_FROM_MENU_ID(ID)     (((ID) & 0x000000FF))
 #define GET_UI_ELEMENT_ID_FROM_MENU_ID(ID) ((((ID) & 0x0000FF00) >> 8))
 
 class CAIManager;
-class CAssetManager;
 class CBaseLibraryDialog;
-class CBaseObject;
-class CBroadcastManager;
 class CClassFactory;
-class CConfigurationManager;
 class CConsoleSynchronization;
-class CCryEditDoc;
 class CCustomActionsEditorManager;
 class CEditorCommandManager;
 class CEditorFileMonitor;
 class CEditorFlowGraphModuleManager;
 class CEditorPythonManager;
-class CEditTool;
-class CSelectionGroup;
 class CEntityPrototype;
 class CEntityPrototypeManager;
 class CExportManager;
 class CFlowGraphDebuggerEditor;
-class CFlowGraphManager;
-class CGameEngine;
 class CGameTokenManager;
 class CGizmoManager;
-class CHeightmap;
 class CIconManager;
 class CLensFlareManager;
-class CLevelEditorSharedState;
 class CLevelIndependentFileMan;
 class CMainThreadWorker;
 class CMaterialFXGraphMan;
-class CMaterialManager;
 class CObjectManager;
 class CParticleManager;
-class CPersonalizationManager;
 class CPluginManager;
 class CPolledKeyManager;
-class CPrefabManager;
-class CRuler;
 class CSelectionGroup;
 class CTerrainManager;
-class CTrayArea;
-class CUIEnumsDatabase;
 class CUIManager;
 class CVegetationMap;
-class CViewManager;
-class CViewport;
 class EditorScriptEnvironment;
-class LevelEditorSharedState;
 class QWidget;
 
-struct AABB;
-struct I3DEngine;
 struct IBackgroundScheduleManager;
 struct IBackgroundTaskManagerListener;
-struct ICommandManager;
-struct IDataBaseItem;
-struct IDataBaseManager;
 struct IDevManager;
-struct IEditorClassFactory;
-struct IExportManager;
-struct INotificationCenter;
-struct IGizmoManager;
-struct IIconManager;
-struct IPane;
-struct IPythonManager;
-struct IRenderer;
-struct IResourceSelectorHost;
-struct ISourceControl;
-struct ISystem;
-struct IUriEventListener;
+struct SInputEvent;
 
 enum EEditorPathName
 {
@@ -145,7 +108,8 @@ public:
 	IRenderer*                   GetRenderer() override;
 	void                         WriteToConsole(const char* pszString);
 
-	void                         SetConsoleVar(const char* var, float value);
+	void                         SetConsoleVar(const char* var, const int value);
+	void                         SetConsoleVar(const char* var, const float value);
 	void                         SetConsoleStringVar(const char* var, const char* value);
 
 	float                        GetConsoleVar(const char* var);
@@ -158,7 +122,7 @@ public:
 		}
 
 		return 0;
-	};
+	}
 
 	string              GetMasterCDFolder();
 	virtual const char* GetLevelName() override;
@@ -192,10 +156,7 @@ public:
 	IGizmoManager*                  GetGizmoManager();
 	const CSelectionGroup*          GetSelection() const;
 	const ISelectionGroup*          GetISelectionGroup() const override;
-	int                             ClearSelection();
 	CBaseObject*                    GetSelectedObject();
-	void                            SelectObject(CBaseObject* obj);
-	void                            SelectObjects(std::vector<CBaseObject*> objects);
 	void                            LockSelection(bool bLock);
 	bool                            IsSelectionLocked();
 	IDataBaseManager*               GetDBItemManager(EDataBaseItemType itemType);
@@ -239,7 +200,7 @@ public:
 		if (m_pSystem)
 			return m_pSystem->GetIMovieSystem();
 		return NULL;
-	};
+	}
 
 	CPluginManager*           GetPluginManager()  { return m_pPluginManager; }
 	CTerrainManager*          GetTerrainManager() { return m_pTerrainManager; }
@@ -257,8 +218,6 @@ public:
 	void                      UpdateSequencer(bool bOnlyKeys = false);
 	CRuler*                   GetRuler() override { return m_pRuler; }
 	void                      SetDataModified();
-	virtual bool              IsHelpersDisplayed() const;
-	virtual void              EnableHelpersDisplay(bool bEnable);
 	XmlNodeRef                FindTemplate(const string& templateName);
 	void                      AddTemplate(const string& templateName, XmlNodeRef& tmpl);
 	virtual void              OpenAndFocusDataBase(EDataBaseItemType type, IDataBaseItem* pItem) override;
@@ -347,7 +306,7 @@ public:
 	virtual void             RemoveWaitProgress(CWaitProgress* pProgress);
 	virtual void             RegisterEntity(IRenderNode* pRenderNode);
 	virtual void             UnRegisterEntityAsJob(IRenderNode* pRenderNode);
-	virtual void             SyncPrefabCPrefabObject(CBaseObject* oObject, const SObjectChangedContext& context);
+	virtual void             SyncPrefabCPrefabObject(CBaseObject* pObject, const SObjectChangedContext& context);
 	virtual bool             IsModifyInProgressCPrefabObject(CBaseObject* oObject);
 	virtual void             OnPrefabMake();
 	virtual IEditorMaterial* LoadMaterial(const string& name);
@@ -375,50 +334,47 @@ protected:
 	void OnObjectHideMaskChanged();
 
 	//! List of all notify listeners.
-	std::list<IEditorNotifyListener*> m_listeners;
+	std::list<IEditorNotifyListener*>        m_listeners;
 
-	int                               m_objectHideMask;
-	EOperationMode                    m_operationMode;
-	ISystem*                          m_pSystem;
-	CClassFactory*                    m_pClassFactory;
-	CEditorCommandManager*            m_pCommandManager;
-	CAssetManager*                    m_pAssetManager;
-	CTrayArea*                        m_pTrayArea;
-	INotificationCenter*              m_pNotificationCenter;
-	CPersonalizationManager*          m_pPersonalizationManager;
-	CPreferences*                     m_pPreferences;
-	CEditorPythonManager*             m_pPythonManager;
-	CPolledKeyManager*                m_pPolledKeyManager;
-	CObjectManager*                   m_pObjectManager;
-	CGizmoManager*                    m_pGizmoManager;
-	CPluginManager*                   m_pPluginManager;
-	CViewManager*                     m_pViewManager;
-	IUndoManager*                     m_pUndoManager;
-	bool                              m_areHelpersEnabled;
-	bool                              m_bUpdates;
-	Version                           m_fileVersion;
-	Version                           m_productVersion;
-	CXmlTemplateRegistry              m_templateRegistry;
-	CIconManager*                     m_pIconManager;
-	wstring                           m_masterCDFolder;
-	string                            m_userFolder;
-	bool                              m_bSelectionLocked;
-	CAIManager*                       m_pAIManager;
-	CUIManager*                       m_pUIManager;
-	CCustomActionsEditorManager*      m_pCustomActionsManager;
-	CEditorFlowGraphModuleManager*    m_pFlowGraphModuleManager;
-	CMaterialFXGraphMan*              m_pMatFxGraphManager;
-	CFlowGraphDebuggerEditor*         m_pFlowGraphDebuggerEditor;
-	CGameEngine*                      m_pGameEngine;
-	CEntityPrototypeManager*          m_pEntityManager;
-	CMaterialManager*                 m_pMaterialManager;
-	CParticleManager*                 m_particleManager;
-	CPrefabManager*                   m_pPrefabManager;
-	CBroadcastManager*                m_pGlobalBroadcastManager;
-	CGameTokenManager*                m_pGameTokenManager;
-	CLensFlareManager*                m_pLensFlareManager;
-	//! Global instance of error report class.
-	//! Source control interface.
+	int                                      m_objectHideMask;
+	EOperationMode                           m_operationMode;
+	ISystem*                                 m_pSystem;
+	CClassFactory*                           m_pClassFactory;
+	CEditorCommandManager*                   m_pCommandManager;
+	CAssetManager*                           m_pAssetManager;
+	CTrayArea*                               m_pTrayArea;
+	INotificationCenter*                     m_pNotificationCenter;
+	CPersonalizationManager*                 m_pPersonalizationManager;
+	CPreferences*                            m_pPreferences;
+	CEditorPythonManager*                    m_pPythonManager;
+	CPolledKeyManager*                       m_pPolledKeyManager;
+	CObjectManager*                          m_pObjectManager;
+	CGizmoManager*                           m_pGizmoManager;
+	CPluginManager*                          m_pPluginManager;
+	CViewManager*                            m_pViewManager;
+	IUndoManager*                            m_pUndoManager;
+	bool                                     m_bUpdates;
+	Version                                  m_fileVersion;
+	Version                                  m_productVersion;
+	CXmlTemplateRegistry                     m_templateRegistry;
+	CIconManager*                            m_pIconManager;
+	wstring                                  m_masterCDFolder;
+	string                                   m_userFolder;
+	bool                                     m_bSelectionLocked;
+	CAIManager*                              m_pAIManager;
+	CUIManager*                              m_pUIManager;
+	CCustomActionsEditorManager*             m_pCustomActionsManager;
+	CEditorFlowGraphModuleManager*           m_pFlowGraphModuleManager;
+	CMaterialFXGraphMan*                     m_pMatFxGraphManager;
+	CFlowGraphDebuggerEditor*                m_pFlowGraphDebuggerEditor;
+	CGameEngine*                             m_pGameEngine;
+	CEntityPrototypeManager*                 m_pEntityManager;
+	CMaterialManager*                        m_pMaterialManager;
+	CParticleManager*                        m_particleManager;
+	CPrefabManager*                          m_pPrefabManager;
+	CBroadcastManager*                       m_pGlobalBroadcastManager;
+	CGameTokenManager*                       m_pGameTokenManager;
+	CLensFlareManager*                       m_pLensFlareManager;
 	ISourceControl*                          m_pSourceControl;
 	CFlowGraphManager*                       m_pFlowGraphManager;
 

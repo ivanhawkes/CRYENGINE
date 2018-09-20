@@ -186,6 +186,34 @@ void CTerrainManager::SwapLayers(int layer1, int layer2)
 	signalLayersChanged();
 }
 
+void CTerrainManager::MoveLayerToTop(int index)
+{
+	CRY_ASSERT(index > 0 && index < m_layers.size());
+
+	std::vector<CLayer*> tmp;
+	tmp.reserve(m_layers.size());
+
+	tmp.push_back(m_layers[index]);
+	tmp.insert(tmp.end(), m_layers.cbegin(), m_layers.cbegin() + index);
+	tmp.insert(tmp.end(), m_layers.cbegin() + index + 1, m_layers.cend());
+
+	m_layers.swap(tmp);
+}
+
+void CTerrainManager::MoveLayerToBottom(int index)
+{
+	CRY_ASSERT(index >= 0 && index < m_layers.size()-1);
+
+	std::vector<CLayer*> tmp;
+	tmp.reserve(m_layers.size());
+
+	tmp.insert(tmp.end(), m_layers.cbegin(), m_layers.cbegin() + index);
+	tmp.insert(tmp.end(), m_layers.cbegin() + index + 1, m_layers.cend());
+	tmp.push_back(m_layers[index]);
+
+	m_layers.swap(tmp);
+}
+
 void CTerrainManager::InvalidateLayers()
 {
 	////////////////////////////////////////////////////////////////////////
@@ -594,11 +622,6 @@ void CTerrainManager::ResetHeightMap()
 	m_heightmap.SetMaxHeight(1024);
 }
 
-bool CTerrainManager::WouldHeightmapSaveSucceed()
-{
-	return GetRGBLayer()->WouldSaveSucceed();
-}
-
 CRGBLayer* CTerrainManager::GetRGBLayer()
 {
 	return m_heightmap.GetRGBLayer();
@@ -661,8 +684,6 @@ void CTerrainManager::SetModified(int x1, int y1, int x2, int y2)
 	if (!gEnv->p3DEngine->GetITerrain())
 		return;
 
-	GetIEditorImpl()->SetModifiedFlag();
-
 	AABB bounds;
 	bounds.Reset();
 	if (!(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0))
@@ -686,6 +707,8 @@ void CTerrainManager::SetModified(int x1, int y1, int x2, int y2)
 		bounds.Add(Vec3((y1 - 1) * nTerrainSectorSize, (x1 - 1) * nTerrainSectorSize, -32000.0f));
 		bounds.Add(Vec3((y2 + 1) * nTerrainSectorSize, (x2 + 1) * nTerrainSectorSize, +32000.0f));
 	}
+
+	signalTerrainChanged();
 }
 
 void CTerrainManager::SelectLayer(int layerIndex)

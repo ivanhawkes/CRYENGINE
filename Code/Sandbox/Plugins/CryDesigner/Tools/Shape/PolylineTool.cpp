@@ -2,11 +2,12 @@
 
 #include "StdAfx.h"
 #include "PolylineTool.h"
-#include "DesignerEditor.h"
-#include "Core/Model.h"
+
 #include "Core/Helper.h"
-#include "ViewManager.h"
-#include "Objects/DisplayContext.h"
+#include "DesignerEditor.h"
+
+#include <Objects/DisplayContext.h>
+#include <Viewport.h>
 
 namespace Designer
 {
@@ -542,4 +543,3 @@ ELineState PolylineTool::GetLineState() const
 
 REGISTER_DESIGNER_TOOL_WITH_PROPERTYTREE_PANEL_AND_COMMAND(eDesigner_Polyline, eToolGroup_Shape, "Polyline", PolylineTool,
                                                            polyline, "runs polyline tool", "designer.polyline")
-

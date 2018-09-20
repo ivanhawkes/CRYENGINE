@@ -176,7 +176,6 @@ bool QParentWndWidget::eventFilter(QObject* obj, QEvent* ev)
 	default:
 		break;
 	}
-	;
 
 	return QWidget::eventFilter(obj, ev);
 }
@@ -248,4 +247,3 @@ bool QParentWndWidget::focusNextPrevChild(bool next)
 	::SetFocus(m_parent);
 	return true;
 }
-

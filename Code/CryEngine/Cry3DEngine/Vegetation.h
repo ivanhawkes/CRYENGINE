@@ -20,6 +20,14 @@ class CVegetation
 	  , public Cry3DEngineBase
 {
 public:
+
+	enum EAllocatorId
+	{
+		eAllocator_Default    = 0,
+		eAllocator_Procedural = 1,
+		eAllocator_Count      = 2,
+	};
+
 	Vec3                                        m_vPos;
 	IPhysicalEntity*                            m_pPhysEnt;
 	SVegetationSpriteInfo*                      m_pSpriteInfo;
@@ -78,6 +86,7 @@ public:
 	virtual void         SetBBox(const AABB& WSBBox) final;
 	virtual void         OffsetPosition(const Vec3& delta) final;
 	const float          GetRadius() const;
+	static void          StaticReset();
 	void                 UpdateRndFlags();
 	ILINE int            GetStatObjGroupSize() const
 	{
@@ -151,6 +160,13 @@ public:
 
 	// Apply bending parameters to the CRenderObject
 	void FillBendingData(CRenderObject* pObj, const SRenderingPassInfo& passInfo) const;
+
+	// Custom pool allocator for vegetation
+	static void* operator new(size_t size, EAllocatorId allocatorId = eAllocator_Default);
+	// Need to have a matching placement delete operator for durango compilation
+	static void  operator delete(void* pToFree, EAllocatorId unused);
+	static void  operator delete(void* pToFree);
+	static void  GetStaticMemoryUsage(ICrySizer* pSizer);
 };
 
 #endif // _CVegetation_H_

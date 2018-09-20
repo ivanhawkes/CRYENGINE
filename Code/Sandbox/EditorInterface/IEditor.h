@@ -13,7 +13,6 @@ class CBaseObject;
 class CBroadcastManager;
 class CConfigurationManager;
 class CCryEditDoc;
-class CDisplaySettings;
 class CFlowGraphManager;
 class CHeightmap;
 class CGameEngine;
@@ -46,7 +45,6 @@ struct IEditorMaterial;
 struct IEditorNotifyListener;
 struct IExportManager;
 struct IFileChangeMonitor;
-struct IGame;
 struct IGizmoManager;
 struct IIconManager;
 struct ILevelEditor;
@@ -63,16 +61,12 @@ struct IResourceSelectorHost;
 struct ISelectionGroup;
 struct ISourceControl;
 struct ISystem;
-struct ITransformManipulator;
 struct IUndoManager;
-struct IUndoObject;
 struct IUriEventListener;
 struct IViewportManager;
-struct SEditorSettings;
 struct SObjectChangedContext;
 struct SRayHitInfo;
 
-enum EModifiedModule;
 enum ESystemConfigSpec;
 
 namespace FileSystem
@@ -150,14 +144,11 @@ enum EEditorNotifyEvent
 	eNotify_OnVegetationObjectSelection, // When vegetation objects selection change.
 	eNotify_OnVegetationPanelUpdate,     // When vegetation objects selection change.
 
-	eNotify_OnDisplayRenderUpdate,     // Sent when editor finish terrain texture generation.
+	eNotify_OnObjectHideMaskChange,     // Sent when editor changes types of objects to display
 
 	eNotify_OnTimeOfDayChange,         // Time of day parameters where modified.
 
 	eNotify_OnDataBaseUpdate,          // DataBase Library was modified.
-
-	eNotify_OnLayerImportBegin,   //layer import was started
-	eNotify_OnLayerImportEnd,     //layer import completed
 
 	eNotify_OnBeginSWNewScene,          // Sent when SW document is begin to be cleared.
 	eNotify_OnEndSWNewScene,            // Sent after SW document have been cleared.
@@ -370,9 +361,6 @@ struct IEditor
 	virtual CCryEditDoc* GetDocument() const = 0;
 	virtual void         SetModifiedFlag(bool modified = true) = 0;
 
-	//! Select object
-	//TODO: this should be part of object manager
-	virtual void            SelectObject(CBaseObject* obj) = 0;
 	//! Get access to object manager.
 	virtual IObjectManager* GetObjectManager() = 0;
 
@@ -383,21 +371,19 @@ struct IEditor
 
 	virtual void                   DeleteObject(CBaseObject* obj) = 0;
 	virtual const ISelectionGroup* GetISelectionGroup() const = 0;
-	virtual int                    ClearSelection() = 0;
 	virtual bool                   IsSelectionLocked() = 0;
 	virtual CBaseObject*           GetSelectedObject() = 0;
 	virtual CPrefabManager*        GetPrefabManager() = 0;
 	virtual const char*            GetLevelName() = 0;
 	virtual const char*            GetLevelPath() = 0;
-	virtual bool                   IsHelpersDisplayed() const = 0;
-	virtual void                   EnableHelpersDisplay(bool bEnable) = 0;
 	virtual void                   StartObjectCreation(const char* type, const char* file = nullptr) = 0;
 	virtual CHeightmap*            GetHeightmap() = 0;
 	// end level editor methods
 
 	virtual ESystemConfigSpec GetEditorConfigSpec() const = 0;
 
-	virtual void              SetConsoleVar(const char* var, float value) = 0;
+	virtual void              SetConsoleVar(const char* var, const int value) = 0;
+	virtual void              SetConsoleVar(const char* var, const float value) = 0;
 	virtual float             GetConsoleVar(const char* var) = 0;
 
 	//! Adds a handler for native OS specific events. Useful for plugins that need access to specific OS messages.
@@ -457,7 +443,7 @@ struct IEditor
 	virtual bool             IsCGroup(CBaseObject* pObject) = 0;
 	virtual void             ResumeUpdateCGroup(CBaseObject* pObject) = 0;
 	virtual bool             SuspendUpdateCGroup(CBaseObject* pObject) = 0;
-	virtual void             SyncPrefabCPrefabObject(CBaseObject* oObject, const SObjectChangedContext& context) = 0;
+	virtual void             SyncPrefabCPrefabObject(CBaseObject* pObject, const SObjectChangedContext& context) = 0;
 	virtual bool             IsModifyInProgressCPrefabObject(CBaseObject* oObject) = 0;
 	virtual bool             IsCPrefabObject(CBaseObject* pObject) = 0;
 	virtual bool             IsGroupOpen(CBaseObject* pObject) = 0;

@@ -4,7 +4,7 @@
 #include "ItemDescriptionDlg.h"
 #include "SmartObjectsEditorDialog.h"
 #include "SmartObjectStateDialog.h"
-#include "AI\AIManager.h"
+#include "AI/AIManager.h"
 #include "Controls/QuestionDialog.h"
 #include "Util/MFCUtil.h"
 
@@ -687,4 +687,3 @@ BOOL CSmartObjectStateDialog::OnInitDialog()
 	return TRUE;  // return TRUE unless you set the focus to a control
 	// EXCEPTION: OCX Property Pages should return FALSE
 }
-

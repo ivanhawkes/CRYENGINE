@@ -35,18 +35,16 @@ public:
 	string GetFullName() const;
 
 	//! Get GUID assigned to this layer.
-	CryGUID GetGUID() const       { return m_guid; }
-
-	CryGUID GetParentGUID() const { return m_parentGUID; }
+	const CryGUID& GetGUID() const { return m_guid; }
 
 	//////////////////////////////////////////////////////////////////////////
 	// Query layer status.
 	//////////////////////////////////////////////////////////////////////////
 	virtual bool IsVisible(bool isRecursive = true) const override;
 	virtual bool IsFrozen(bool isRecursive = true) const override;
-	bool         IsExportable() const         { return m_exportable; };
-	bool         IsExporLayerPak() const      { return m_exportLayerPak; };
-	bool         IsDefaultLoaded() const      { return m_defaultLoaded; };
+	bool         IsExportable() const         { return m_exportable; }
+	bool         IsExporLayerPak() const      { return m_exportLayerPak; }
+	bool         IsDefaultLoaded() const      { return m_defaultLoaded; }
 	bool         HasPhysics() const           { return m_havePhysics; }
 	int          GetSpecs() const             { return m_specs; }
 	ColorB       GetColor() const;
@@ -58,9 +56,9 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 	virtual void SetVisible(bool isVisible, bool isRecursive = false) override;
 	virtual void SetFrozen(bool isFrozen, bool isRecursive = false) override;
-	void         SetExportable(bool isExportable)         { m_exportable = isExportable; };
-	void         SetExportLayerPak(bool isExportLayerPak) { m_exportLayerPak = isExportLayerPak; };
-	void         SetDefaultLoaded(bool isDefaultLoaded)   { m_defaultLoaded = isDefaultLoaded; };
+	void         SetExportable(bool isExportable)         { m_exportable = isExportable; }
+	void         SetExportLayerPak(bool isExportLayerPak) { m_exportLayerPak = isExportLayerPak; }
+	void         SetDefaultLoaded(bool isDefaultLoaded)   { m_defaultLoaded = isDefaultLoaded; }
 	void         SetHavePhysics(bool isHavePhysics)       { m_havePhysics = isHavePhysics; }
 	void         SetSpecs(int specs)                      { m_specs = specs; }
 	void         SetColor(ColorB color, bool useColorOverride);
@@ -68,7 +66,7 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 	//! Save/Load layer to/from xml node.
 	void SerializeBase(XmlNodeRef& node, bool isLoading);
-	void Serialize(XmlNodeRef& node, bool isLoading);
+	virtual void Serialize(XmlNodeRef& node, bool isLoading);
 
 	//! Get number of objects.
 	uint GetObjectCount() const;
@@ -106,10 +104,7 @@ public:
 
 	EObjectLayerType    GetLayerType() const { return m_layerType; }
 
-	std::vector<string> GetAttacments()
-	{
-		return m_files;
-	};
+	const std::vector<string>& GetFiles() const { return m_files; }
 
 protected:
 	friend class CObjectLayerManager;
@@ -161,8 +156,6 @@ protected:
 
 	//! Pointer to parent layer.
 	CObjectLayer* m_parent;
-	//! Parent layer GUID.
-	CryGUID       m_parentGUID;
 
 	//! Layer ID for LayerSwith
 	uint16           m_nLayerId;

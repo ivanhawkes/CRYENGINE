@@ -3,56 +3,40 @@
 #include "StdAfx.h"
 #include "TerrainDialog.h"
 
-#include "Dialogs/ToolbarDialog.h"
-#include "Terrain/GenerationParam.h"
-#include "Terrain/Noise.h"
-
-#include "TerrainLighting.h"
-
-#include "TopRendererWnd.h"
-#include "Vegetation/VegetationMap.h"
-
-#include "Terrain/Heightmap.h"
-#include "Terrain/TerrainManager.h"
-#include "Terrain/TerrainBrushTool.h"
-
-#include <LevelEditor/LevelEditorSharedState.h>
-
-#include "GameEngine.h"
-#include "CryEdit.h"
-#include "CryEditDoc.h"
-#include <QtUtil.h>
-#include "FileDialogs/SystemFileDialog.h"
-#include "Controls/QuestionDialog.h"
-#include "Util/MFCUtil.h"
-#include <Preferences/GeneralPreferences.h>
-#include <QDir>
-
-#include <CrySystem/ISystem.h>
-#include <CrySystem/IProjectManager.h>
-
-#include "TerrainTextureExport.h"
-#include "GameExporter.h"
+#include "Export/ExportManager.h"
 #include "Terrain/Dialogs/ResizeTerrainTextureDialog.h"
 #include "Terrain/Dialogs/ResizeTerrainDialog.h"
-#include "Export/ExportManager.h"
-#include "Objects/ObjectLoader.h"
-#include "CrySandbox/ScopedVariableSetter.h"
-#include "Dialogs/QNumericBoxDialog.h"
+#include "Terrain/GenerationParam.h"
+#include "Terrain/Heightmap.h"
+#include "Terrain/TerrainManager.h"
+#include "Terrain/Noise.h"
+#include "CryEditDoc.h"
+#include "GameEngine.h"
+#include "GameExporter.h"
+#include "TerrainLighting.h"
+#include "TerrainTextureExport.h"
+
+#include <Util/MFCUtil.h>
+
+#include <Controls/QuestionDialog.h>
+#include <Dialogs/QNumericBoxDialog.h>
+#include <FileDialogs/SystemFileDialog.h>
+#include <LevelEditor/LevelEditorSharedState.h>
+#include <Objects/ObjectLoader.h>
+#include <Preferences/GeneralPreferences.h>
+
+#include <CrySandbox/ScopedVariableSetter.h>
+#include <CrySystem/IProjectManager.h>
 
 #define IDW_ROLLUP_PANE AFX_IDW_CONTROLBAR_FIRST + 10
 
-//////////////////////////////////////////////////////////////////////////
 IMPLEMENT_DYNCREATE(CTerrainDialog, CBaseFrameWnd)
 
-/////////////////////////////////////////////////////////////////////////////
-// CTerrainDialog dialog
 CTerrainDialog::CTerrainDialog()
 {
 	// We don't have valid recent terrain generation parameters yet
 	m_sLastParam = new SNoiseParams;
 	m_sLastParam->bValid = false;
-	m_pViewport = 0;
 
 	m_pHeightmap = GetIEditorImpl()->GetHeightmap();
 	if (m_pHeightmap)
@@ -75,7 +59,6 @@ CTerrainDialog::~CTerrainDialog()
 }
 
 BEGIN_MESSAGE_MAP(CTerrainDialog, CBaseFrameWnd)
-ON_MESSAGE(WM_KICKIDLE, OnKickIdle)
 ON_COMMAND(ID_TERRAIN_LOAD, OnTerrainLoad)
 ON_COMMAND(ID_TERRAIN_ERASE, OnTerrainErase)
 ON_COMMAND(ID_TERRAIN_RESIZE, OnResizeTerrain)
@@ -99,13 +82,6 @@ ON_COMMAND(ID_MODIFY_REDUCERANGELIGHT, OnModifyReduceRangeLight)
 ON_WM_MOUSEWHEEL()
 ON_COMMAND(ID_HOLD, OnHold)
 ON_COMMAND(ID_FETCH, OnFetch)
-ON_COMMAND(ID_OPTIONS_SHOWMAPOBJECTS, OnOptionsShowMapObjects)
-ON_COMMAND(ID_OPTIONS_SHOWWATER, OnOptionsShowWater)
-ON_UPDATE_COMMAND_UI(ID_OPTIONS_SHOWWATER, OnShowWaterUpdateUI)
-ON_UPDATE_COMMAND_UI(ID_OPTIONS_SHOWMAPOBJECTS, OnShowMapObjectsUpdateUI)
-ON_COMMAND(ID_OPTIONS_SHOWGRID, OnOptionsShowGrid)
-ON_UPDATE_COMMAND_UI(ID_OPTIONS_SHOWGRID, OnShowGridUpdateUI)
-ON_COMMAND(ID_OPTIONS_EDITTERRAINCURVE, OnOptionsEditTerrainCurve)
 ON_COMMAND(ID_SETWATERLEVEL, OnSetWaterLevel)
 ON_COMMAND(ID_MODIFY_SETMAXHEIGHT, OnSetMaxHeight)
 ON_COMMAND(ID_MODIFY_SETUNITSIZE, OnSetUnitSize)
@@ -113,9 +89,6 @@ ON_COMMAND(ID_TOOLS_CUSTOMIZEKEYBOARD, OnCustomize)
 ON_COMMAND(ID_TOOLS_EXPORT_SHORTCUTS, OnExportShortcuts)
 ON_COMMAND(ID_TOOLS_IMPORT_SHORTCUTS, OnImportShortcuts)
 END_MESSAGE_MAP()
-
-/////////////////////////////////////////////////////////////////////////////
-// CTerrainDialog message handlers
 
 BOOL CTerrainDialog::OnInitDialog()
 {
@@ -156,20 +129,7 @@ BOOL CTerrainDialog::OnInitDialog()
 	/////////////////////////////////////////////////////////////////////////
 	// Docking Pane for TaskPanel
 	m_pDockPane_Rollup = GetDockingPaneManager()->CreatePane(IDW_ROLLUP_PANE, CRect(0, 0, 300, 500), xtpPaneDockRight);
-	//m_pDockPane_Rollup->SetOptions(xtpPaneNoCloseable|xtpPaneNoFloatable);
 
-	m_pViewport = new CTopRendererWnd;
-	//m_pViewport->SetDlgCtrlID(AFX_IDW_PANE_FIRST);
-	//m_pViewport->MoveWindow( CRect(20,50,500,500) );
-	//m_pViewport->ModifyStyle( WS_POPUP,WS_CHILD,0 );
-	//m_pViewport->SetParent( this );
-	//m_pViewport->SetOwner( this );
-	m_pViewport->m_bShowHeightmap = true;
-	//m_pViewport->ShowWindow( SW_SHOW );
-	m_pViewport->SetShowWater(true);
-	m_pViewport->SetShowViewMarker(false);
-
-	//////////////////////////////////////////////////////////////////////////
 	char szCaption[128];
 	cry_sprintf(szCaption, "Heightmap %" PRIu64 "x%" PRIu64, m_pHeightmap->GetWidth(), m_pHeightmap->GetHeight());
 	m_wndStatusBar.SetPaneText(0, szCaption);
@@ -180,7 +140,6 @@ BOOL CTerrainDialog::OnInitDialog()
 	              // EXCEPTION: OCX Property Pages should return FALSE
 }
 
-//////////////////////////////////////////////////////////////////////////
 LRESULT CTerrainDialog::OnDockingPaneNotify(WPARAM wParam, LPARAM lParam)
 {
 	if (wParam == XTP_DPN_SHOWWINDOW)
@@ -208,15 +167,6 @@ LRESULT CTerrainDialog::OnDockingPaneNotify(WPARAM wParam, LPARAM lParam)
 		{
 		}
 	}
-
-	return FALSE;
-}
-
-//////////////////////////////////////////////////////////////////////////
-LRESULT CTerrainDialog::OnKickIdle(WPARAM wParam, LPARAM lParam)
-{
-	if (m_pViewport)
-		m_pViewport->Update();
 
 	return FALSE;
 }
@@ -263,10 +213,7 @@ void CTerrainDialog::OnTerrainLoad()
 		}
 
 		InvalidateTerrain();
-
-		if (m_pViewport)
-			m_pViewport->InitHeightmapAlignment();
-		InvalidateViewport();
+		GetIEditorImpl()->UpdateViews(eUpdateHeightmap);
 	}
 }
 
@@ -645,54 +592,6 @@ void CTerrainDialog::OnFetch()
 	InvalidateTerrain();
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// Options
-void CTerrainDialog::OnShowWaterUpdateUI(CCmdUI* pCmdUI)
-{
-	pCmdUI->SetCheck(m_pViewport->GetShowWater() ? 1 : 0);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CTerrainDialog::OnShowMapObjectsUpdateUI(CCmdUI* pCmdUI)
-{
-	pCmdUI->SetCheck(m_pViewport->m_bShowStatObjects ? 1 : 0);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CTerrainDialog::OnShowGridUpdateUI(CCmdUI* pCmdUI)
-{
-	pCmdUI->SetCheck(m_pViewport->GetShowGrid() ? 1 : 0);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CTerrainDialog::OnOptionsShowMapObjects()
-{
-	m_pViewport->m_bShowStatObjects = !m_pViewport->m_bShowStatObjects;
-
-	// Update the draw window
-	InvalidateViewport();
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CTerrainDialog::OnOptionsShowWater()
-{
-	m_pViewport->SetShowWater(!m_pViewport->GetShowWater());
-	// Update the draw window
-	InvalidateViewport();
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CTerrainDialog::OnOptionsShowGrid()
-{
-	m_pViewport->SetShowGrid(!m_pViewport->GetShowGrid());
-	// Update the draw window
-	InvalidateViewport();
-}
-
-void CTerrainDialog::OnOptionsEditTerrainCurve()
-{
-}
-
 void CTerrainDialog::OnSetWaterLevel()
 {
 	////////////////////////////////////////////////////////////////////////
@@ -760,7 +659,6 @@ void CTerrainDialog::OnSetUnitSize()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTerrainDialog::InvalidateTerrain()
 {
 	GetIEditorImpl()->SetModifiedFlag();
@@ -771,18 +669,9 @@ void CTerrainDialog::InvalidateTerrain()
 
 	GetIEditorImpl()->GetGameEngine()->ReloadEnvironment();
 
-	InvalidateViewport();
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CTerrainDialog::InvalidateViewport()
-{
-	LOADING_TIME_PROFILE_SECTION;
-	m_pViewport->Invalidate();
 	GetIEditorImpl()->UpdateViews(eUpdateHeightmap);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTerrainDialog::OnEditorNotifyEvent(EEditorNotifyEvent event)
 {
 	switch (event)
@@ -790,31 +679,25 @@ void CTerrainDialog::OnEditorNotifyEvent(EEditorNotifyEvent event)
 	case eNotify_OnEndNewScene:
 	case eNotify_OnEndSceneOpen:
 	case eNotify_OnTerrainRebuild:
-		m_pViewport->InitHeightmapAlignment();
-		InvalidateViewport();
+		GetIEditorImpl()->UpdateViews(eUpdateHeightmap);
 		break;
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTerrainDialog::OnCustomize()
 {
 	CMFCUtils::ShowShortcutsCustomizeDlg(GetCommandBars(), IDR_TERRAIN, "TerrainEditor");
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTerrainDialog::OnExportShortcuts()
 {
 	CMFCUtils::ExportShortcuts(GetCommandBars()->GetShortcutManager());
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTerrainDialog::OnImportShortcuts()
 {
 	CMFCUtils::ImportShortcuts(GetCommandBars()->GetShortcutManager(), "TerrainEditor");
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 void CTerrainDialog::GenerateTerrainTexture()
 {
@@ -910,7 +793,6 @@ void CTerrainDialog::OnReloadTerrain()
 
 void CTerrainDialog::OnTerrainExportBlock()
 {
-	// TODO: Add your command handler code here
 	AABB box = GetIEditorImpl()->GetLevelEditorSharedState()->GetSelectedRegion();
 	if (!GetIEditorImpl()->GetDocument() || !GetIEditorImpl()->IsDocumentReady() || !box.IsNonZero())
 	{
@@ -955,7 +837,6 @@ void CTerrainDialog::OnTerrainExportBlock()
 
 void CTerrainDialog::OnTerrainImportBlock()
 {
-	// TODO: Add your command handler code here
 	CSystemFileDialog::RunParams runParams;
 	runParams.title = QObject::tr("Import Terrain Block");
 
@@ -964,40 +845,32 @@ void CTerrainDialog::OnTerrainImportBlock()
 
 	QString fileName = CSystemFileDialog::RunImportFile(runParams, nullptr);
 
-	if (!fileName.isEmpty())
+	if (fileName.isEmpty())
 	{
-		CWaitCursor wait;
-		CXmlArchive* ar = new CXmlArchive;
-		if (!ar->Load(fileName.toStdString().c_str()))
-		{
-			CQuestionDialog::SWarning(QObject::tr("Warning"), QObject::tr("Loading of Terrain Block file failed"));
-			delete ar;
-			return;
-		}
+		return;
+	}
 
-		// Import terrain area.
-		CUndo undo("Import Terrain Area");
+	CWaitCursor wait;
+	CXmlArchive ar;
+	if (!ar.Load(fileName.toStdString().c_str()))
+	{
+		CQuestionDialog::SWarning(QObject::tr("Warning"), QObject::tr("Loading of Terrain Block file failed"));
+		return;
+	}
 
-		CHeightmap* pHeightmap = GetIEditorImpl()->GetHeightmap();
-		pHeightmap->ImportBlock(*ar, CPoint(0, 0), false);
-		// Load selection from archive.
-		XmlNodeRef objRoot = ar->root->findChild("Objects");
-		if (objRoot)
-		{
-			GetIEditorImpl()->ClearSelection();
-			CObjectArchive ar(GetIEditorImpl()->GetObjectManager(), objRoot, true);
-			GetIEditorImpl()->GetObjectManager()->LoadObjects(ar, true);
-		}
+	// Import terrain area.
+	CUndo undo("Import Terrain Area");
 
-		delete ar;
-		ar = 0;
+	CHeightmap* pHeightmap = GetIEditorImpl()->GetHeightmap();
+	pHeightmap->ImportBlock(ar, CPoint(0, 0), false);
 
-		/*
-		// Archive will be deleted within Move tool.
-		CTerrainMoveTool *mt = new CTerrainMoveTool;
-		mt->SetArchive( ar );
-		GetIEditorImpl()->GetLevelEditorSharedState()->SetEditTool( mt );
-		*/
+	// Load selection from archive.
+	XmlNodeRef objRoot = ar.root->findChild("Objects");
+	if (objRoot)
+	{
+		GetIEditorImpl()->GetObjectManager()->ClearSelection();
+		CObjectArchive objArchive(GetIEditorImpl()->GetObjectManager(), objRoot, true);
+		GetIEditorImpl()->GetObjectManager()->LoadObjects(objArchive, true);
 	}
 }
 

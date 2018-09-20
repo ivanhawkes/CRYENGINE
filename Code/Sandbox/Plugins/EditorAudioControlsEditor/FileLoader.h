@@ -26,10 +26,9 @@ private:
 	void      LoadControlsLibrary(XmlNodeRef const pRoot, string const& filepath, string const& level, string const& filename, uint32 const version);
 	CControl* LoadControl(XmlNodeRef const pNode, Scope const scope, uint32 const version, CAsset* const pParentItem);
 
-	void      LoadPreloadConnections(XmlNodeRef const pNode, CControl* const pControl, uint32 const version);
+	void      LoadPlatformSpecificConnections(XmlNodeRef const pNode, CControl* const pControl, uint32 const version);
 	void      LoadConnections(XmlNodeRef const root, CControl* const pControl);
 
-	void      CreateInternalSwitch(CAsset* const pLibrary, char const* const szSwitchName, SwitchStates const& StateNames, char const* const szDescription);
 	void      CreateDefaultControls();
 
 	void      LoadEditorData(XmlNodeRef const pEditorDataNode, CAsset& library);
@@ -45,4 +44,3 @@ private:
 	EErrorCode m_errorCodeMask;
 };
 } // namespace ACE
-

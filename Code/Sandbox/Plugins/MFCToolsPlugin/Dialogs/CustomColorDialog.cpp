@@ -110,7 +110,7 @@ void CCustomColorDialog::OnColorSelect()
 
 	MSG msg;
 	m_bPickerMode = TRUE;
-	;
+
 	::SetCursor(m_hcurPicker);
 
 	LONG_PTR thisPtr = reinterpret_cast<LONG_PTR>(this);
@@ -280,4 +280,3 @@ BOOL CCustomColorDialog::PreTranslateMessage(MSG* pMsg)
 
 	return CMFCColorDialog::PreTranslateMessage(pMsg);
 }
-

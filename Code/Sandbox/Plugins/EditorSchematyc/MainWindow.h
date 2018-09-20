@@ -59,7 +59,7 @@ public:
 	~CMainWindow();
 
 	// CEditor
-	virtual const char* GetEditorName() const override { return "Schematyc Editor"; };
+	virtual const char* GetEditorName() const override { return "Schematyc Editor"; }
 	virtual void        SetLayout(const QVariantMap& state) override;
 	virtual QVariantMap GetLayout() const override;
 	// ~CEditor
@@ -159,4 +159,3 @@ private:
 };
 
 } // Schematyc
-

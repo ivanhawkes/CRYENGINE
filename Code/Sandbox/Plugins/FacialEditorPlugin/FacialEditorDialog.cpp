@@ -1831,7 +1831,6 @@ void CFacialEditorDialog::OnFacialEdEvent(EFacialEdEvent event, IFacialEffector*
 		}
 		break;
 	}
-	;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2836,7 +2835,7 @@ public:
 	void operator()(const char* morphName)
 	{
 		CReportRecord<MorphCheckError>* record = m_report.AddRecord(MorphCheckError(morphName));
-		record->AddField("Morph Name", std::mem_fun_ref(&MorphCheckError::GetMorphName));
+		record->AddField("Morph Name", std::bind(&MorphCheckError::GetMorphName, std::placeholders::_1));
 	}
 
 private:
@@ -2991,4 +2990,3 @@ void CFacialEditorDialog::OnImportShortcuts()
 {
 	CMFCUtils::ImportShortcuts(GetCommandBars()->GetShortcutManager(), "FacialEditor");
 }
-

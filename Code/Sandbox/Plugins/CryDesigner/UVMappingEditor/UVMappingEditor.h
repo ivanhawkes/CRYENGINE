@@ -2,8 +2,7 @@
 
 #pragma once
 
-#include <QMainWindow>
-#include "UVMappingEditorCommon.h"
+//#include "UVMappingEditorCommon.h"
 #include "Core/PolygonMesh.h"
 #include "Objects/DesignerObject.h"
 #include "BaseTool.h"
@@ -17,17 +16,15 @@
 #include "DisplayViewportAdapter.h"
 #include "QtViewPane.h"
 
-class QToolbar;
-class QToolButton;
-class QBoxLayout;
-class QGridLayout;
-class UVIslandManager;
-class CAxisHelper;
-struct SRenderContext;
 class CBaseObject;
+class QBoxLayout;
 class QCheckBox;
-
+class QGridLayout;
 class QMenuComboBox;
+class QToolButton;
+class UVIslandManager;
+
+struct SRenderContext;
 
 namespace Designer
 {
@@ -94,7 +91,7 @@ public:
 
 	//////////////////////////////////////////////////////////
 	// CDockableWindow implementation
-	virtual const char*                       GetPaneTitle() const override        { return "UV Mapping"; };
+	virtual const char*                       GetPaneTitle() const override        { return "UV Mapping"; }
 	virtual IViewPaneClass::EDockingDirection GetDockingDirection() const override { return IViewPaneClass::DOCK_FLOAT; }
 	//////////////////////////////////////////////////////////
 
@@ -165,4 +162,3 @@ UVMappingEditor* GetUVEditor();
 
 }
 }
-

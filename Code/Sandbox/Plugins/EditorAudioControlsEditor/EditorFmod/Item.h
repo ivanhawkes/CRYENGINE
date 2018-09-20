@@ -10,7 +10,7 @@ namespace Impl
 {
 namespace Fmod
 {
-enum class EItemType
+enum class EItemType : CryAudio::EnumFlagsType
 {
 	None,
 	Bank,
@@ -22,12 +22,17 @@ enum class EItemType
 	Event,
 	MixerGroup,
 	Folder,
-	EditorFolder,
-};
+	EditorFolder, };
 
 class CItem final : public IItem
 {
 public:
+
+	CItem() = delete;
+	CItem(CItem const&) = delete;
+	CItem(CItem&&) = delete;
+	CItem& operator=(CItem const&) = delete;
+	CItem& operator=(CItem&&) = delete;
 
 	explicit CItem(
 		string const& name,
@@ -43,27 +48,28 @@ public:
 		, m_pakStatus(pakStatus)
 		, m_filePath(filePath)
 		, m_pParent(nullptr)
+		, m_pathName("")
 	{}
 
 	virtual ~CItem() override = default;
 
-	CItem() = delete;
-
 	// IItem
 	virtual ControlId     GetId() const override                        { return m_id; }
 	virtual string const& GetName() const override                      { return m_name; }
-	virtual float         GetRadius() const override                    { return 0.0f; }
 	virtual size_t        GetNumChildren() const override               { return m_children.size(); }
 	virtual IItem*        GetChildAt(size_t const index) const override { return m_children[index]; }
 	virtual IItem*        GetParent() const override                    { return m_pParent; }
 	virtual EItemFlags    GetFlags() const override                     { return m_flags; }
 	// ~IItem
 
-	EItemType     GetType() const                  { return m_type; }
-	string const& GetFilePath() const              { return m_filePath; }
-	EPakStatus    GetPakStatus() const             { return m_pakStatus; }
+	EItemType     GetType() const                     { return m_type; }
+	string const& GetFilePath() const                 { return m_filePath; }
+	EPakStatus    GetPakStatus() const                { return m_pakStatus; }
 
-	void          SetFlags(EItemFlags const flags) { m_flags = flags; }
+	void          SetFlags(EItemFlags const flags)    { m_flags = flags; }
+
+	void          SetPathName(string const& pathName) { m_pathName = pathName; }
+	string const& GetPathName() const                 { return m_pathName; }
 
 	void          AddChild(CItem* const pChild);
 	void          RemoveChild(CItem* const pChild);
@@ -73,14 +79,16 @@ private:
 
 	void SetParent(CItem* const pParent) { m_pParent = pParent; }
 
+	string const        m_name;
 	ControlId const     m_id;
 	EItemType const     m_type;
-	string const        m_name;
-	string const        m_filePath;
-	EPakStatus const    m_pakStatus;
-	std::vector<CItem*> m_children;
-	CItem*              m_pParent;
 	EItemFlags          m_flags;
+	EPakStatus const    m_pakStatus;
+	string const        m_filePath;
+	CItem*              m_pParent;
+	string              m_pathName;
+	std::vector<CItem*> m_children;
+
 };
 
 using ItemCache = std::map<ControlId, CItem*>;

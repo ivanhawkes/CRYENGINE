@@ -184,7 +184,6 @@ QuatT CharacterSpaceProvider::GetTransform(const Manip::SSpaceAndIndex& si) cons
 	default:
 		return characterLocation;   //root in world-space
 	}
-	;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,4 +344,3 @@ void GizmoSink::SkipRead()
 }
 
 }
-

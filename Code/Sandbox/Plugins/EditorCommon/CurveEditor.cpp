@@ -1,21 +1,23 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#include <StdAfx.h>
-#include "QtUtil.h"
-#include "Util/Math.h"
+#include "StdAfx.h"
 #include "CurveEditor.h"
+
 #include "DrawingPrimitives/TimeSlider.h"
 #include "DrawingPrimitives/Ruler.h"
+#include "EditorFramework/Events.h"
+#include "EditorStyleHelper.h"
+#include "Util/Math.h"
+#include "QtUtil.h"
+
+#include <CryIcon.h>
+
 #include <CryMath/Bezier_impl.h>
 
-#include <QPainter>
-#include <QMouseEvent>
 #include <QColor>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QToolBar>
-#include "CryIcon.h"
-#include "EditorStyleHelper.h"
-
-#include <EditorFramework/Events.h>
 
 #pragma warning (push)
 #pragma warning (disable : 4554)
@@ -2025,4 +2027,3 @@ void CCurveEditor::FillWithCurveToolsAndConnect(QToolBar* pToolBar)
 	pToolBar->addAction(CryIcon("icons:CurveEditor/break.ico"), "Break tangents", this, SLOT(OnBreakTangents()));
 	pToolBar->addAction(CryIcon("icons:CurveEditor/unify.ico"), "Unify tangents", this, SLOT(OnUnifyTangents()));
 }
-

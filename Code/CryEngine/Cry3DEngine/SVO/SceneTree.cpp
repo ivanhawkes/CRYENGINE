@@ -69,12 +69,27 @@ int CSvoEnv::ExportSvo(ICryArchive* pArchive)
 		uint32 dummyCounter = 0;
 		uint32 totalSizeCounter = 0;
 		PodArray<byte> dummyArray;
-		m_pSvoRoot->SaveNode(dummyArray, dummyCounter, pArchive, totalSizeCounter);
+		m_pSvoRoot->SaveNode(dummyArray, dummyCounter, pArchive, totalSizeCounter, GetPlayableArea());
 
 		PrintMessage("======= Finished SVO data export: %.1f MB in %1.1f sec =======", (float)totalSizeCounter / 1024.f / 1024.f, GetCurAsyncTimeSec() - timeStart);
 	}
 
 	return m_pSvoRoot ? 1 : 0;
+}
+
+AABB CSvoEnv::GetPlayableArea()
+{
+	AABB playableArea = AABB(Vec3(0, 0, 0), Vec3((float)gEnv->p3DEngine->GetTerrainSize()));
+	playableArea.Expand(-Vec3(Cry3DEngineBase::GetCVars()->e_svoTI_VoxelizationMapBorder - 1.f, Cry3DEngineBase::GetCVars()->e_svoTI_VoxelizationMapBorder - 1.f, 0));
+	return playableArea;
+}
+
+AABB CSvoNode::GetMagnifiedNodeBox(const AABB& nodeBox)
+{
+	AABB expandedBox = nodeBox;
+	float expand = min(nodeBox.max.z - nodeBox.min.z, 64.f);
+	expandedBox.Expand(Vec3(expand));
+	return expandedBox;
 }
 
 Vec3* GeneratePointsOnHalfSphere(int n);
@@ -185,7 +200,7 @@ bool CSvoEnv::Render()
 
 			m_pSvoRoot->CheckReadyForRendering(0, m_arrForStreaming);
 
-			m_pSvoRoot->Render(0, 1, 0, arrVertsOut, m_arrForStreaming);
+			m_pSvoRoot->Render(0, 1, 0, arrVertsOut, m_arrForStreaming, GetPlayableArea());
 
 			CheckUpdateMeshPools();
 		}
@@ -697,7 +712,7 @@ Vec3i ComputeDataCoord(int atlasOffset)
 	return vOffset3D;
 }
 
-void CSvoNode::Render(PodArray<struct SPvsItem>* pSortedPVS, uint64 nodeKey, int treeLevel, PodArray<SVF_P3F_C4B_T2F>& arrVertsOut, PodArray<CVoxelSegment*> arrForStreaming[SVO_STREAM_QUEUE_MAX_SIZE][SVO_STREAM_QUEUE_MAX_SIZE])
+void CSvoNode::Render(PodArray<struct SPvsItem>* pSortedPVS, uint64 nodeKey, int treeLevel, PodArray<SVF_P3F_C4B_T2F>& arrVertsOut, PodArray<CVoxelSegment*> arrForStreaming[SVO_STREAM_QUEUE_MAX_SIZE][SVO_STREAM_QUEUE_MAX_SIZE], const AABB& playableArea)
 {
 	float boxSize = m_nodeBox.GetSize().x;
 
@@ -724,13 +739,15 @@ void CSvoNode::Render(PodArray<struct SPvsItem>* pSortedPVS, uint64 nodeKey, int
 
 	// auto allocate new childs
 	if (Cry3DEngineBase::GetCVars()->e_svoTI_Active && m_pSeg && m_pSeg->m_eStreamingStatus == ecss_Ready && m_pSeg->m_pBlockInfo)
-		if (m_pSeg->m_dwChildTrisTest || (m_pSeg->GetBoxSize() > Cry3DEngineBase::GetCVars()->e_svoMaxNodeSize) || (Cry3DEngineBase::GetCVars()->e_svoTI_Troposphere_Subdivide))
+	{
+		if ((m_pSeg->m_dwChildTrisTest && playableArea.IsIntersectBox(GetMagnifiedNodeBox(m_nodeBox))) || (m_pSeg->GetBoxSize() > Cry3DEngineBase::GetCVars()->e_svoMaxNodeSize) || (Cry3DEngineBase::GetCVars()->e_svoTI_Troposphere_Subdivide))
 		{
 			if (nodeToCamDist < boxSizeRated && !bDrawThisNode)
 			{
 				CheckAllocateChilds();
 			}
 		}
+	}
 
 	if ((!m_ppChilds || (nodeToCamDist > boxSizeRated) || (boxSize <= Cry3DEngineBase::GetCVars()->e_svoMinNodeSize))
 	    || (!CVoxelSegment::m_voxCam.IsAABBVisible_E(m_nodeBox) && (nodeToCamDist * 1.5 > boxSizeRated)))
@@ -817,7 +834,7 @@ void CSvoNode::Render(PodArray<struct SPvsItem>* pSortedPVS, uint64 nodeKey, int
 			int childId = arrChildId[c];
 			CSvoNode* pChild = m_ppChilds[childId];
 			if (pChild)
-				pChild->Render(nullptr, (nodeKey << 3) + (childId), treeLevel, arrVertsOut, arrForStreaming);
+				pChild->Render(nullptr, (nodeKey << 3) + (childId), treeLevel, arrVertsOut, arrForStreaming, playableArea);
 		}
 	}
 }
@@ -1040,7 +1057,7 @@ CSvoNode::~CSvoNode()
 	gSvoEnv->m_nodeCounter--;
 }
 
-uint32 CSvoNode::SaveNode(PodArray<byte>& rS, uint32& nodesCounterRec, ICryArchive* pArchive, uint32& totalSizeCounter)
+uint32 CSvoNode::SaveNode(PodArray<byte>& rS, uint32& nodesCounterRec, ICryArchive* pArchive, uint32& totalSizeCounter, const AABB& playableArea)
 {
 	assert(m_pSeg);
 
@@ -1064,7 +1081,7 @@ uint32 CSvoNode::SaveNode(PodArray<byte>& rS, uint32& nodesCounterRec, ICryArchi
 	// auto allocate new childs same way it happens during rendering
 	if (Cry3DEngineBase::GetCVars()->e_svoTI_Active && m_pSeg && m_pSeg->m_eStreamingStatus == ecss_Ready /*&& m_pSeg->m_pBlockInfo*/)
 	{
-		if (m_pSeg->m_dwChildTrisTest || (m_pSeg->GetBoxSize() > Cry3DEngineBase::GetCVars()->e_svoMaxNodeSize) || (Cry3DEngineBase::GetCVars()->e_svoTI_Troposphere_Subdivide))
+		if ((m_pSeg->m_dwChildTrisTest && playableArea.IsIntersectBox(GetMagnifiedNodeBox(m_nodeBox))) || (m_pSeg->GetBoxSize() > Cry3DEngineBase::GetCVars()->e_svoMaxNodeSize) || (Cry3DEngineBase::GetCVars()->e_svoTI_Troposphere_Subdivide))
 		{
 			CheckAllocateChilds();
 		}
@@ -1078,7 +1095,7 @@ uint32 CSvoNode::SaveNode(PodArray<byte>& rS, uint32& nodesCounterRec, ICryArchi
 		{
 			if (m_ppChilds && m_ppChilds[childId])
 			{
-				m_ppChilds[childId]->SaveNode(rS, nodesCounterRec, pArchive, totalSizeCounter);
+				m_ppChilds[childId]->SaveNode(rS, nodesCounterRec, pArchive, totalSizeCounter, playableArea);
 			}
 		}
 
@@ -1103,13 +1120,11 @@ uint32 CSvoNode::SaveNode(PodArray<byte>& rS, uint32& nodesCounterRec, ICryArchi
 					uint32 nodesCounter = 0;
 					float startTime = Cry3DEngineBase::GetTimer()->GetAsyncCurTime();
 
-					AABB terrainBox = AABB(Vec3(0, 0, 0), Vec3((float)gEnv->p3DEngine->GetTerrainSize(), (float)gEnv->p3DEngine->GetTerrainSize(), (float)gEnv->p3DEngine->GetTerrainSize()));
-					terrainBox.Expand(-Vec3(Cry3DEngineBase::GetCVars()->e_svoTI_VoxelizationMapBorder + 1.f, Cry3DEngineBase::GetCVars()->e_svoTI_VoxelizationMapBorder + 1.f, 0));
-					bool isInPlayableArea = terrainBox.IsIntersectBox(m_ppChilds[childId]->m_nodeBox);
+					bool isInPlayableArea = playableArea.IsIntersectBox(GetMagnifiedNodeBox(m_ppChilds[childId]->m_nodeBox));
 
 					if (isInPlayableArea && !CVoxelSegment::m_bExportAbortRequested)
 					{
-						m_ppChilds[childId]->SaveNode(arrSvoData, nodesCounter, pArchive, totalSizeCounter);
+						m_ppChilds[childId]->SaveNode(arrSvoData, nodesCounter, pArchive, totalSizeCounter, playableArea);
 					}
 
 					if (nodesCounter)
@@ -1198,7 +1213,7 @@ uint32 CSvoNode::SaveNode(PodArray<byte>& rS, uint32& nodesCounterRec, ICryArchi
 			{
 				((uint32*)&rS[childOffsetsPos])[childId * 2 + 0] = rS.Count();  // file offset
 
-				int childNodeDataSize = m_ppChilds[childId]->SaveNode(rS, nodesCounterRec, pArchive, totalSizeCounter);
+				int childNodeDataSize = m_ppChilds[childId]->SaveNode(rS, nodesCounterRec, pArchive, totalSizeCounter, playableArea);
 
 				((uint32*)&rS[childOffsetsPos])[childId * 2 + 1] = childNodeDataSize;  // file data size
 			}
@@ -2249,11 +2264,11 @@ void C3DEngine::UpdateTISettings()
 	GetCVars()->e_svoTI_NumberOfBounces = tiAdv.numberOfBounces;
 	GetCVars()->e_svoTI_Saturation = tiAdv.saturation;
 	GetCVars()->e_svoTI_PropagationBooster = tiAdv.propagationBooster;
-	GetCVars()->e_svoTI_PointLightsBias = ti.pointLightsBias;
+	GetCVars()->e_svoTI_PointLightsBias = tiAdv.pointLightsBias;
 	if (gEnv->IsEditor())
 	{
 		GetCVars()->e_svoTI_UpdateLighting = tiAdv.updateLighting ? 1 : 0;
-		GetCVars()->e_svoTI_UpdateGeometry = tiAdv.updateGeometry ? 1 : 0;
+		GetCVars()->e_svoTI_UpdateGeometry = ti.updateGeometry ? 1 : 0;
 	}
 	GetCVars()->e_svoTI_SkyColorMultiplier = ti.skyColorMultiplier;
 	GetCVars()->e_svoTI_UseLightProbes = tiAdv.useLightProbes ? 1 : 0;
@@ -2272,8 +2287,6 @@ void C3DEngine::UpdateTISettings()
 
 	GetCVars()->e_svoMinNodeSize = ti.minNodeSize;
 
-	GetCVars()->e_svoTI_SkipNonGILights = tiAdv.skipNonGiLights ? 1 : 0;
-	GetCVars()->e_svoTI_ForceGIForAllLights = tiAdv.forceGIForAllLights;
 	GetCVars()->e_svoTI_SSAOAmount = ti.ssaoAmount;
 	GetCVars()->e_svoTI_PortalsDeform = tiAdv.portalsDeform;
 	GetCVars()->e_svoTI_PortalsInject = tiAdv.portalsInject;
@@ -2286,20 +2299,6 @@ void C3DEngine::UpdateTISettings()
 	GetCVars()->e_svoTI_ShadowsFromHeightmap = tiAdv.shadowsFromHeightmap ? 1 : 0;
 	GetCVars()->e_svoTI_Troposphere_Active = tiAdv.troposphere_Active ? 1 : 0;
 	GetCVars()->e_svoTI_Troposphere_Brightness = tiAdv.troposphere_Brightness;
-	GetCVars()->e_svoTI_Troposphere_Ground_Height = tiAdv.troposphere_Ground_Height;
-	GetCVars()->e_svoTI_Troposphere_Layer0_Height = tiAdv.troposphere_Layer0_Height;
-	GetCVars()->e_svoTI_Troposphere_Layer1_Height = tiAdv.troposphere_Layer1_Height;
-	GetCVars()->e_svoTI_Troposphere_Snow_Height = tiAdv.troposphere_Snow_Height;
-	GetCVars()->e_svoTI_Troposphere_Layer0_Rand = tiAdv.troposphere_Layer0_Rand;
-	GetCVars()->e_svoTI_Troposphere_Layer1_Rand = tiAdv.troposphere_Layer1_Rand;
-	GetCVars()->e_svoTI_Troposphere_Layer0_Dens = tiAdv.troposphere_Layer0_Dens;
-	GetCVars()->e_svoTI_Troposphere_Layer1_Dens = tiAdv.troposphere_Layer1_Dens;
-	//GetCVars()->e_svoTI_Troposphere_CloudGen_Height = (float)atof(GetXMLAttribText(pInputNode, szXmlNodeName, "Troposphere_CloudGen_Height", "0"));
-	GetCVars()->e_svoTI_Troposphere_CloudGen_Freq = tiAdv.troposphere_CloudGen_Freq;
-	GetCVars()->e_svoTI_Troposphere_CloudGen_FreqStep = tiAdv.troposphere_CloudGen_FreqStep;
-	GetCVars()->e_svoTI_Troposphere_CloudGen_Scale = tiAdv.troposphere_CloudGen_Scale;
-	GetCVars()->e_svoTI_Troposphere_CloudGenTurb_Freq = tiAdv.troposphere_CloudGenTurb_Freq;
-	GetCVars()->e_svoTI_Troposphere_CloudGenTurb_Scale = tiAdv.troposphere_CloudGenTurb_Scale;
 	GetCVars()->e_svoTI_Troposphere_Density = tiAdv.troposphere_Density;
 	GetCVars()->e_svoTI_Troposphere_Subdivide = GetCVars()->e_svoTI_Troposphere_Active;
 
@@ -2307,7 +2306,7 @@ void C3DEngine::UpdateTISettings()
 	GetCVars()->e_svoTI_AnalyticalGI = tiAdv.analyticalGI ? 1 : 0;
 	GetCVars()->e_svoTI_TraceVoxels = tiAdv.traceVoxels ? 1 : 0;
 
-	int lowSpecMode = tiAdv.lowSpecMode;
+	int lowSpecMode = ti.lowSpecMode;
 	if (lowSpecMode > -2 && gEnv->IsEditor()) // otherwise we use value from sys_spec_Light.cfg
 		GetCVars()->e_svoTI_LowSpecMode = lowSpecMode;
 
@@ -2315,18 +2314,14 @@ void C3DEngine::UpdateTISettings()
 	GetCVars()->e_svoTI_HalfresKernelSecondary = tiAdv.halfresKernelSecondary ? 1 : 0;
 	GetCVars()->e_svoTI_UseTODSkyColor = ti.useTodSkyColor;
 
-	GetCVars()->e_svoTI_HighGlossOcclusion = ti.highGlossOcclusion;
-	GetCVars()->e_svoTI_TranslucentBrightness = ti.translucentBrightness;
+	GetCVars()->e_svoTI_HighGlossOcclusion = tiAdv.highGlossOcclusion;
+	GetCVars()->e_svoTI_TranslucentBrightness = tiAdv.translucentBrightness;
 
 	#ifdef FEATURE_SVO_GI_ALLOW_HQ
 	GetCVars()->e_svoTI_IntegrationMode = tiAdv.integrationMode;
 	#else
 	GetCVars()->e_svoTI_IntegrationMode = 0;
 	#endif
-
-	GetCVars()->e_svoTI_RT_MaxDist = tiAdv.rtMaxDist;
-
-	GetCVars()->e_svoTI_ConstantAmbientDebug = tiAdv.constantAmbientDebug;
 
 	if (Cry3DEngineBase::GetCVars()->e_svoStreamVoxels != 2)
 		GetCVars()->e_svoStreamVoxels = tiAdv.streamVoxels ? 1 : 0;

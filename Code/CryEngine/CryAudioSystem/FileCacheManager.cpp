@@ -5,22 +5,21 @@
 #include "ATLEntities.h"
 #include "AudioCVars.h"
 #include "Common/Logger.h"
-#include "Common.h"
 #include <IAudioImpl.h>
 #include <CryRenderer/IRenderer.h>
 #include <CryMemory/IMemory.h>
 #include <CryString/CryPath.h>
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	#include "DebugColor.h"
 	#include <CryRenderer/IRenderAuxGeom.h>
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
 namespace CryAudio
 {
 //////////////////////////////////////////////////////////////////////////
-CFileCacheManager::CFileCacheManager(AudioPreloadRequestLookup& preloadRequests)
-	: m_preloadRequests(preloadRequests)
-	, m_currentByteTotal(0)
+CFileCacheManager::CFileCacheManager()
+	: m_currentByteTotal(0)
 	, m_maxByteTotal(0)
 {
 }
@@ -32,7 +31,7 @@ CFileCacheManager::~CFileCacheManager()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CFileCacheManager::Init()
+void CFileCacheManager::Initialize()
 {
 	AllocateHeap(static_cast<size_t>(g_cvars.m_fileCacheManagerSize), "AudioFileCacheManager");
 }
@@ -182,7 +181,7 @@ ERequestStatus CFileCacheManager::TryLoadRequest(PreloadRequestId const audioPre
 {
 	bool bFullSuccess = false;
 	bool bFullFailure = true;
-	CATLPreloadRequest* const pPreloadRequest = stl::find_in_map(m_preloadRequests, audioPreloadRequestId, nullptr);
+	CATLPreloadRequest* const pPreloadRequest = stl::find_in_map(g_preloadRequests, audioPreloadRequestId, nullptr);
 
 	if (pPreloadRequest != nullptr && (!bAutoLoadOnly || (bAutoLoadOnly && pPreloadRequest->m_bAutoLoad)))
 	{
@@ -209,7 +208,7 @@ ERequestStatus CFileCacheManager::TryUnloadRequest(PreloadRequestId const audioP
 {
 	bool bFullSuccess = false;
 	bool bFullFailure = true;
-	CATLPreloadRequest* const pPreloadRequest = stl::find_in_map(m_preloadRequests, audioPreloadRequestId, nullptr);
+	CATLPreloadRequest* const pPreloadRequest = stl::find_in_map(g_preloadRequests, audioPreloadRequestId, nullptr);
 
 	if (pPreloadRequest != nullptr)
 	{
@@ -336,7 +335,7 @@ void CFileCacheManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX,
 	float blue[4] = { 0.1f, 0.2f, 0.8f, originalAlpha };
 	float yellow[4] = { 1.0f, 1.0f, 0.0f, originalAlpha };
 
-	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_managerColorHeader.data(), false, "FileCacheManager (%d of %d KiB) [Entries: %d]", static_cast<int>(m_currentByteTotal >> 10), static_cast<int>(m_maxByteTotal >> 10), static_cast<int>(m_audioFileEntries.size()));
+	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_globalColorHeader.data(), false, "FileCacheManager (%d of %d KiB) [Entries: %d]", static_cast<int>(m_currentByteTotal >> 10), static_cast<int>(m_maxByteTotal >> 10), static_cast<int>(m_audioFileEntries.size()));
 	posY += Debug::g_managerHeaderLineHeight;
 
 	if (!m_audioFileEntries.empty())

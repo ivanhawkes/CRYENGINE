@@ -21,7 +21,6 @@ public:
 	void                   AppendTrack(CTrackViewTrack* pTrack);
 	void                   AppendTrackBundle(const CTrackViewTrackBundle& bundle);
 
-	bool                   IsOneTrack() const;
 	bool                   AreAllOfSameType() const { return m_bAllOfSameType; }
 	bool                   HasRotationTrack() const { return m_bHasRotationTrack; }
 
@@ -201,4 +200,3 @@ private:
 	CTrackViewAnimNode*    m_pTrackAnimNode;
 	std::vector<bool>      m_keySelectionStates;
 };
-

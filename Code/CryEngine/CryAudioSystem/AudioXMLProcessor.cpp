@@ -2,36 +2,15 @@
 
 #include "stdafx.h"
 #include "AudioXMLProcessor.h"
-#include "InternalEntities.h"
+#include "Managers.h"
+#include "FileCacheManager.h"
+#include "ATLEntities.h"
 #include "Common/Logger.h"
-#include "Common.h"
 #include <IAudioImpl.h>
 #include <CryString/CryPath.h>
 
 namespace CryAudio
 {
-#define AUDIO_TRIGGER_IMPL_ID_NUM_RESERVED 100 // IDs below that value are used for the CATLTriggerImpl_Internal
-
-//////////////////////////////////////////////////////////////////////////
-CAudioXMLProcessor::CAudioXMLProcessor(
-	AudioTriggerLookup& triggers,
-	AudioParameterLookup& parameters,
-	AudioSwitchLookup& switches,
-	AudioEnvironmentLookup& environments,
-	AudioPreloadRequestLookup& preloadRequests,
-	CFileCacheManager& fileCacheMgr,
-	SInternalControls const& internalControls)
-	: m_triggers(triggers)
-	, m_parameters(parameters)
-	, m_switches(switches)
-	, m_environments(environments)
-	, m_preloadRequests(preloadRequests)
-	, m_triggerImplIdCounter(AUDIO_TRIGGER_IMPL_ID_NUM_RESERVED)
-	, m_fileCacheMgr(fileCacheMgr)
-	, m_internalControls(internalControls)
-{
-}
-
 //////////////////////////////////////////////////////////////////////////
 void CAudioXMLProcessor::ParseControlsData(char const* const szFolderPath, EDataScope const dataScope)
 {
@@ -136,6 +115,10 @@ void CAudioXMLProcessor::ParseControlsFile(XmlNodeRef const pRootNode, EDataScop
 			{
 				ParseEnvironments(pChildNode, dataScope);
 			}
+			else if (_stricmp(szChildNodeTag, s_szSettingsNodeTag) == 0)
+			{
+				ParseSettings(pChildNode, dataScope);
+			}
 			else if (_stricmp(szChildNodeTag, s_szPreloadsNodeTag) == 0 ||
 			         _stricmp(szChildNodeTag, s_szEditorDataTag) == 0)
 			{
@@ -167,16 +150,13 @@ void CAudioXMLProcessor::ParseDefaultControlsFile(XmlNodeRef const pRootNode)
 			{
 				ParseDefaultTriggers(pChildNode);
 			}
-			else if (_stricmp(childNodeTag, s_szParametersNodeTag) == 0)
-			{
-				ParseDefaultParameters(pChildNode);
-			}
-			else if ((_stricmp(childNodeTag, s_szSwitchesNodeTag) == 0) ||
+			else if ((_stricmp(childNodeTag, s_szParametersNodeTag) == 0) ||
+			         (_stricmp(childNodeTag, s_szSwitchesNodeTag) == 0) ||
 			         (_stricmp(childNodeTag, s_szEnvironmentsNodeTag) == 0) ||
 			         (_stricmp(childNodeTag, s_szPreloadsNodeTag) == 0) ||
 			         (_stricmp(childNodeTag, s_szEditorDataTag) == 0))
 			{
-				// These tags are valid but ignored here, beacuse no default controls of these type currently exist.
+				// These tags are valid but ignored here, because no default controls of these type currently exist.
 			}
 			else
 			{
@@ -300,33 +280,20 @@ void CAudioXMLProcessor::ClearControlsData(EDataScope const dataScope)
 	{
 		if (dataScope == EDataScope::All || dataScope == EDataScope::Global)
 		{
-			delete g_pAbsoluteVelocityParameter;
-			g_pAbsoluteVelocityParameter = nullptr;
+			g_loseFocusTrigger.Clear();
+			g_getFocusTrigger.Clear();
+			g_muteAllTrigger.Clear();
+			g_unmuteAllTrigger.Clear();
+			g_pauseAllTrigger.Clear();
+			g_resumeAllTrigger.Clear();
 
-			delete g_pRelativeVelocityParameter;
-			g_pRelativeVelocityParameter = nullptr;
-
-			delete g_pLoseFocusTrigger;
-			g_pLoseFocusTrigger = nullptr;
-
-			delete g_pGetFocusTrigger;
-			g_pGetFocusTrigger = nullptr;
-
-			delete g_pMuteAllTrigger;
-			g_pMuteAllTrigger = nullptr;
-
-			delete g_pUnmuteAllTrigger;
-			g_pUnmuteAllTrigger = nullptr;
-
-			delete g_pPauseAllTrigger;
-			g_pPauseAllTrigger = nullptr;
-
-			delete g_pResumeAllTrigger;
-			g_pResumeAllTrigger = nullptr;
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+			g_previewTrigger.Clear();
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 		}
 
-		AudioTriggerLookup::iterator iterTriggers(m_triggers.begin());
-		AudioTriggerLookup::const_iterator iterTriggersEnd(m_triggers.end());
+		AudioTriggerLookup::iterator iterTriggers(g_triggers.begin());
+		AudioTriggerLookup::const_iterator iterTriggersEnd(g_triggers.end());
 
 		while (iterTriggers != iterTriggersEnd)
 		{
@@ -335,16 +302,16 @@ void CAudioXMLProcessor::ClearControlsData(EDataScope const dataScope)
 			if ((pTrigger->GetDataScope() == dataScope) || dataScope == EDataScope::All)
 			{
 				delete pTrigger;
-				iterTriggers = m_triggers.erase(iterTriggers);
-				iterTriggersEnd = m_triggers.end();
+				iterTriggers = g_triggers.erase(iterTriggers);
+				iterTriggersEnd = g_triggers.end();
 				continue;
 			}
 
 			++iterTriggers;
 		}
 
-		AudioParameterLookup::iterator iterParameters(m_parameters.begin());
-		AudioParameterLookup::const_iterator iterParametersEnd(m_parameters.end());
+		AudioParameterLookup::iterator iterParameters(g_parameters.begin());
+		AudioParameterLookup::const_iterator iterParametersEnd(g_parameters.end());
 
 		while (iterParameters != iterParametersEnd)
 		{
@@ -353,16 +320,16 @@ void CAudioXMLProcessor::ClearControlsData(EDataScope const dataScope)
 			if ((pParameter->GetDataScope() == dataScope) || dataScope == EDataScope::All)
 			{
 				delete pParameter;
-				iterParameters = m_parameters.erase(iterParameters);
-				iterParametersEnd = m_parameters.end();
+				iterParameters = g_parameters.erase(iterParameters);
+				iterParametersEnd = g_parameters.end();
 				continue;
 			}
 
 			++iterParameters;
 		}
 
-		AudioSwitchLookup::iterator iterSwitches(m_switches.begin());
-		AudioSwitchLookup::const_iterator iterSwitchesEnd(m_switches.end());
+		AudioSwitchLookup::iterator iterSwitches(g_switches.begin());
+		AudioSwitchLookup::const_iterator iterSwitchesEnd(g_switches.end());
 
 		while (iterSwitches != iterSwitchesEnd)
 		{
@@ -370,17 +337,17 @@ void CAudioXMLProcessor::ClearControlsData(EDataScope const dataScope)
 
 			if ((pSwitch->GetDataScope() == dataScope) || dataScope == EDataScope::All)
 			{
-				DeleteSwitch(pSwitch);
-				iterSwitches = m_switches.erase(iterSwitches);
-				iterSwitchesEnd = m_switches.end();
+				delete pSwitch;
+				iterSwitches = g_switches.erase(iterSwitches);
+				iterSwitchesEnd = g_switches.end();
 				continue;
 			}
 
 			++iterSwitches;
 		}
 
-		AudioEnvironmentLookup::iterator iterEnvironments(m_environments.begin());
-		AudioEnvironmentLookup::const_iterator iterEnvironmentsEnd(m_environments.end());
+		AudioEnvironmentLookup::iterator iterEnvironments(g_environments.begin());
+		AudioEnvironmentLookup::const_iterator iterEnvironmentsEnd(g_environments.end());
 
 		while (iterEnvironments != iterEnvironmentsEnd)
 		{
@@ -389,12 +356,30 @@ void CAudioXMLProcessor::ClearControlsData(EDataScope const dataScope)
 			if ((pEnvironment->GetDataScope() == dataScope) || dataScope == EDataScope::All)
 			{
 				DeleteEnvironment(pEnvironment);
-				iterEnvironments = m_environments.erase(iterEnvironments);
-				iterEnvironmentsEnd = m_environments.end();
+				iterEnvironments = g_environments.erase(iterEnvironments);
+				iterEnvironmentsEnd = g_environments.end();
 				continue;
 			}
 
 			++iterEnvironments;
+		}
+
+		SettingLookup::iterator iterSettings(g_settings.begin());
+		SettingLookup::const_iterator iterSettingsEnd(g_settings.end());
+
+		while (iterSettings != iterSettingsEnd)
+		{
+			CSetting const* const pSetting = iterSettings->second;
+
+			if ((pSetting->GetDataScope() == dataScope) || dataScope == EDataScope::All)
+			{
+				delete pSetting;
+				iterSettings = g_settings.erase(iterSettings);
+				iterSettingsEnd = g_settings.end();
+				continue;
+			}
+
+			++iterSettings;
 		}
 	}
 }
@@ -453,7 +438,7 @@ void CAudioXMLProcessor::ParsePreloads(XmlNodeRef const pPreloadDataRoot, EDataS
 
 					for (int k = 0; k < fileCount; ++k)
 					{
-						FileEntryId const id = m_fileCacheMgr.TryAddFileCacheEntry(pFileListParentNode->getChild(k), dataScope, isAutoLoad);
+						FileEntryId const id = g_fileCacheManager.TryAddFileCacheEntry(pFileListParentNode->getChild(k), dataScope, isAutoLoad);
 
 						if (id != InvalidFileEntryId)
 						{
@@ -465,7 +450,7 @@ void CAudioXMLProcessor::ParsePreloads(XmlNodeRef const pPreloadDataRoot, EDataS
 						}
 					}
 
-					CATLPreloadRequest* pPreloadRequest = stl::find_in_map(m_preloadRequests, preloadRequestId, nullptr);
+					CATLPreloadRequest* pPreloadRequest = stl::find_in_map(g_preloadRequests, preloadRequestId, nullptr);
 
 					if (pPreloadRequest == nullptr)
 					{
@@ -477,7 +462,7 @@ void CAudioXMLProcessor::ParsePreloads(XmlNodeRef const pPreloadDataRoot, EDataS
 
 						if (pPreloadRequest != nullptr)
 						{
-							m_preloadRequests[preloadRequestId] = pPreloadRequest;
+							g_preloadRequests[preloadRequestId] = pPreloadRequest;
 						}
 						else
 						{
@@ -504,8 +489,8 @@ void CAudioXMLProcessor::ClearPreloadsData(EDataScope const dataScope)
 {
 	if (g_pIImpl != nullptr)
 	{
-		AudioPreloadRequestLookup::iterator iRemover = m_preloadRequests.begin();
-		AudioPreloadRequestLookup::const_iterator const iEnd = m_preloadRequests.end();
+		AudioPreloadRequestLookup::iterator iRemover = g_preloadRequests.begin();
+		AudioPreloadRequestLookup::const_iterator const iEnd = g_preloadRequests.end();
 
 		while (iRemover != iEnd)
 		{
@@ -514,7 +499,7 @@ void CAudioXMLProcessor::ClearPreloadsData(EDataScope const dataScope)
 			if ((pRequest->GetDataScope() == dataScope) || dataScope == EDataScope::All)
 			{
 				DeletePreloadRequest(pRequest);
-				m_preloadRequests.erase(iRemover++);
+				g_preloadRequests.erase(iRemover++);
 			}
 			else
 			{
@@ -538,7 +523,7 @@ void CAudioXMLProcessor::ParseEnvironments(XmlNodeRef const pAudioEnvironmentRoo
 			char const* const szEnvironmentName = pEnvironmentNode->getAttr(s_szNameAttribute);
 			auto const environmentId = static_cast<EnvironmentId const>(StringToId(szEnvironmentName));
 
-			if ((environmentId != InvalidControlId) && (stl::find_in_map(m_environments, environmentId, nullptr) == nullptr))
+			if ((environmentId != InvalidControlId) && (stl::find_in_map(g_environments, environmentId, nullptr) == nullptr))
 			{
 				//there is no entry yet with this ID in the container
 				int const numConnections = pEnvironmentNode->getChildCount();
@@ -574,13 +559,89 @@ void CAudioXMLProcessor::ParseEnvironments(XmlNodeRef const pAudioEnvironmentRoo
 
 					if (pNewEnvironment != nullptr)
 					{
-						m_environments[environmentId] = pNewEnvironment;
+						g_environments[environmentId] = pNewEnvironment;
 					}
 				}
 			}
 			else
 			{
 				Cry::Audio::Log(ELogType::Error, R"(Environment "%s" already exists!)", szEnvironmentName);
+			}
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CAudioXMLProcessor::ParseSettings(XmlNodeRef const pRoot, EDataScope const dataScope)
+{
+	int const numSettings = pRoot->getChildCount();
+
+	for (int i = 0; i < numSettings; ++i)
+	{
+		XmlNodeRef const pSettingNode(pRoot->getChild(i));
+
+		if (pSettingNode && _stricmp(pSettingNode->getTag(), s_szSettingTag) == 0)
+		{
+			char const* const szSettingName = pSettingNode->getAttr(s_szNameAttribute);
+			auto const settingId = static_cast<ControlId>(StringToId(szSettingName));
+
+			if ((settingId != InvalidControlId) && (stl::find_in_map(g_settings, settingId, nullptr) == nullptr))
+			{
+				XmlNodeRef pSettingImplParentNode = nullptr;
+				int const numPlatforms = pSettingNode->getChildCount();
+
+				for (int j = 0; j < numPlatforms; ++j)
+				{
+					XmlNodeRef const pPlatformNode(pSettingNode->getChild(j));
+
+					if ((pPlatformNode != nullptr) && (_stricmp(pPlatformNode->getAttr(s_szNameAttribute), SATLXMLTags::szPlatform) == 0))
+					{
+						pSettingImplParentNode = pPlatformNode;
+						break;
+					}
+				}
+
+				if (pSettingImplParentNode != nullptr)
+				{
+					bool const isAutoLoad = (_stricmp(pSettingNode->getAttr(s_szTypeAttribute), s_szDataLoadType) == 0);
+
+					int const numConnections = pSettingImplParentNode->getChildCount();
+					SettingConnections connections;
+					connections.reserve(numConnections);
+
+					for (int k = 0; k < numConnections; ++k)
+					{
+						XmlNodeRef const pSettingImplNode(pSettingImplParentNode->getChild(k));
+
+						if (pSettingImplNode != nullptr)
+						{
+							Impl::ISetting const* const pISetting = g_pIImpl->ConstructSetting(pSettingImplNode);
+
+							if (pISetting != nullptr)
+							{
+								CSettingImpl const* const pSettingImpl = new CSettingImpl(pISetting);
+								connections.push_back(pSettingImpl);
+							}
+						}
+					}
+
+					connections.shrink_to_fit();
+
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+					auto const pNewSetting = new CSetting(settingId, dataScope, isAutoLoad, connections, szSettingName);
+#else
+					auto const pNewSetting = new CSetting(settingId, dataScope, isAutoLoad, connections);
+#endif        // INCLUDE_AUDIO_PRODUCTION_CODE
+
+					if (pNewSetting != nullptr)
+					{
+						g_settings[settingId] = pNewSetting;
+					}
+				}
+			}
+			else
+			{
+				Cry::Audio::Log(ELogType::Error, R"(Setting "%s" already exists!)", szSettingName);
 			}
 		}
 	}
@@ -600,14 +661,15 @@ void CAudioXMLProcessor::ParseTriggers(XmlNodeRef const pXMLTriggerRoot, EDataSc
 			char const* const szTriggerName = pTriggerNode->getAttr(s_szNameAttribute);
 			auto const triggerId = static_cast<ControlId const>(StringToId(szTriggerName));
 
-			if ((triggerId != InvalidControlId) && (stl::find_in_map(m_triggers, triggerId, nullptr) == nullptr))
+			if ((triggerId != InvalidControlId) && (stl::find_in_map(g_triggers, triggerId, nullptr) == nullptr))
 			{
 				int const numConnections = pTriggerNode->getChildCount();
 				TriggerConnections connections;
 				connections.reserve(numConnections);
 
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 				float maxRadius = 0.0f;
-				pTriggerNode->getAttr(s_szRadiusAttribute, maxRadius);
+#endif        // INCLUDE_AUDIO_PRODUCTION_CODE
 
 				for (int m = 0; m < numConnections; ++m)
 				{
@@ -615,12 +677,17 @@ void CAudioXMLProcessor::ParseTriggers(XmlNodeRef const pXMLTriggerRoot, EDataSc
 
 					if (pTriggerImplNode)
 					{
-						Impl::ITrigger const* const pITrigger = g_pIImpl->ConstructTrigger(pTriggerImplNode);
+						float radius = 0.0f;
+						Impl::ITrigger const* const pITrigger = g_pIImpl->ConstructTrigger(pTriggerImplNode, radius);
 
 						if (pITrigger != nullptr)
 						{
-							CATLTriggerImpl const* const pTriggerImpl = new CATLTriggerImpl(++m_triggerImplIdCounter, pITrigger);
+							CATLTriggerImpl const* const pTriggerImpl = new CATLTriggerImpl(++g_uniqueConnectionId, pITrigger);
 							connections.push_back(pTriggerImpl);
+
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+							maxRadius = std::max(radius, maxRadius);
+#endif          // INCLUDE_AUDIO_PRODUCTION_CODE
 						}
 					}
 				}
@@ -630,12 +697,12 @@ void CAudioXMLProcessor::ParseTriggers(XmlNodeRef const pXMLTriggerRoot, EDataSc
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 				CTrigger* const pNewTrigger = new CTrigger(triggerId, dataScope, connections, maxRadius, szTriggerName);
 #else
-				CTrigger* const pNewTrigger = new CTrigger(triggerId, dataScope, connections, maxRadius);
+				CTrigger* const pNewTrigger = new CTrigger(triggerId, dataScope, connections);
 #endif        // INCLUDE_AUDIO_PRODUCTION_CODE
 
 				if (pNewTrigger != nullptr)
 				{
-					m_triggers[triggerId] = pNewTrigger;
+					g_triggers[triggerId] = pNewTrigger;
 				}
 			}
 			else
@@ -669,11 +736,12 @@ void CAudioXMLProcessor::ParseDefaultTriggers(XmlNodeRef const pXMLTriggerRoot)
 
 				if (pConnectionNode != nullptr)
 				{
-					Impl::ITrigger const* const pITrigger = g_pIImpl->ConstructTrigger(pConnectionNode);
+					float radius = 0.0f;
+					Impl::ITrigger const* const pITrigger = g_pIImpl->ConstructTrigger(pConnectionNode, radius);
 
 					if (pITrigger != nullptr)
 					{
-						CATLTriggerImpl const* const pTriggerImpl = new CATLTriggerImpl(++m_triggerImplIdCounter, pITrigger);
+						CATLTriggerImpl const* const pTriggerImpl = new CATLTriggerImpl(++g_uniqueConnectionId, pITrigger);
 						connections.push_back(pTriggerImpl);
 					}
 				}
@@ -685,44 +753,32 @@ void CAudioXMLProcessor::ParseDefaultTriggers(XmlNodeRef const pXMLTriggerRoot)
 			{
 			case LoseFocusTriggerId:
 				{
-					CRY_ASSERT_MESSAGE(g_pLoseFocusTrigger == nullptr, "<Audio> lose focus trigger must be nullptr during initialization.");
-					g_pLoseFocusTrigger = new CLoseFocusTrigger(connections);
-
+					g_loseFocusTrigger.AddConnections(connections);
 					break;
 				}
 			case GetFocusTriggerId:
 				{
-					CRY_ASSERT_MESSAGE(g_pGetFocusTrigger == nullptr, "<Audio> get focus trigger must be nullptr during initialization.");
-					g_pGetFocusTrigger = new CGetFocusTrigger(connections);
-
+					g_getFocusTrigger.AddConnections(connections);
 					break;
 				}
 			case MuteAllTriggerId:
 				{
-					CRY_ASSERT_MESSAGE(g_pMuteAllTrigger == nullptr, "<Audio> mute all trigger must be nullptr during initialization.");
-					g_pMuteAllTrigger = new CMuteAllTrigger(connections);
-
+					g_muteAllTrigger.AddConnections(connections);
 					break;
 				}
 			case UnmuteAllTriggerId:
 				{
-					CRY_ASSERT_MESSAGE(g_pUnmuteAllTrigger == nullptr, "<Audio> unmute all trigger must be nullptr during initialization.");
-					g_pUnmuteAllTrigger = new CUnmuteAllTrigger(connections);
-
+					g_unmuteAllTrigger.AddConnections(connections);
 					break;
 				}
 			case PauseAllTriggerId:
 				{
-					CRY_ASSERT_MESSAGE(g_pPauseAllTrigger == nullptr, "<Audio> pause all trigger must be nullptr during initialization.");
-					g_pPauseAllTrigger = new CPauseAllTrigger(connections);
-
+					g_pauseAllTrigger.AddConnections(connections);
 					break;
 				}
 			case ResumeAllTriggerId:
 				{
-					CRY_ASSERT_MESSAGE(g_pResumeAllTrigger == nullptr, "<Audio> resume all trigger must be nullptr during initialization.");
-					g_pResumeAllTrigger = new CResumeAllTrigger(connections);
-
+					g_resumeAllTrigger.AddConnections(connections);
 					break;
 				}
 			default:
@@ -747,7 +803,7 @@ void CAudioXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataSco
 			char const* const szSwitchName = pSwitchNode->getAttr(s_szNameAttribute);
 			auto const switchId = static_cast<ControlId const>(StringToId(szSwitchName));
 
-			if ((switchId != InvalidControlId) && (stl::find_in_map(m_switches, switchId, nullptr) == nullptr))
+			if ((switchId != InvalidControlId) && (stl::find_in_map(g_switches, switchId, nullptr) == nullptr))
 			{
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 				auto const pNewSwitch = new CATLSwitch(switchId, dataScope, szSwitchName);
@@ -769,7 +825,7 @@ void CAudioXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataSco
 						if (switchStateId != InvalidSwitchStateId)
 						{
 							int const numConnections = pSwitchStateNode->getChildCount();
-							CATLSwitchState::ImplPtrVec connections;
+							SwitchStateConnections connections;
 							connections.reserve(numConnections);
 
 							for (int k = 0; k < numConnections; ++k)
@@ -783,8 +839,8 @@ void CAudioXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataSco
 									if (pISwitchState != nullptr)
 									{
 										// Only add the connection if the middleware recognizes the control
-										CExternalAudioSwitchStateImpl const* const pExternalSwitchStateImpl = new CExternalAudioSwitchStateImpl(pISwitchState);
-										connections.push_back(pExternalSwitchStateImpl);
+										CSwitchStateImpl const* const pSwitchStateImpl = new CSwitchStateImpl(pISwitchState);
+										connections.push_back(pSwitchStateImpl);
 									}
 								}
 							}
@@ -795,12 +851,12 @@ void CAudioXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataSco
 							auto const pNewState = new CATLSwitchState(switchId, switchStateId, connections);
 #endif          // INCLUDE_AUDIO_PRODUCTION_CODE
 
-							pNewSwitch->audioSwitchStates[switchStateId] = pNewState;
+							pNewSwitch->AddState(switchStateId, pNewState);
 						}
 					}
 				}
 
-				m_switches[switchId] = pNewSwitch;
+				g_switches[switchId] = pNewSwitch;
 			}
 			else
 			{
@@ -824,7 +880,7 @@ void CAudioXMLProcessor::ParseParameters(XmlNodeRef const pXMLParameterRoot, EDa
 			char const* const szParameterName = pParameterNode->getAttr(s_szNameAttribute);
 			auto const parameterId = static_cast<ControlId const>(StringToId(szParameterName));
 
-			if ((parameterId != InvalidControlId) && (stl::find_in_map(m_parameters, parameterId, nullptr) == nullptr))
+			if ((parameterId != InvalidControlId) && (stl::find_in_map(g_parameters, parameterId, nullptr) == nullptr))
 			{
 				int const numConnections = pParameterNode->getChildCount();
 				ParameterConnections connections;
@@ -856,7 +912,7 @@ void CAudioXMLProcessor::ParseParameters(XmlNodeRef const pXMLParameterRoot, EDa
 
 				if (pParameter != nullptr)
 				{
-					m_parameters[parameterId] = pParameter;
+					g_parameters[parameterId] = pParameter;
 				}
 			}
 			else
@@ -864,92 +920,6 @@ void CAudioXMLProcessor::ParseParameters(XmlNodeRef const pXMLParameterRoot, EDa
 				Cry::Audio::Log(ELogType::Error, R"(Parameter "%s" already exists!)", szParameterName);
 			}
 		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CAudioXMLProcessor::ParseDefaultParameters(XmlNodeRef const pXMLParameterRoot)
-{
-	int const numParameters = pXMLParameterRoot->getChildCount();
-
-	for (int i = 0; i < numParameters; ++i)
-	{
-		XmlNodeRef const pParameterNode(pXMLParameterRoot->getChild(i));
-
-		if (pParameterNode && _stricmp(pParameterNode->getTag(), s_szParameterTag) == 0)
-		{
-			char const* const szParameterName = pParameterNode->getAttr(s_szNameAttribute);
-			ControlId const parameterId = static_cast<ControlId const>(StringToId(szParameterName));
-			int const numConnections = pParameterNode->getChildCount();
-			ParameterConnections connections;
-			connections.reserve(numConnections);
-
-			for (int j = 0; j < numConnections; ++j)
-			{
-				XmlNodeRef const pParameterImplNode(pParameterNode->getChild(j));
-
-				if (pParameterImplNode != nullptr)
-				{
-					Impl::IParameter const* const pExternalParameterImpl = g_pIImpl->ConstructParameter(pParameterImplNode);
-
-					if (pExternalParameterImpl != nullptr)
-					{
-						CParameterImpl const* const pParameterImpl = new CParameterImpl(pExternalParameterImpl);
-						connections.push_back(pParameterImpl);
-					}
-				}
-			}
-
-			connections.shrink_to_fit();
-
-			switch (parameterId)
-			{
-			case AbsoluteVelocityParameterId:
-				{
-					CRY_ASSERT_MESSAGE(g_pAbsoluteVelocityParameter == nullptr, "<Audio> absolute velocity parameter must be nullptr during initialization.");
-					g_pAbsoluteVelocityParameter = new CAbsoluteVelocityParameter(connections);
-
-					break;
-				}
-			case RelativeVelocityParameterId:
-				{
-					CRY_ASSERT_MESSAGE(g_pRelativeVelocityParameter == nullptr, "<Audio> relative velocity parameter must be nullptr during initialization.");
-					g_pRelativeVelocityParameter = new CRelativeVelocityParameter(connections);
-
-					break;
-				}
-			default:
-				{
-					CRY_ASSERT_MESSAGE(false, R"(The default parameter "%s" does not exist.)", szParameterName);
-
-					break;
-				}
-			}
-		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CAudioXMLProcessor::DeleteSwitch(CATLSwitch const* const pSwitch)
-{
-	if (pSwitch != nullptr)
-	{
-		for (auto const& statePair : pSwitch->audioSwitchStates)
-		{
-			CATLSwitchState const* const pSwitchState = statePair.second;
-
-			if (pSwitchState != nullptr)
-			{
-				for (auto const pStateImpl : pSwitchState->m_implPtrs)
-				{
-					delete pStateImpl;
-				}
-
-				delete pSwitchState;
-			}
-		}
-
-		delete pSwitch;
 	}
 }
 
@@ -962,7 +932,7 @@ void CAudioXMLProcessor::DeletePreloadRequest(CATLPreloadRequest const* const pP
 
 		for (auto const fileId : pPreloadRequest->m_fileEntryIds)
 		{
-			m_fileCacheMgr.TryRemoveFileCacheEntry(fileId, dataScope);
+			g_fileCacheManager.TryRemoveFileCacheEntry(fileId, dataScope);
 		}
 
 		delete pPreloadRequest;

@@ -37,7 +37,7 @@ CVegetationSelectTool::CVegetationSelectTool()
 	, m_pVegetationMap(GetIEditorImpl()->GetVegetationMap())
 	, m_pManipulator(nullptr)
 {
-	GetIEditorImpl()->ClearSelection();
+	GetIEditorImpl()->GetObjectManager()->ClearSelection();
 }
 
 CVegetationSelectTool::~CVegetationSelectTool()
@@ -90,7 +90,7 @@ void CVegetationSelectTool::Display(SDisplayContext& dc)
 		}
 	}
 
-	if (dc.flags & DISPLAY_2D)
+	if (dc.display2D)
 	{
 		return;
 	}

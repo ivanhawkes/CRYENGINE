@@ -8,21 +8,16 @@
  */
 
 #include "StdAfx.h"
-#include <memory>
 #include "IconXPMCache.h"
-#include "QPropertyTree.h"
-#include <CrySerialization/yasli/decorators/IconXPM.h>
+
 #include "Serialization/PropertyTree/Unicode.h"
-#include <QApplication>
-#include <QStyleOption>
-#include <QPainter>
-#include <QBitmap>
+#include "Serialization/QPropertyTree/QPropertyTree.h"
+
+#include <CrySerialization/yasli/decorators/IconXPM.h>
 
 #ifndef _MSC_VER
 # define _stricmp strcasecmp
 #endif
-
-// ---------------------------------------------------------------------------
 
 namespace property_tree {
 
@@ -185,7 +180,6 @@ QImage* IconXPMCache::getImageForIcon(const Icon& icon)
 		FilenameToBitmap::iterator it = filenameToImageMap_.find(icon.filename);
 		if (it != filenameToImageMap_.end())
 			return it->second.bitmap;
-		;
 
 		BitmapCache& cache = filenameToImageMap_[icon.filename];
 		cache.bitmap = new QImage(property_tree::PropertyIcon(QString::fromUtf8(icon.filename.c_str())).pixmap(16, 16).toImage());
@@ -196,8 +190,4 @@ QImage* IconXPMCache::getImageForIcon(const Icon& icon)
 	return &emptyImage;
 }
 
-// ---------------------------------------------------------------------------
-
-
 }
-

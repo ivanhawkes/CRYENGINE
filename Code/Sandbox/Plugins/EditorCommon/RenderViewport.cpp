@@ -2,48 +2,42 @@
 
 #include "StdAfx.h"
 #include "RenderViewport.h"
-#include <CryInput/IInput.h>
-
-#include <Cry3DEngine/I3DEngine.h>
-#include <CryPhysics/IPhysics.h>
-#include <CryAISystem/IAISystem.h>
-#include <CrySystem/IConsole.h>
-#include <CrySystem/ITimer.h>
-#include <CryInput/IInput.h>
-#include <CryRenderer/IRenderAuxGeom.h>
-#include <CryMath/Cry_GeoIntersect.h>
-#include <CryMath/Cry_Math.h>
-#include <CryInput/IHardwareMouse.h>
-#include <CryGame/IGameFramework.h>
-#include <CryAnimation/ICryAnimation.h>
-#include <CryPhysics/IPhysicsDebugRenderer.h>
-#include "Gizmos/IGizmoManager.h"
 
 #include "Controls/DynamicPopupMenu.h"
 #include "EditorFramework/Events.h"
-#include "ViewportInteraction.h"
-#include <Preferences/ViewportPreferences.h>
-#include "Objects\BaseObject.h"
+#include "Gizmos/IGizmoManager.h"
+#include "LevelEditor/Tools/EditTool.h"
+#include "Objects/BaseObject.h"
+#include "Preferences/SnappingPreferences.h"
+#include "Preferences/ViewportPreferences.h"
+#include "ILevelEditor.h"
+#include "IObjectManager.h"
 #include "IUndoManager.h"
 #include "IViewportManager.h"
-#include "IObjectManager.h"
-#include "ILevelEditor.h"
-#include "LevelEditor/Tools/EditTool.h"
-
-#include <QResizeEvent>
 #include "QtUtil.h"
-#include "Grid.h"
 #include "RenderLock.h"
+#include "ViewportInteraction.h"
 
-void* CRenderViewport::m_currentContextWnd = 0;
-CRenderViewport* CRenderViewport::m_pPrimaryViewport = 0;
+#include <Cry3DEngine/I3DEngine.h>
+#include <CryAISystem/IAISystem.h>
+#include <CryAnimation/ICryAnimation.h>
+#include <CryInput/IHardwareMouse.h>
+#include <CryInput/IInput.h>
+#include <CryMath/Cry_GeoIntersect.h>
+#include <CryMath/Cry_Math.h>
+#include <CryPhysics/IPhysics.h>
+#include <CryPhysics/IPhysicsDebugRenderer.h>
+#include <CryRenderer/IRenderAuxGeom.h>
+#include <CrySystem/IConsole.h>
+#include <CrySystem/ITimer.h>
 
-#define MAX_ORBIT_DISTANCE        (2000.0f)
-#define RENDER_MESH_TEST_DISTANCE (0.2f)
+void* CRenderViewport::m_currentContextWnd = nullptr;
+CRenderViewport* CRenderViewport::m_pPrimaryViewport = nullptr;
 
 namespace
 {
 const char renderViewportTitleName[] = "Perspective";
+const float g_renderMeshTestDistance = 0.2f;
 }
 
 SCameraPreferences CRenderViewport::s_cameraPreferences;
@@ -72,7 +66,6 @@ bool SCameraPreferences::Serialize(yasli::Archive& ar)
 //////////////////////////////////////////////////////////////////////////
 // CRenderViewport
 //////////////////////////////////////////////////////////////////////////
-
 CRenderViewport::CRenderViewport() : m_pCameraDelegate(nullptr)
 {
 	m_pSkipEnts = 0;
@@ -112,7 +105,6 @@ CRenderViewport::CRenderViewport() : m_pCameraDelegate(nullptr)
 	m_lastCameraSpeedScale = 1.0f;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::OnFilterCryInputEvent(CryInputEvent* evt)
 {
 	SInputEvent* pInput = evt->GetInputEvent();
@@ -137,7 +129,6 @@ void CRenderViewport::OnFilterCryInputEvent(CryInputEvent* evt)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 CRenderViewport::~CRenderViewport()
 {
 	DestroyRenderContext();
@@ -146,10 +137,8 @@ CRenderViewport::~CRenderViewport()
 	delete[] m_pSkipEnts;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::InitCommon()
 {
-
 	m_Camera = GetIEditor()->GetSystem()->GetViewCamera();
 	SetViewTM(m_Camera.GetMatrix());
 
@@ -180,7 +169,6 @@ void CRenderViewport::InitCommon()
 	m_engine = GetIEditor()->Get3DEngine();
 }
 
-//////////////////////////////////////////////////////////////////////////
 static int OnPaintFilter(unsigned int code, struct _EXCEPTION_POINTERS* ep)
 {
 	// Win32 handles first-chance exceptions generated during the execution of WM_PAINT.
@@ -201,7 +189,6 @@ static int OnPaintFilter(unsigned int code, struct _EXCEPTION_POINTERS* ep)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::OnPaintSafe()
 {
 	__try
@@ -219,7 +206,6 @@ void CRenderViewport::OnPaintSafe()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::ProcessMouse()
 {
 	CPoint point;
@@ -397,13 +383,11 @@ void CRenderViewport::ProcessMouse()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::ResetContent()
 {
 	CViewport::ResetContent();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::UpdateContent(int flags)
 {
 	CViewport::UpdateContent(flags);
@@ -413,7 +397,6 @@ void CRenderViewport::UpdateContent(int flags)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::Update()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
@@ -484,7 +467,7 @@ void CRenderViewport::Update()
 				return;
 		}
 
-		// Why 16? Internal effects can use half or quarter renderbuffer size so this ensures some leeway in resolution (see CE-8648)
+		// Why 16? Internal effects can use half or quarter render buffer size so this ensures some leeway in resolution (see CE-8648)
 		CRect rcClient;
 		GetClientRect(&rcClient);
 		if (rcClient.right < 16 || rcClient.bottom < 16)
@@ -495,12 +478,6 @@ void CRenderViewport::Update()
 
 		// Configures Aux to draw to the current display-context
 		SDisplayContext displayContext = InitDisplayContext(m_displayContextKey);
-
-		if (m_bForceUpdateVisibleObjectCache)
-		{
-			GetIEditor()->GetObjectManager()->ForceUpdateVisibleObjectCache(displayContext);
-			m_bForceUpdateVisibleObjectCache = false;
-		}
 
 		// 3D engine stats
 		GetIEditor()->GetSystem()->RenderBegin(m_displayContextKey);
@@ -525,8 +502,6 @@ void CRenderViewport::Update()
 		// draw gizmos on top of 2d icons.
 		GetIEditor()->GetGizmoManager()->Display(displayContext);
 
-		// 3D engine stats
-
 		CCamera CurCamera = gEnv->pSystem->GetViewCamera();
 		gEnv->pSystem->SetViewCamera(m_Camera);
 
@@ -548,7 +523,6 @@ void CRenderViewport::Update()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::SetCameraObject(CBaseObject* cameraObject)
 {
 	m_pCameraDelegate = NULL;
@@ -596,7 +570,6 @@ void CRenderViewport::SetCameraDelegate(const ICameraDelegate* pDelegate)
 	GetIEditor()->Notify(eNotify_CameraChanged);
 }
 
-//////////////////////////////////////////////////////////////////////////
 CBaseObject* CRenderViewport::GetCameraObject() const
 {
 	CBaseObject* pCameraObject = NULL;
@@ -615,7 +588,6 @@ CBaseObject* CRenderViewport::GetCameraObject() const
 	return pCameraObject;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::OnEditorNotifyEvent(EEditorNotifyEvent event)
 {
 	switch (event)
@@ -674,15 +646,6 @@ void CRenderViewport::OnEditorNotifyEvent(EEditorNotifyEvent event)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
-namespace {
-inline Vec3 NegY(const Vec3& v, float y)
-{
-	return Vec3(v.x, y - v.y, v.z);
-}
-}
-
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::RenderSelectionRectangle(SDisplayContext& context)
 {
 	if (m_selectedRect.IsRectEmpty())
@@ -697,12 +660,10 @@ void CRenderViewport::RenderSelectionRectangle(SDisplayContext& context)
 	context.DrawWireQuad2d(topLeft, bottomRight, 1);
 }
 
-//////////////////////////////////////////////////////////////////////////
 SDisplayContext CRenderViewport::InitDisplayContext(const SDisplayContextKey& displayContextKey)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
 
-	// Draw all objects.
 	SDisplayContext dctx;
 	dctx.SetDisplayContext(displayContextKey, IRenderer::eViewportType_Default);
 	dctx.SetView(this);
@@ -711,47 +672,51 @@ SDisplayContext CRenderViewport::InitDisplayContext(const SDisplayContextKey& di
 	dctx.engine = m_engine;
 	dctx.box.min = Vec3(-100000, -100000, -100000);
 	dctx.box.max = Vec3(100000, 100000, 100000);
-	dctx.flags = 0;
 	dctx.pIconManager = GetIEditor()->GetIconManager();
 
-	if (!gViewportPreferences.displayLabels || !(GetIEditor()->IsHelpersDisplayed()))
+	if (m_helperSettings.enabled)
 	{
-		dctx.flags |= DISPLAY_HIDENAMES;
-	}
-	if (gViewportPreferences.displayLinks && GetIEditor()->IsHelpersDisplayed())
-	{
-		dctx.flags |= DISPLAY_LINKS;
-	}
-	if (m_bDegradateQuality)
-	{
-		dctx.flags |= DISPLAY_DEGRADATED;
-	}
-	if (gViewportPreferences.showBBoxes)
-	{
-		dctx.flags |= DISPLAY_BBOX;
+		dctx.enabled = m_helperSettings.enabled;
+
+		dctx.showIcons = m_helperSettings.showIcons;
+		dctx.showMesh = m_helperSettings.showMesh;
+		dctx.showAnimationTracks = m_helperSettings.showAnimationTracks;
+		dctx.showBoundingBoxes = m_helperSettings.showBoundingBoxes;
+		dctx.showComponentHelpers = m_helperSettings.showComponentHelpers;
+		dctx.showDimensions = m_helperSettings.showDimensions;
+		dctx.fillSelectedShapes = m_helperSettings.fillSelectedShapes;
+		dctx.showFrozenObjectsHelpers = m_helperSettings.showFrozenObjectsHelpers;
+		dctx.showTextLabels = m_helperSettings.showTextLabels;
+		dctx.showEntityObjectsTextLabels = m_helperSettings.showEntityObjectsTextLabels;
+		dctx.showLinks = m_helperSettings.showLinks;
+		dctx.showMeshStatsOnMouseOver = m_helperSettings.showMeshStatsOnMouseOver;
+		dctx.showRadii = m_helperSettings.showRadii;
+		dctx.showSelectedObjectOrientation = m_helperSettings.showSelectedObjectOrientation;
+		dctx.showSnappingGridGuide = m_helperSettings.showSnappingGridGuide;
+		dctx.showTriggerBounds = m_helperSettings.showTriggerBounds;
+
+		dctx.showAreaHelper = m_helperSettings.showAreaHelper;
+		dctx.showBrushHelper = m_helperSettings.showBrushHelper;
+		dctx.showDecalHelper = m_helperSettings.showDecalHelper;
+		dctx.showEntityObjectHelper = m_helperSettings.showEntityObjectHelper;
+		dctx.showEnviromentProbeHelper = m_helperSettings.showEnviromentProbeHelper;
+		dctx.showGroupHelper = m_helperSettings.showGroupHelper;
+		dctx.showPrefabHelper = m_helperSettings.showPrefabHelper;
+		dctx.showPrefabBounds = m_helperSettings.showPrefabBounds;
+		dctx.showPrefabChildrenHelpers = m_helperSettings.showPrefabChildrenHelpers;
+		dctx.showRoadHelper = m_helperSettings.showRoadHelper;
+		dctx.showShapeHelper = m_helperSettings.showShapeHelper;
 	}
 
-	if (gViewportPreferences.displayTracks && GetIEditor()->IsHelpersDisplayed())
-	{
-		dctx.flags |= DISPLAY_TRACKS;
-		dctx.flags |= DISPLAY_TRACKTICKS;
-	}
-
-	if (m_bAdvancedSelectMode)
-		dctx.flags |= DISPLAY_SELECTION_HELPERS;
-
-	if (GetIEditor()->GetLevelEditorSharedState()->GetCoordSystem() == CLevelEditorSharedState::CoordSystem::World)
-	{
-		dctx.flags |= DISPLAY_WORLDSPACEAXIS;
-	}
+	// Selection helpers should be visible even if helpers are disabled
+	dctx.displaySelectionHelpers = m_bAdvancedSelectMode;
 
 	return dctx;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::DrawAxis(SDisplayContext& context)
 {
-	if (!GetIEditor()->IsHelpersDisplayed())      // show axis only if draw helpers is activated
+	if (!m_helperSettings.enabled)
 		return;
 
 	Vec3 colX(1, 0, 0), colY(0, 1, 0), colZ(0, 0, 1), colW(1, 1, 1);
@@ -795,12 +760,12 @@ void CRenderViewport::DrawAxis(SDisplayContext& context)
 	context.SetState(prevRState);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::DrawBackground(SDisplayContext& context)
 {
-
-	if (!GetIEditor()->IsHelpersDisplayed())      // show gradient bg only if draw helpers are activated
+	if (!m_helperSettings.enabled)
+	{
 		return;
+	}
 
 	const float startX = 0.0f;
 	const float endX = m_Camera.GetViewSurfaceX();
@@ -830,7 +795,6 @@ void CRenderViewport::DrawBackground(SDisplayContext& context)
 	context.DrawQuadGradient(bottomRight, bottomLeft, topLeft, topRight, secondC, firstC);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::RenderCursorString()
 {
 	if (m_cursorStr.IsEmpty())
@@ -852,7 +816,6 @@ void CRenderViewport::RenderCursorString()
 	IRenderAuxText::Draw2dLabel(point.x + 12, point.y + 4, 1.2f, col, false, "%s", (const char*)m_cursorStr);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::UpdateSafeFrame()
 {
 	CRect rcClient;
@@ -896,7 +859,6 @@ void CRenderViewport::UpdateSafeFrame()
 	m_safeTitle.DeflateRect(m_safeFrame.Width() * SAFE_TITLE_SCALE_FACTOR, m_safeFrame.Height() * SAFE_TITLE_SCALE_FACTOR);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::RenderSafeFrame(SDisplayContext& context)
 {
 	RenderSafeFrame(context, m_safeFrame, 0.75f, 0.75f, 0, 0.8f);
@@ -904,7 +866,6 @@ void CRenderViewport::RenderSafeFrame(SDisplayContext& context)
 	RenderSafeFrame(context, m_safeTitle, 0.80f, 0.60f, 0, 0.8f);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::RenderSafeFrame(SDisplayContext& context, const CRect& frame, float r, float g, float b, float a)
 {
 	context.SetColor(r, g, b, a);
@@ -919,13 +880,11 @@ void CRenderViewport::RenderSafeFrame(SDisplayContext& context, const CRect& fra
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CRenderViewport::GetAspectRatio() const
 {
 	return gViewportPreferences.defaultAspectRatio;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::RenderSnapMarker(SDisplayContext& context)
 {
 	if (!gSnappingPreferences.markerDisplay())
@@ -959,57 +918,6 @@ void CRenderViewport::RenderSnapMarker(SDisplayContext& context)
 	context.DrawLine2d(point + CPoint(s, -s), point + CPoint(s, s), 0);
 }
 
-//////////////////////////////////////////////////////////////////////////
-static void OnMenuDisplayWireframe()
-{
-	ICVar* piVar(gEnv->pConsole->GetCVar("r_wireframe"));
-	int nRenderMode = piVar->GetIVal();
-	if (nRenderMode != R_WIREFRAME_MODE)
-	{
-		piVar->Set(R_WIREFRAME_MODE);
-	}
-	else
-	{
-		piVar->Set(R_SOLID_MODE);
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-static void OnMenuDisplayPointMode()
-{
-	ICVar* piVar(gEnv->pConsole->GetCVar("r_wireframe"));
-	int nRenderMode = piVar->GetIVal();
-	if (nRenderMode != R_POINT_MODE)
-	{
-		piVar->Set(R_POINT_MODE);
-	}
-	else
-	{
-		piVar->Set(R_SOLID_MODE);
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-static void OnMenuTargetAspectRatio(float aspect)
-{
-	gViewportPreferences.defaultAspectRatio = aspect;
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CRenderViewport::ToggleCameraObject()
-{
-	/*m_bSequenceCamera = !m_bSequenceCamera;
-	   if (m_bSequenceCamera == false)
-	   gEnv->p3DEngine->SetPostEffectParam("Dof_Active", 0);*/
-
-	SetCameraObject(0);
-
-	//GetIEditor()->GetAnimation()->ForceAnimation();
-
-	//GetIEditor()->GetAnimation()->ForceAnimation();
-}
-
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::SetCamera(const CCamera& camera)
 {
 	const CCamera& ccam = gEnv->pSystem->GetViewCamera();
@@ -1019,7 +927,6 @@ void CRenderViewport::SetCamera(const CCamera& camera)
 	SetViewTM(m_Camera.GetMatrix());
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CRenderViewport::GetCameraRotateSpeed() const
 {
 	return gViewportMovementPreferences.camRotateSpeed;
@@ -1045,7 +952,6 @@ void CRenderViewport::SetCameraMoveSpeedIncrements(int sp, bool bnotify)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 const char* CRenderViewport::GetCameraMenuName() const
 {
 	// Do explicit instead of using GetCameraObject because we are interested in the
@@ -1068,7 +974,6 @@ const char* CRenderViewport::GetCameraMenuName() const
 	return "Camera";
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CRenderViewport::GetCameraSpeedScale() const
 {
 	if (s_cameraPreferences.speedHeightRelativeEnabled)
@@ -1091,7 +996,6 @@ float CRenderViewport::GetCameraSpeedScale() const
 	return 1.0f;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::SetViewTM(const Matrix34& viewTM, bool bMoveOnly)
 {
 	Matrix34 camMatrix = viewTM;
@@ -1171,7 +1075,6 @@ void CRenderViewport::SetViewTM(const Matrix34& viewTM, bool bMoveOnly)
 	m_Camera.SetMatrix(camMatrix);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::RenderSelectedRegion(SDisplayContext& context)
 {
 	if (!m_engine)
@@ -1258,8 +1161,7 @@ void CRenderViewport::RenderSelectedRegion(SDisplayContext& context)
 			Vec3(x1, y1, fMinZ),
 			Vec3(x2, y1, fMinZ),
 			Vec3(x2, y2, fMinZ),
-			Vec3(x1, y2, fMinZ)
-		};
+			Vec3(x1, y2, fMinZ) };
 
 		// Generate vertices
 		static AABB boxPrev(0.0f);
@@ -1338,7 +1240,6 @@ void CRenderViewport::RenderSelectedRegion(SDisplayContext& context)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::ProcessKeys()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
@@ -1454,7 +1355,6 @@ Vec3 CRenderViewport::WorldToView3D(const Vec3& wp, int nFlags) const
 	return out;
 }
 
-//////////////////////////////////////////////////////////////////////////
 POINT CRenderViewport::WorldToView(const Vec3& wp) const
 {
 	CPoint p(0, 0);
@@ -1509,7 +1409,6 @@ Vec3 CRenderViewport::UpViewDirection() const
 	return m_Camera.GetUp();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::AdjustObjectPosition(const ray_hit& hit, Vec3& outNormal, Vec3& outPos) const
 {
 	Matrix34A objMat, objMatInv;
@@ -1545,7 +1444,7 @@ bool CRenderViewport::AdjustObjectPosition(const ray_hit& hit, Vec3& outNormal, 
 
 	// put into position object space hit position
 	Vec3 vOS_HitPos = objMatInv.TransformPoint(hit.pt);
-	vOS_HitPos -= vOS_HitDir * RENDER_MESH_TEST_DISTANCE * fWorldScaleInv;
+	vOS_HitPos -= vOS_HitDir * g_renderMeshTestDistance * fWorldScaleInv;
 
 	IRenderMesh* pRM = pEntObject->GetRenderMesh();
 
@@ -1567,7 +1466,6 @@ bool CRenderViewport::AdjustObjectPosition(const ray_hit& hit, Vec3& outNormal, 
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::RayRenderMeshIntersection(IRenderMesh* pRenderMesh, const Vec3& vInPos, const Vec3& vInDir, Vec3& vOutPos, Vec3& vOutNormal) const
 {
 	SRayHitInfo hitInfo;
@@ -1583,7 +1481,6 @@ bool CRenderViewport::RayRenderMeshIntersection(IRenderMesh* pRenderMesh, const 
 	return bRes;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::ViewToWorldRay(POINT vp, Vec3& raySrc, Vec3& rayDir) const
 {
 	if (!m_renderer)
@@ -1612,7 +1509,6 @@ void CRenderViewport::ViewToWorldRay(POINT vp, Vec3& raySrc, Vec3& rayDir) const
 	rayDir = v;
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CRenderViewport::GetScreenScaleFactor(const Vec3& worldPoint) const
 {
 	Vec3 pointVec = worldPoint - m_Camera.GetPosition();
@@ -1623,7 +1519,6 @@ float CRenderViewport::GetScreenScaleFactor(const Vec3& worldPoint) const
 	return dist;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::HitTest(CPoint point, HitContext& hitInfo)
 {
 	hitInfo.camera = &m_Camera;
@@ -1631,7 +1526,6 @@ bool CRenderViewport::HitTest(CPoint point, HitContext& hitInfo)
 	return CViewport::HitTest(point, hitInfo);
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::IsBoundsVisible(const AABB& box) const
 {
 	// If at least part of bbox is visible then its visible.
@@ -1673,7 +1567,6 @@ void CRenderViewport::GetResolution(int& x, int& y)
 	y = m_currentResolution.height;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::CreateRenderContext(HWND hWnd, IRenderer::EViewportType viewportType)
 {
 	// Create context.
@@ -1701,7 +1594,6 @@ bool CRenderViewport::CreateRenderContext(HWND hWnd, IRenderer::EViewportType vi
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::DestroyRenderContext()
 {
 	// Destroy render context.
@@ -1715,7 +1607,6 @@ void CRenderViewport::DestroyRenderContext()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::SetDefaultCamera()
 {
 	if (IsDefaultCamera())
@@ -1725,7 +1616,6 @@ void CRenderViewport::SetDefaultCamera()
 	SetCameraObject(0);
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::IsDefaultCamera() const
 {
 	if (m_cameraObjectId != CryGUID::Null() || GetCameraObject() || m_pCameraDelegate)
@@ -1734,7 +1624,6 @@ bool CRenderViewport::IsDefaultCamera() const
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 CRenderViewport::SPreviousContext CRenderViewport::SetCurrentContext()
 {
 	SPreviousContext x;
@@ -1744,8 +1633,6 @@ CRenderViewport::SPreviousContext CRenderViewport::SetCurrentContext()
 
 	return x;
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 void CRenderViewport::RestorePreviousContext(const SPreviousContext& x) const
 {
@@ -1767,7 +1654,6 @@ void CRenderViewport::RestorePreviousContext(const SPreviousContext& x) const
    }
  */
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::HideCursor()
 {
 	if (m_bCursorHidden || !gViewportPreferences.hideMouseCursorWhenCaptured)
@@ -1778,7 +1664,6 @@ void CRenderViewport::HideCursor()
 	m_bCursorHidden = true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::ShowCursor()
 {
 	if (!m_bCursorHidden || !gViewportPreferences.hideMouseCursorWhenCaptured)
@@ -1789,13 +1674,11 @@ void CRenderViewport::ShowCursor()
 	m_bCursorHidden = false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::BeginUndoTransaction()
 {
 	CScopedRenderLock::Lock();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::EndUndoTransaction()
 {
 	CScopedRenderLock::Unlock();
@@ -1817,7 +1700,7 @@ void CRenderViewport::OnResizeInternal(int width, int height)
 
 	gEnv->pSystem->GetISystemEventDispatcher()->OnSystemEvent(ESYSTEM_EVENT_RESIZE, m_currentResolution.width, m_currentResolution.height);
 }
-//////////////////////////////////////////////////////////////////////////
+
 void CRenderViewport::OnResize()
 {
 	CRect rcClient;
@@ -1839,7 +1722,6 @@ void CRenderViewport::OnResize()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CRenderViewport::OnPaint()
 {
 	m_isOnPaint = true;
@@ -1847,20 +1729,9 @@ void CRenderViewport::OnPaint()
 	m_isOnPaint = false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CRenderViewport::MouseCallback(EMouseEvent event, CPoint& point, int flags)
 {
-	if (event == eMouseLDown && m_renderer)
-	{
-		// Force the visible object cache to be updated - this is to ensure that
-		// selection will work properly even if helpers are not being displayed,
-		// in which case the cache is not updated every frame.
-		if (!GetIEditor()->IsHelpersDisplayed())
-		{
-			m_bForceUpdateVisibleObjectCache = true;
-		}
-	}
-	else if (event == eMouseLUp)
+	if (event == eMouseLUp)
 	{
 		// Update viewports after done with actions.
 		GetIEditor()->UpdateViews(eUpdateObjects);

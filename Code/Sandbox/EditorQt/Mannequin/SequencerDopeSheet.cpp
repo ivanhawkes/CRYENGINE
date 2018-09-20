@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 #include "SequencerDopeSheet.h"
-#include "Controls\MemDC.h"
+#include "Controls/MemDC.h"
 #include "MannPreferences.h"
 #include "SequencerUndo.h"
 
@@ -308,7 +308,6 @@ void CSequencerDopeSheet::DrawKeys(const CSequencerTrack* track, CDC* dc, const 
 						imgType = SEQBMP_PARAMS;
 						break;
 					}
-					;
 				}
 
 				// images are ordered (sel,unsel),(sel,unsel),(sel,unsel),(sel,unsel)
@@ -721,4 +720,3 @@ void CSequencerDopeSheet::DrawNodeItem(const CSequencerNode* pAnimNode, CDC* dc,
 
 	dc->SelectObject(prevFont);
 }
-

@@ -5,8 +5,6 @@
 #include "FileSystem_FileMonitor.h"
 #include "FileSystem_Directory.h"
 
-#include <QMetaType>
-
 #include <memory>
 
 namespace FileSystem
@@ -60,4 +58,3 @@ protected:
 
 Q_DECLARE_METATYPE(FileSystem::SubTreeMonitorPtr)
 Q_DECLARE_METATYPE(FileSystem::SSubTreeMonitorUpdate)
-

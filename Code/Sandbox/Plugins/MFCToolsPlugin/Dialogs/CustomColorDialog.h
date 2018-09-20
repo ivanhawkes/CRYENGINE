@@ -12,10 +12,12 @@
 //  1. Enables the 'ColorChangeCallback' registration
 //  2. Makes the color picking tool work across multiple monitors
 
+#include "MFCToolsDefines.h"
+
 /////////////////////////////////////////////////////////////////////////////
 // CCustomColorDialog dialog
 
-class PLUGIN_API CCustomColorDialog : public CMFCColorDialog
+class MFC_TOOLS_PLUGIN_API CCustomColorDialog : public CMFCColorDialog
 {
 	DECLARE_DYNAMIC(CCustomColorDialog)
 public:
@@ -47,4 +49,3 @@ protected:
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.
 
 #endif // !defined(AFX_CUSTOMCOLORDIALOG_H__E1491910_A0B4_48B3_9556_CB079E1EAC7F__INCLUDED_)
-

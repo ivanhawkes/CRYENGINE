@@ -9,6 +9,7 @@
 // NumberCtrl.h : header file
 //
 
+#include "MFCToolsDefines.h"
 #include "NumberCtrlEdit.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -19,7 +20,7 @@
 // Sent to parent when user stops to change control value.
 #define EN_END_DRAG   EN_CHANGE + 0x1001
 
-class PLUGIN_API CNumberCtrl : public CWnd
+class MFC_TOOLS_PLUGIN_API CNumberCtrl : public CWnd
 {
 	// Construction
 public:
@@ -171,4 +172,3 @@ public:
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.
 
 #endif // !defined(AFX_NUMBERCTRL_H__F928C7EC_F2C9_4272_B538_C670C0B2EF9F__INCLUDED_)
-

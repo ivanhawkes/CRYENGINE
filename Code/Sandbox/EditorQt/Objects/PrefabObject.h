@@ -99,11 +99,6 @@ public:
 	void         SetAutoUpdatePrefab(bool autoUpdate);
 	bool         GetAutoUpdatePrefab() const { return m_autoUpdatePrefabs; }
 
-	//! Assigns the specified asset to the object, in this case a material or a prefab can be assigned
-	//! \param pHitContext Specifies raycast context, if we are applying the asset via a drag action
-	virtual bool ApplyAsset(const CAsset& asset, HitContext* pHitContext = nullptr) override;
-	virtual bool CanApplyAsset(const CAsset& asset, string* pApplyTextOut = nullptr) const override;
-
 	// Extract all objects inside.
 	void         CloneAll(std::vector<CBaseObject*>& extractedObjects);
 	void         SyncPrefab(const SObjectChangedContext& context);
@@ -119,10 +114,11 @@ public:
 	void         SetChangePivotMode(bool changePivotMode) { m_bChangePivotPoint = changePivotMode; }
 	virtual void OnContextMenu(CPopupMenuItem* menu);
 	virtual int  MouseCreateCallback(IDisplayViewport* view, EMouseEvent event, CPoint& point, int flags) override;
+	//! Create new GUID for the prefab, flag it as such and assign the correct layer
+	void         GenerateGUIDsForObjectAndChildren(CBaseObject* pObject);
 protected:
 	void         SerializeMembers(Serialization::IArchive& ar);
 	virtual void RemoveChild(CBaseObject* child);
-
 	CPrefabObject();
 
 	void         SetPrefabGuid(CryGUID guid) { m_prefabGUID = guid; }

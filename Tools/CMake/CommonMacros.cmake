@@ -588,6 +588,17 @@ macro(apply_compile_settings)
 	endif()
 endmacro()
 
+macro(apply_ltcg_if_enabled)
+	if (OPTION_STATIC_LINKING AND OPTION_LTCG)
+		if (MSVC_VERSION)
+			string(APPEND CMAKE_STATIC_LINKER_FLAGS " /LTCG")
+		else ()
+			string(APPEND CMAKE_STATIC_LINKER_FLAGS " -flto") # GCC & Clang
+		endif()
+		set(CMAKE_STATIC_LINKER_FLAGS ${CMAKE_STATIC_LINKER_FLAGS} CACHE STRING "" FORCE)
+	endif()
+endmacro()
+
 function(CryEngineModule target)
 	prepare_project(${ARGN})
 
@@ -625,17 +636,24 @@ function(CryEngineModule target)
 	if (NOT DEFINED PROJECT_BUILD_CRYENGINE OR PROJECT_BUILD_CRYENGINE)
 		install(TARGETS ${target} LIBRARY DESTINATION bin RUNTIME DESTINATION bin ARCHIVE DESTINATION lib)
 	endif()
+
+	apply_ltcg_if_enabled()
+
 endfunction()
 
 function(CryGameModule target)
 	prepare_project(${ARGN})
-	add_library(${THIS_PROJECT} ${${THIS_PROJECT}_SOURCES})
+	if (OPTION_STATIC_LINKING AND NOT OPTION_STATIC_LINKING_WITH_GAME_AS_DLL)
+		add_library(${THIS_PROJECT} ${${THIS_PROJECT}_SOURCES})
+	else()
+		add_library(${THIS_PROJECT} SHARED ${${THIS_PROJECT}_SOURCES})
+	endif()
 	apply_compile_settings()
 	if (NOT game_folder)
 		set(game_folder ${CMAKE_CURRENT_SOURCE_DIR} CACHE INTERNAL "Game folder used for resource files on Windows" FORCE)
 	endif()
 	set(GAME_MODULES ${GAME_MODULES} ${THIS_PROJECT} CACHE INTERNAL "List of game modules being built" FORCE)
-	if (OPTION_STATIC_LINKING)
+	if (OPTION_STATIC_LINKING AND NOT OPTION_STATIC_LINKING_WITH_GAME_AS_DLL)
 		target_compile_definitions(${THIS_PROJECT} PRIVATE _LIB -DCRY_IS_MONOLITHIC_BUILD)
 	elseif(ANDROID)
 		set(SHARED_MODULES ${SHARED_MODULES} ${THIS_PROJECT} CACHE INTERNAL "Shared modules for APK creation" FORCE)
@@ -673,6 +691,8 @@ function(CryGameModule target)
 			file(WRITE "${CMAKE_BINARY_DIR}/ProjectEngineDefineOverrides.h" "")
 		endif()
 	endif()
+	
+	apply_ltcg_if_enabled()
 
 endfunction()
 
@@ -685,12 +705,31 @@ function(CreateDynamicModule target)
 	apply_compile_settings()
 endfunction()
 
+#Use this for modules which link against the engine
 function(CryEngineStaticModule target)
 	prepare_project(${ARGN})
 	add_library(${THIS_PROJECT} STATIC ${${THIS_PROJECT}_SOURCES})
 	set(MODULE_FORCE_STATIC TRUE)
 	target_compile_definitions(${THIS_PROJECT} PRIVATE -D_LIB)
 	if (OPTION_STATIC_LINKING AND NOT MODULE_FORCE_SHARED)
+		target_compile_definitions(${THIS_PROJECT} PRIVATE -DCRY_IS_MONOLITHIC_BUILD)
+	endif()
+	if(OPTION_DEDICATED_SERVER)
+		target_compile_definitions( ${THIS_PROJECT} PRIVATE "-DDEDICATED_SERVER")
+	endif()
+	if (MODULE_EDITOR_COMPILE_SETTINGS)
+		set_editor_module_flags()
+	endif()
+	apply_compile_settings()
+endfunction()
+
+#Use this for modules which link against the game
+function(CryGameStaticModule target)
+	prepare_project(${ARGN})
+	add_library(${THIS_PROJECT} STATIC ${${THIS_PROJECT}_SOURCES})
+	set(MODULE_FORCE_STATIC TRUE)
+	target_compile_definitions(${THIS_PROJECT} PRIVATE -D_LIB)
+	if (OPTION_STATIC_LINKING AND NOT MODULE_FORCE_SHARED AND NOT OPTION_STATIC_LINKING_WITH_GAME_AS_DLL)
 		target_compile_definitions(${THIS_PROJECT} PRIVATE -DCRY_IS_MONOLITHIC_BUILD)
 	endif()
 	if(OPTION_DEDICATED_SERVER)
@@ -726,7 +765,11 @@ function(CryLauncher target)
 			set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS_PROFILE " /NODEFAULTLIB:libcpmt.lib")
 			set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS_RELEASE " /NODEFAULTLIB:libcpmt.lib")
 		endif()
-		set(MODULES_LIST ${GAME_MODULES} ${MODULES})
+		if (OPTION_STATIC_LINKING_WITH_GAME_AS_DLL)
+			set(MODULES_LIST ${MODULES})
+		else()
+			set(MODULES_LIST ${GAME_MODULES} ${MODULES})
+		endif()
 		wrap_whole_archive(${target} WRAPPED_MODULES MODULES_LIST)
 		target_link_libraries(${THIS_PROJECT} PRIVATE ${WRAPPED_MODULES})
 	endif()
@@ -797,6 +840,8 @@ function(CryUnitTestSuite target)
 			set(temp_old_output_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 			set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/durango_test/${target}")
 			set(LAYOUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/durango_test/${target}_layout/")
+			file(GLOB RESOURCE_COPY_WILDCARD "${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Resources/*.*")
+			file(COPY ${RESOURCE_COPY_WILDCARD} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 			configure_durango_game(
 				"GENERATE_DIRECTORY" "${CMAKE_CURRENT_BINARY_DIR}"
@@ -809,11 +854,11 @@ function(CryUnitTestSuite target)
 				"foreground_text" "light"
 				"background_color" "#6495ED"
 				"version" "1.0.0.0"
-				"logo" "placeholder.png"
-				"small_logo" "placeholder.png"
-				"wide_logo" "placeholder.png"
-				"splash_screen" "placeholder.png"
-				"store_logo" "placeholder.png"
+				"logo" "DurangoLogo.png"
+				"small_logo" "DurangoSmallLogo.png"
+				"wide_logo" "DurangoWideLogo.png"
+				"splash_screen" "DurangoSplashScreen.png"
+				"store_logo" "DurangoStoreLogo.png"
 			)
 			add_sources("NoUberFile" SOURCE_GROUP "Generated" "${CMAKE_CURRENT_BINARY_DIR}/Package.appxmanifest")
 		endif()
@@ -855,12 +900,38 @@ function(CryUnitTestSuite target)
         	target_link_libraries( ${THIS_PROJECT} PRIVATE dl pthread)
         endif()
 	endif()
-	include_directories("${CRYENGINE_DIR}/Code/SDKs/googletest_CE_Support/googletest/include")
-	include_directories("${CRYENGINE_DIR}/Code/SDKs/googletest_CE_Support/googlemock/include")
-	include_directories("${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common")
+	target_include_directories(
+		${THIS_PROJECT} PUBLIC 
+		"${CRYENGINE_DIR}/Code/SDKs/googletest_CE_Support/googletest/include"
+		"${CRYENGINE_DIR}/Code/SDKs/googletest_CE_Support/googlemock/include"
+		"${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common"
+	)
 	target_link_libraries(${THIS_PROJECT} PUBLIC gtest gmock)
 endfunction()
 
+function(CryEditorPluginUnitTestSuite target)
+	prepare_project(${ARGN})
+	add_executable(${THIS_PROJECT} ${${THIS_PROJECT}_SOURCES})
+	if(WIN32)
+		set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS " /SUBSYSTEM:CONSOLE")
+	endif()
+	apply_compile_settings()
+		
+	target_sources(${target} PRIVATE "${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common/UnitTest.h")
+	source_group("Imported" FILES "${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common/UnitTest.h")
+	target_sources(${target} PRIVATE "${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common/Main.cpp")
+	source_group("Imported" FILES "${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common/Main.cpp")
+	target_include_directories(
+		${THIS_PROJECT} PUBLIC 
+		"${CRYENGINE_DIR}/Code/SDKs/googletest_CE_Support/googletest/include"
+		"${CRYENGINE_DIR}/Code/SDKs/googletest_CE_Support/googlemock/include"
+		"${CRYENGINE_DIR}/Code/CryEngine/UnitTests/Common"
+	)
+	target_link_libraries(${THIS_PROJECT} PUBLIC gtest gmock)
+	set_editor_module_flags()
+	target_compile_definitions(${THIS_PROJECT} PRIVATE _LAUNCHER -DEDITOR_PLUGIN_UNIT_TEST -DSANDBOX_IMPORTS -DEDITOR_COMMON_IMPORTS -DNOT_USE_CRY_MEMORY_MANAGER)
+	target_link_libraries(${THIS_PROJECT} PRIVATE EditorCommon)
+endfunction()
 
 function(CryWindowsApplication target)
 	prepare_project(${ARGN})
@@ -923,7 +994,7 @@ function(CryEditor target)
 	set_editor_module_flags()
 	add_metadata()
 	target_compile_options(${THIS_PROJECT} PRIVATE /Zm200)
-	target_compile_definitions(${THIS_PROJECT} PRIVATE -DSANDBOX_EXPORTS -DPLUGIN_IMPORTS -DEDITOR_COMMON_IMPORTS)
+	target_compile_definitions(${THIS_PROJECT} PRIVATE -DSANDBOX_EXPORTS -DEDITOR_COMMON_IMPORTS)
 	target_link_libraries(${THIS_PROJECT} PRIVATE EditorCommon)
 	set_property(TARGET ${THIS_PROJECT} PROPERTY ENABLE_EXPORTS TRUE)
 	set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS " /SUBSYSTEM:WINDOWS")
@@ -935,7 +1006,7 @@ function(CryEditorPlugin target)
 	add_library(${THIS_PROJECT} ${${THIS_PROJECT}_SOURCES})
 	set_editor_module_flags()
 	target_compile_options(${THIS_PROJECT} PRIVATE /Zm200)
-	target_compile_definitions(${THIS_PROJECT} PRIVATE -DSANDBOX_IMPORTS -DPLUGIN_IMPORTS -DEDITOR_COMMON_IMPORTS -DNOT_USE_CRY_MEMORY_MANAGER)
+	target_compile_definitions(${THIS_PROJECT} PRIVATE -DSANDBOX_IMPORTS -DEDITOR_COMMON_IMPORTS -DNOT_USE_CRY_MEMORY_MANAGER)
 	set_property(TARGET ${THIS_PROJECT} PROPERTY LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/EditorPlugins")
 	set_property(TARGET ${THIS_PROJECT} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/EditorPlugins")
 	target_link_libraries(${THIS_PROJECT} PRIVATE EditorCommon)

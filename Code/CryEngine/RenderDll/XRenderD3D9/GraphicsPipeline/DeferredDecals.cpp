@@ -62,6 +62,7 @@ void CDeferredDecalsStage::ResizeDecalBuffers(size_t requiredDecalCount)
 		for (int i = allocatedDecalCount; i < requiredDecalCount; ++i)
 		{
 			CConstantBufferPtr pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SDecalConstants));
+			if (pCB) pCB->SetDebugName("DeferredDecals Per-Primitive CB");
 
 			m_decalPrimitives.emplace_back();
 			m_decalPrimitives.back().SetInlineConstantBuffer(eConstantBufferShaderSlot_PerPrimitive, pCB, EShaderStage_Pixel | EShaderStage_Vertex);
@@ -159,7 +160,7 @@ void CDeferredDecalsStage::SetupDecalPrimitive(const SDeferredDecal& decal, CRen
 	primitive.SetSampler(9, EDefaultSamplerStates::PointClamp);  // Used by gbuffer normal encoding
 
 	primitive.SetTexture(0, CRendererResources::s_ptexLinearDepth);
-	primitive.SetTexture(1, (CTexture*)CRendererResources::s_ptexBackBuffer);  // Contains copy of scene normals
+	primitive.SetTexture(1, CRendererResources::s_ptexSceneNormalsBent);  // Contains copy of scene normals
 	primitive.SetTexture(2, (CTexture*)pDiffuseMap);
 	primitive.SetTexture(3, (CTexture*)pNormalMap);
 	primitive.SetTexture(4, (CTexture*)pSmoothnessMap);
@@ -287,7 +288,8 @@ void CDeferredDecalsStage::SetupDecalPrimitive(const SDeferredDecal& decal, CRen
 		STENCOP_FAIL(FSS_STENCOP_KEEP)  |
 		STENCOP_ZFAIL(FSS_STENCOP_KEEP) |
 		STENCOP_PASS(FSS_STENCOP_KEEP),
-		BIT_STENCIL_RESERVED, BIT_STENCIL_RESERVED, 0xFF);
+		BIT_STENCIL_RESERVED | BIT_STENCIL_ALLOW_DECALBLEND, 
+		BIT_STENCIL_RESERVED | BIT_STENCIL_ALLOW_DECALBLEND, 0xFF);
 
 	primitive.Compile(m_decalPass);
 	m_decalPass.AddPrimitive(&primitive);
@@ -316,7 +318,7 @@ void CDeferredDecalsStage::Execute()
 	PROFILE_LABEL_SCOPE("DEFERRED_DECALS");
 
 	// Create temporary copy to enable reads from normal target
-	GetDeviceObjectFactory().GetCoreCommandList().GetCopyInterface()->Copy(CRendererResources::s_ptexSceneNormalsMap->GetDevTexture(), CRendererResources::s_ptexBackBuffer->GetDevTexture());
+	GetDeviceObjectFactory().GetCoreCommandList().GetCopyInterface()->Copy(CRendererResources::s_ptexSceneNormalsMap->GetDevTexture(), CRendererResources::s_ptexSceneNormalsBent->GetDevTexture());
 	
 	// Sort decals
 	std::stable_sort(deferredDecals.begin(), deferredDecals.end(), DecalSortComparison());

@@ -37,9 +37,6 @@ public:
 	bool              IsAutoLoad() const { return m_isAutoLoad; }
 	void              SetAutoLoad(bool const isAutoLoad);
 
-	float             GetRadius() const { return m_radius; }
-	void              SetRadius(float const radius);
-
 	ControlIds const& GetSelectedConnections() const                           { return m_selectedConnectionIds; }
 	void              SetSelectedConnections(ControlIds selectedConnectionIds) { m_selectedConnectionIds = selectedConnectionIds; }
 
@@ -57,8 +54,6 @@ public:
 
 private:
 
-	void MatchRadiusToAttenuation();
-
 	void SignalControlAboutToBeModified();
 	void SignalControlModified();
 	void SignalConnectionAdded(Impl::IItem* const pIItem);
@@ -66,10 +61,9 @@ private:
 	void SignalConnectionModified();
 
 	ControlId const            m_id;
-	Scope                      m_scope = 0;
+	Scope                      m_scope;
 	std::vector<ConnectionPtr> m_connections;
-	float                      m_radius = 0.0f;
-	bool                       m_isAutoLoad = true;
+	bool                       m_isAutoLoad;
 
 	using XMLNodes = std::vector<XmlNodeRef>;
 	std::map<int, XMLNodes> m_rawConnections;

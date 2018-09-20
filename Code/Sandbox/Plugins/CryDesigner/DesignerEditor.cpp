@@ -2,32 +2,18 @@
 
 #include "StdAfx.h"
 #include "DesignerEditor.h"
-#include "ViewManager.h"
+
 #include "Objects/DesignerObject.h"
-#include "Objects/DisplayContext.h"
-#include "Core/ModelCompiler.h"
-#include "ToolFactory.h"
-#include "Core/Model.h"
-#include "Tools/BaseTool.h"
 #include "Tools/Select/SelectTool.h"
-#include "Util/Undo.h"
-#include "Core/Helper.h"
-#include "Objects/ObjectLayer.h"
-#include "Objects/ObjectLayerManager.h"
-#include "Objects/BrushObject.h"
-#include "Util/ElementSet.h"
-#include "Material/MaterialManager.h"
-#include "SurfaceInfoPicker.h"
-#include "ToolFactory.h"
-#include "Gizmos/ITransformManipulator.h"
-#include "Gizmos/IGizmoManager.h"
-#include "Util/ExcludedEdgeManager.h"
 #include "Util/Display.h"
-#include <Preferences/ViewportPreferences.h>
-#include "CryEditDoc.h"
-#include "QtUtil.h"
-#include "Util/Converter.h"
-#include "RecursionLoopGuard.h"
+#include "Util/Undo.h"
+
+// EditorQt
+#include <SurfaceInfoPicker.h>
+#include <Viewport.h>
+
+// EditorCommon
+#include <Gizmos/IGizmoManager.h>
 
 namespace Designer
 {
@@ -35,8 +21,8 @@ namespace Designer
 class DesignerEditor_ClassDesc : public IClassDesc
 {
 	virtual ESystemClassID SystemClassID()   { return ESYSTEM_CLASS_EDITTOOL; }
-	virtual const char*    ClassName()       { return "EditTool.DesignerEditor"; };
-	virtual const char*    Category()        { return "Brush"; };
+	virtual const char*    ClassName()       { return "EditTool.DesignerEditor"; }
+	virtual const char*    Category()        { return "Brush"; }
 	virtual CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(DesignerEditor); }
 };
 
@@ -75,7 +61,7 @@ void DesignerEditor::StartCreation(const char* szObjectType)
 
 void DesignerEditor::Create(const char* szObjectType)
 {
-	// We must begin and end an undo step here because cancelling shape creation
+	// We must begin and end an undo step here because canceling shape creation
 	// will cancel the current undo stack and kill our CBaseObject along with the current shape.
 	// This will lead to crashes.
 	GetIEditor()->GetIUndoManager()->Begin();
@@ -787,8 +773,8 @@ IMPLEMENT_DYNCREATE(CreateDesignerObjectTool, DesignerEditor)
 class CreateDesignerObjectTool_ClassDesc : public IClassDesc
 {
 	ESystemClassID SystemClassID()   { return ESYSTEM_CLASS_EDITTOOL; }
-	const char*    ClassName()       { return "EditTool.CreateDesignerObjectTool"; };
-	const char*    Category()        { return "Object"; };
+	const char*    ClassName()       { return "EditTool.CreateDesignerObjectTool"; }
+	const char*    Category()        { return "Object"; }
 	CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CreateDesignerObjectTool); }
 };
 
@@ -800,4 +786,3 @@ CreateDesignerObjectTool::CreateDesignerObjectTool()
 }
 
 }
-

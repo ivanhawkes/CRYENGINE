@@ -142,7 +142,6 @@ private:
 	CAnimationCompressionManager* m_pManager;
 	std::vector<string>           m_fileList;
 	int                           m_totalFileCount;
-	;
 };
 
 // ---------------------------------------------------------------------------
@@ -349,4 +348,3 @@ void CAnimationCompressionManager::OnReloadCHRPARAMSComplete(CBackgroundTaskRelo
 	if (pTask == m_pReloadCHRPARAMSTask)
 		m_pReloadCHRPARAMSTask = 0;
 }
-

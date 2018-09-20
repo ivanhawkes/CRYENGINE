@@ -3,20 +3,17 @@
 #include "StdAfx.h"
 #include "AssetType.h"
 
-#include "Asset.h"
-#include "AssetImportContext.h"
-#include "AssetImporter.h"
-#include "AssetManager.h"
-#include "Loader/AssetLoaderHelpers.h"
-#include "Loader/Metadata.h"
-
+#include "AssetSystem/AssetImportContext.h"
+#include "AssetSystem/AssetImporter.h"
+#include "AssetSystem/AssetManager.h"
+#include "AssetSystem/EditableAsset.h"
+#include "AssetSystem/Loader/AssetLoaderHelpers.h"
+#include "AssetSystem/Loader/Metadata.h"
 #include "FilePathUtil.h"
-#include "ProxyModels/ItemModelAttribute.h"
-#include "QtUtil.h"
+
+#include <CryString/StringUtils.h>
 #include <QFile>
 
-#include <CryString/CryPath.h>
-#include "EditableAsset.h"
 
 namespace Private_AssetType
 {
@@ -190,6 +187,14 @@ bool CAssetType::Create(const char* szFilepath, const void* pTypeSpecificParamet
 {
 	using namespace Private_AssetType;
 
+	string reasonToReject;
+	if (!CAssetType::IsValidAssetPath(szFilepath, reasonToReject))
+	{
+		const char* szMsg = QT_TR_NOOP("Can not create asset");
+		CryWarning(EValidatorModule::VALIDATOR_MODULE_EDITOR, EValidatorSeverity::VALIDATOR_ERROR, "%s %s: %s", szMsg, szFilepath, reasonToReject.c_str());
+		return false;
+	}
+
 	ICryPak* const pIPak = GetISystem()->GetIPak();
 	if (!pIPak->MakeDir(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), PathUtil::GetPathWithoutFilename(szFilepath)).c_str()))
 	{
@@ -202,13 +207,15 @@ bool CAssetType::Create(const char* szFilepath, const void* pTypeSpecificParamet
 		return false;
 	}
 
-	CAsset* const pNewAsset = AssetLoader::CAssetFactory::CreateFromMetadata(szFilepath, metadata.GetMetadata());
+	CAssetPtr const pNewAsset = AssetLoader::CAssetFactory::CreateFromMetadata(szFilepath, metadata.GetMetadata());
 
 	CEditableAsset editAsset(*pNewAsset);
-	editAsset.WriteToFile();
+	if (!editAsset.WriteToFile())
+	{
+		return false;
+	}
 
 	CAssetManager::GetInstance()->MergeAssets({ pNewAsset });
-
 	return true;
 }
 
@@ -263,7 +270,10 @@ std::vector<string> CAssetType::GetAssetFiles(const CAsset& asset, bool includeS
 		files.emplace_back(asset.GetFile(i));
 	}
 	files.emplace_back(asset.GetMetadataFile());
-	files.emplace_back(asset.GetThumbnailPath());
+	if (HasThumbnail())
+	{
+		files.emplace_back(asset.GetThumbnailPath());
+	}
 	if (includeSourceFile)
 	{
 		files.emplace_back(asset.GetSourceFile());
@@ -286,74 +296,71 @@ std::vector<string> CAssetType::GetAssetFiles(const CAsset& asset, bool includeS
 	return files;
 }
 
-bool CAssetType::DeleteAssetFiles(const CAsset& asset, bool bDeleteSourceFile, size_t& numberOfFilesDeleted) const
+bool CAssetType::IsInPakOnly(const CAsset& asset) const
 {
-	numberOfFilesDeleted = 0;
-
-	if (asset.IsReadOnly())
+	std::vector<string> filepaths(GetAssetFiles(asset, false, true));
+	for (string& path : filepaths)
 	{
-		CryWarning(EValidatorModule::VALIDATOR_MODULE_EDITOR, EValidatorSeverity::VALIDATOR_ERROR, "Unable to delete asset \"%s\": the asset is read only.", asset.GetName());
-		return false;
-	}
-
-	bool bReadOnly = false;
-	std::vector<string> filesToRemove;
-
-	{
-		const std::vector<string> files(GetAssetFiles(asset, bDeleteSourceFile, true));
-		filesToRemove.reserve(files.size());
-		for (const string& path : files)
+		if (PathUtil::IsFileInPakOnly(path))
 		{
-			QFileInfo fileInfo(QtUtil::ToQString(path));
-			if (!fileInfo.exists())
-			{
-				if (GetISystem()->GetIPak()->IsFileExist(PathUtil::AbsolutePathToGamePath(path), ICryPak::eFileLocation_InPak))
-				{
-					CryWarning(EValidatorModule::VALIDATOR_MODULE_EDITOR, EValidatorSeverity::VALIDATOR_ERROR, "Unable to delete asset. The file is in pak: \"%s\"", path.c_str());
-					bReadOnly = true;
-				}
-				continue;
-			}
-			else if (!fileInfo.isWritable())
-			{
-				CryWarning(EValidatorModule::VALIDATOR_MODULE_EDITOR, EValidatorSeverity::VALIDATOR_ERROR, "Unable to delete asset. The file is read-only: \"%s\"", path.c_str());
-				bReadOnly = true;
-				continue;
-			}
-
-			filesToRemove.push_back(path);
+			return true;
 		}
 	}
-
-	if (bReadOnly)
-	{
-		return false;
-	}
-
-	if (filesToRemove.empty())
-	{
-		// Expected result already reached.
-		return true;
-	}
-
-	for (const string& file : filesToRemove)
-	{
-		if (QFile::remove(QtUtil::ToQString(file.c_str())))
-		{
-			++numberOfFilesDeleted;
-		}
-		else
-		{
-			GetISystem()->GetILog()->LogWarning("Can not delete asset file %s", file.c_str());
-		}
-	}
-
-	return numberOfFilesDeleted == filesToRemove.size();
+	return false;
 }
 
 void CAssetType::SetInstantEditor(CAssetEditor* pEditor)
 {
 	m_pInstantEditor = pEditor;
+}
+
+bool CAssetType::IsValidAssetPath(const char* szFilepath, /*out*/string& reasonToReject)
+{
+	if (!(AssetLoader::IsMetadataFile(szFilepath)))
+	{
+		const char* const szReason = QT_TR_NOOP("The filename extension is not recognized as a valid asset extension");
+		reasonToReject = string().Format("%s: %s", szReason, PathUtil::GetExt(szFilepath));
+		return false;
+	}
+
+	const std::vector<CAssetType*>& assetTypes = CAssetManager::GetInstance()->GetAssetTypes();
+
+	const CryPathString dataFilename(PathUtil::RemoveExtension(PathUtil::GetFile(szFilepath)));
+	const char* const szExt = PathUtil::GetExt(dataFilename);
+	const bool unknownAssetType = std::none_of(assetTypes.begin(), assetTypes.end(), [szExt](const CAssetType* pAssetType)
+	{
+		return stricmp(szExt, pAssetType->GetFileExtension()) == 0;
+	});
+
+	if (unknownAssetType)
+	{
+		const char* const szReason = QT_TR_NOOP("The file extension does not match any registered asset type");
+		reasonToReject = string().Format("%s: %s", szReason, szExt);
+		return false;
+	}
+
+	const CryPathString baseName(PathUtil::RemoveExtension(dataFilename));
+	if (baseName.find('.') != CryPathString::npos)
+	{
+		const char* const szReason = QT_TR_NOOP("The dot symbol (.) is not allowed in the asset name");
+		reasonToReject = string().Format("%s: \"%s\"", szReason, baseName.c_str());
+		return false;
+	}
+
+	if (!CryStringUtils::IsValidFileName(baseName.c_str()))
+	{
+		reasonToReject = QT_TR_NOOP("Asset filename is invalid. Only English alphanumeric characters, underscores, and the dash character are permitted.");
+		return false;
+	}
+
+	for (const CAssetType* pAssetType: assetTypes)
+	{ 
+		if (!pAssetType->OnValidateAssetPath(szFilepath, reasonToReject))
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 bool CAssetType::RenameAsset(CAsset* pAsset, const char* szNewName) const
@@ -365,7 +372,7 @@ bool CAssetType::RenameAsset(CAsset* pAsset, const char* szNewName) const
 		return true;
 	}
 
-	if (pAsset->IsReadOnly())
+	if (pAsset->IsImmutable())
 	{
 		CryWarning(EValidatorModule::VALIDATOR_MODULE_EDITOR, EValidatorSeverity::VALIDATOR_ERROR, "Unable to rename asset \"%s\": the asset is read only.", pAsset->GetName());
 		return false;
@@ -435,13 +442,12 @@ bool CAssetType::RenameAsset(CAsset* pAsset, const char* szNewName) const
 	editableAsset.SetName(szNewName);
 	// The asset file monitor will handle this as if the asset had been modified.
 	// See also CAssetManager::CAssetFileMonitor.
-	editableAsset.WriteToFile();
-	return true;
+	return editableAsset.WriteToFile();
 }
 
 bool CAssetType::MoveAsset(CAsset* pAsset, const char* szDestinationFolder, bool bMoveSourcefile) const
 {
-	if (pAsset->IsReadOnly())
+	if (pAsset->IsImmutable())
 	{
 		CryWarning(EValidatorModule::VALIDATOR_MODULE_EDITOR, EValidatorSeverity::VALIDATOR_ERROR, "Unable to move asset \"%s\": the asset is read only.", pAsset->GetName());
 		return false;
@@ -526,8 +532,7 @@ bool CAssetType::MoveAsset(CAsset* pAsset, const char* szDestinationFolder, bool
 		}
 	}
 	editableAsset.SetFiles(files);
-	editableAsset.WriteToFile();
-	return true;
+	return editableAsset.WriteToFile();
 }
 
 bool CAssetType::CopyAsset(CAsset* pAsset, const char* szNewPath) const
@@ -592,8 +597,7 @@ bool CAssetType::CopyAsset(CAsset* pAsset, const char* szNewPath) const
 	editableAsset.SetDependencies(pAsset->GetDependencies());
 	editableAsset.SetDetails(pAsset->GetDetails());
 	editableAsset.InvalidateThumbnail();
-	editableAsset.WriteToFile();
-	return true;
+	return editableAsset.WriteToFile();
 }
 
 // Fallback asset type if the actual type is not registered.

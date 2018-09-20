@@ -465,7 +465,6 @@ UIEnumType ParseUIConfig(const char* sUIConfig, std::map<string, string>& outEnu
 			outEnumPairs[str] = value;
 			resToken = TokenizeString(values, " ,", pos);
 		}
-		;
 	}
 
 	return enumType;
@@ -1141,4 +1140,3 @@ REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyOpenFlowGraphView, flowgraph, open_view,
 REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyOpenFlowGraphViewAndSelect, flowgraph, open_view_and_select,
                                      "Opens named Flow Graph and select entity node",
                                      "flowgraph.open_view_and_select(str flowGraphName,str entityName)");
-

@@ -32,16 +32,18 @@ void CScreenSpaceReflectionsStage::Execute()
 
 	CShader* pShader = CShaderMan::s_shDeferredShading;
 
+	CTexture* targetRT = CRenderer::CV_r_SSReflHalfRes
+		? CRendererResources::s_ptexHDRTargetMaskedScaled[0][1]
+		: CRendererResources::s_ptexHDRTargetMasked;
+
 	{
 		PROFILE_LABEL_SCOPE("SSR_RAYTRACE");
-
-		CTexture* destRT = CRenderer::CV_r_SSReflHalfRes ? CRendererResources::s_ptexHDRTargetScaled[0] : CRendererResources::s_ptexHDRTarget;
 
 		if (m_passRaytracing.IsDirty(CRenderer::CV_r_SSReflHalfRes, rd->RT_GetCurrGpuID()))
 		{
 			static CCryNameTSCRC techRaytrace("SSR_Raytrace");
 			m_passRaytracing.SetTechnique(pShader, techRaytrace, 0);
-			m_passRaytracing.SetRenderTarget(0, destRT);
+			m_passRaytracing.SetRenderTarget(0, targetRT);
 			m_passRaytracing.SetState(GS_NODEPTHTEST);
 			m_passRaytracing.SetTexture(0, CRendererResources::s_ptexLinearDepth);
 			m_passRaytracing.SetTexture(1, CRendererResources::s_ptexSceneNormalsMap);
@@ -73,25 +75,26 @@ void CScreenSpaceReflectionsStage::Execute()
 		m_passRaytracing.Execute();
 	}
 
-	if (!CRenderer::CV_r_SSReflHalfRes)
+	// TODO: Compute shader! because the targets are not compressed / able anyway, and we can half resource allocation)
+	if (targetRT != CRendererResources::s_ptexHDRTargetMaskedScaled[0][1])
 	{
-		m_passCopy.Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0]);
+		m_passCopy.Execute(targetRT, CRendererResources::s_ptexHDRTargetMaskedScaled[0][1]);
 	}
 
 	// Convolve sharp reflections
-	m_passDownsample0.Execute(CRendererResources::s_ptexHDRTargetScaled[0], CRendererResources::s_ptexHDRTargetScaled[1]);
-	m_passBlur0.Execute(CRendererResources::s_ptexHDRTargetScaled[1], CRendererResources::s_ptexHDRTargetScaledTempRT[1], 1.0f, 3.0f);
+	m_passDownsample0.Execute(CRendererResources::s_ptexHDRTargetMaskedScaled[0][1], CRendererResources::s_ptexHDRTargetMaskedScaled[1][0]);
+	m_passBlur0.Execute(CRendererResources::s_ptexHDRTargetMaskedScaled[1][0], CRendererResources::s_ptexHDRTargetMaskedScaled[1][1], 1.0f, 3.0f);
 
-	m_passDownsample1.Execute(CRendererResources::s_ptexHDRTargetScaled[1], CRendererResources::s_ptexHDRTargetScaled[2]);
-	m_passBlur1.Execute(CRendererResources::s_ptexHDRTargetScaled[2], CRendererResources::s_ptexHDRTargetScaledTempRT[2], 1.0f, 3.0f);
+	m_passDownsample1.Execute(CRendererResources::s_ptexHDRTargetMaskedScaled[1][1], CRendererResources::s_ptexHDRTargetMaskedScaled[2][0]);
+	m_passBlur1.Execute(CRendererResources::s_ptexHDRTargetMaskedScaled[2][0], CRendererResources::s_ptexHDRTargetMaskedScaled[2][1], 1.0f, 3.0f);
 
-	m_passDownsample2.Execute(CRendererResources::s_ptexHDRTargetScaled[2], CRendererResources::s_ptexHDRTargetScaled[3]);
-	m_passBlur2.Execute(CRendererResources::s_ptexHDRTargetScaled[3], CRendererResources::s_ptexHDRTargetScaledTempRT[3], 1.0f, 3.0f);
+	m_passDownsample2.Execute(CRendererResources::s_ptexHDRTargetMaskedScaled[2][1], CRendererResources::s_ptexHDRTargetMaskedScaled[3][0]);
+	m_passBlur2.Execute(CRendererResources::s_ptexHDRTargetMaskedScaled[3][0], CRendererResources::s_ptexHDRTargetMaskedScaled[3][1], 1.0f, 3.0f);
 
 	{
 		PROFILE_LABEL_SCOPE("SSR_COMPOSE");
 
-		CTexture* destTex = CRendererResources::s_ptexHDRTargetScaledTmp[0];
+		CTexture* destTex = CRendererResources::s_ptexHDRTargetMaskedScaled[0][0];
 
 		if (m_passComposition.IsDirty())
 		{
@@ -102,10 +105,10 @@ void CScreenSpaceReflectionsStage::Execute()
 			m_passComposition.SetRenderTarget(0, destTex);
 			m_passComposition.SetState(GS_NODEPTHTEST);
 			m_passComposition.SetTexture(0, CRendererResources::s_ptexSceneSpecular);
-			m_passComposition.SetTexture(1, CRendererResources::s_ptexHDRTargetScaled[0]);
-			m_passComposition.SetTexture(2, CRendererResources::s_ptexHDRTargetScaled[1]);
-			m_passComposition.SetTexture(3, CRendererResources::s_ptexHDRTargetScaled[2]);
-			m_passComposition.SetTexture(4, CRendererResources::s_ptexHDRTargetScaled[3]);
+			m_passComposition.SetTexture(1, CRendererResources::s_ptexHDRTargetMaskedScaled[0][1]);
+			m_passComposition.SetTexture(2, CRendererResources::s_ptexHDRTargetMaskedScaled[1][1]);
+			m_passComposition.SetTexture(3, CRendererResources::s_ptexHDRTargetMaskedScaled[2][1]);
+			m_passComposition.SetTexture(4, CRendererResources::s_ptexHDRTargetMaskedScaled[3][1]);
 
 			m_passComposition.SetSampler(0, EDefaultSamplerStates::LinearClamp);
 

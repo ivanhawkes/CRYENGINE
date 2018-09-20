@@ -1,12 +1,13 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 #include "StdAfx.h"
 #include "EditorCommonInit.h"
+
+#include "ProxyModels/ItemModelAttribute.h"
 #include "IPlugin.h"
 
-#include <CryCore/Platform/platform_impl.inl>
-
 #include <QMetaType>
-#include "ProxyModels/ItemModelAttribute.h"
+
+#include <CryCore/Platform/platform_impl.inl>
 
 static IEditor* g_editor = nullptr;
 
@@ -34,4 +35,3 @@ void EDITOR_COMMON_API EditorCommon::Deinitialize()
 	g_editor = nullptr;
 	gEnv = nullptr;
 }
-

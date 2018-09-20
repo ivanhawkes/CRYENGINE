@@ -1,4 +1,6 @@
 start_sources()
+
+# -- crycommonunittest.waf_files --
 sources_platform(ALL)
 add_sources("NoUberFile"
 	SOURCE_GROUP "Source Files"
@@ -19,6 +21,7 @@ add_sources("NoUberFile"
 		"PathTests.cpp"
 		"GUIDTests.cpp"
 		"CryTestTests.cpp"
+		"FileVersionTests.cpp"
 )
 end_sources()
 

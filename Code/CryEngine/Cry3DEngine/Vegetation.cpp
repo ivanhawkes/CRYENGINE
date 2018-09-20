@@ -26,6 +26,52 @@
 
 float CRY_ALIGN(128) CVegetation::g_scBoxDecomprTable[256];
 
+namespace VegetationPoolAllocator
+{
+stl::PoolAllocator<sizeof(CVegetation), stl::PSyncNone> m_vegetationAllocator[CVegetation::eAllocator_Count];
+}
+
+void* CVegetation::operator new(size_t size, EAllocatorId allocatorId)
+{
+	// allocate procedural vegetation separately from normal vegetation
+	return VegetationPoolAllocator::m_vegetationAllocator[allocatorId].Allocate();
+}
+
+void CVegetation::operator delete(void* pToFree, EAllocatorId unused)
+{
+	CVegetation::operator delete(pToFree);
+}
+
+void CVegetation::operator delete(void* pToFree)
+{
+	if (((CVegetation*)pToFree)->m_dwRndFlags & ERF_PROCEDURAL)
+		VegetationPoolAllocator::m_vegetationAllocator[eAllocator_Procedural].Deallocate(pToFree);
+	else
+		VegetationPoolAllocator::m_vegetationAllocator[eAllocator_Default].Deallocate(pToFree);
+}
+
+void CVegetation::StaticReset()
+{
+	for (int i = 0; i < eAllocator_Count; i++)
+	{
+		assert(VegetationPoolAllocator::m_vegetationAllocator[i].GetCounts().nUsed == 0);
+		VegetationPoolAllocator::m_vegetationAllocator[i].FreeMemory();
+	}
+}
+
+void CVegetation::GetStaticMemoryUsage(ICrySizer* pSizer)
+{
+	{
+		SIZER_COMPONENT_NAME(pSizer, "DefaultVegetPool");
+		pSizer->AddObject(VegetationPoolAllocator::m_vegetationAllocator[CVegetation::eAllocator_Default]);
+	}
+
+	{
+		SIZER_COMPONENT_NAME(pSizer, "ProcVegetPool");
+		pSizer->AddObject(VegetationPoolAllocator::m_vegetationAllocator[CVegetation::eAllocator_Procedural]);
+	}
+}
+
 // g_scBoxDecomprTable heps on consoles (no difference on PC)
 void CVegetation::InitVegDecomprTable()
 {
@@ -199,7 +245,7 @@ CLodValue CVegetation::ComputeLod(int wantedLod, const SRenderingPassInfo& passI
 
 	return CLodValue(nLodA, nDissolveRefA, nLodB);
 }
-	
+
 //////////////////////////////////////////////////////////////////////////
 void CVegetation::FillBendingData(CRenderObject* pObj, const SRenderingPassInfo& passInfo) const
 {
@@ -275,6 +321,7 @@ void CVegetation::Render(const SRenderingPassInfo& passInfo, const CLodValue& lo
 	pRenderObject->m_pRenderNode = const_cast<IRenderNode*>(static_cast<const IRenderNode*>(this));
 	pRenderObject->m_fAlpha = 1.f;
 	pRenderObject->m_ObjFlags |= FOB_INSHADOW | FOB_TRANS_MASK | FOB_DYNAMIC_OBJECT;
+	pRenderObject->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : 0;
 	pRenderObject->m_editorSelectionID = m_nEditorSelectionID;
 
 	if (!userData.objMat.m01 && !userData.objMat.m02 && !userData.objMat.m10 && !userData.objMat.m12 && !userData.objMat.m20 && !userData.objMat.m21)
@@ -291,6 +338,7 @@ void CVegetation::Render(const SRenderingPassInfo& passInfo, const CLodValue& lo
 	else
 		pRenderObject->m_ObjFlags &= ~FOB_BLEND_WITH_TERRAIN_COLOR;
 
+	CRY_ASSERT(fEntDistance * 2.0f <= std::numeric_limits<decltype(CRenderObject::m_nSort)>::max());
 	pRenderObject->m_fDistance = fEntDistance;
 	pRenderObject->m_nSort = fastround_positive(fEntDistance * 2.0f);
 
@@ -971,6 +1019,7 @@ void CVegetation::UpdateRndFlags()
 
 	m_dwRndFlags &= ~dwFlagsToUpdate;
 	m_dwRndFlags |= vegetGroup.m_dwRndFlags & (dwFlagsToUpdate | ERF_HAS_CASTSHADOWMAPS);
+	m_dwRndFlags |= !vegetGroup.bIgnoreTerrainLayerBlend ? ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND : 0;
 
 	IRenderNode::SetLodRatio((int)(vegetGroup.fLodDistRatio * 100.f));
 	IRenderNode::SetViewDistRatio((int)(vegetGroup.fMaxViewDistRatio * 100.f));

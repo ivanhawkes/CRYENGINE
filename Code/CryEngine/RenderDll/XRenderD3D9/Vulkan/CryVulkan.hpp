@@ -2,6 +2,35 @@
 
 #pragma once
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if !_RELEASE
+	#define VK_ERROR(...) \
+		do { CryLog("Vulkan Error: " __VA_ARGS__); } while (0)
+	#define VK_ASSERT(cond) \
+		do { if (!(cond)) { VK_ERROR(#cond); CRY_ASSERT(cond); } } while (0)
+#else
+	#define VK_ERROR(...)   do {} while (0)
+	#define VK_ASSERT(cond) do {} while (0)
+#endif
+
+#ifdef _DEBUG
+	#define VK_LOG(cond, ...) \
+		do { if (cond) CryLog("Vulkan Log: " __VA_ARGS__); } while (0)
+	#define VK_WARNING(...) \
+		do { CryLog("Vulkan Warning: " __VA_ARGS__); } while (0)
+	#define VK_ASSERT_DEBUG(cond) VK_ASSERT(cond)
+#else
+	#define VK_LOG(cond, ...)     do {} while (0)
+	#define VK_WARNING(cond, ...) do {} while (0)
+	#define VK_ASSERT_DEBUG(cond) do {} while (0)
+#endif
+
+#define VK_NOT_IMPLEMENTED VK_ASSERT(0 && "Not implemented!");
+#define VK_FUNC_LOG() VK_LOG(true, "%s() called", __FUNC__)
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Pull in everything needed to implement device objects
 #include "API/VKBase.hpp"
 #include "API/VKDevice.hpp"
@@ -39,3 +68,49 @@ HRESULT WINAPI VKCreateDevice(
 bool VKCreateSDLWindow(const char* szTitle, uint32 uWidth, uint32 uHeight, bool bFullScreen, HWND* pHandle);
 void VKDestroySDLWindow(HWND kHandle);
 #endif
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template<class ID3D11DeviceChildDerivative>
+inline void ClearDebugName(ID3D11DeviceChildDerivative* pWrappedResource)
+{
+#if !defined(RELEASE) && CRY_PLATFORM_WINDOWS
+	if (!pWrappedResource)
+		return;
+
+	return pWrappedResource->ClearDebugName();
+#endif
+}
+
+template<class ID3D11DeviceChildDerivative>
+inline void SetDebugName(ID3D11DeviceChildDerivative* pWrappedResource, const char* name, ...)
+{
+#if !defined(RELEASE) && CRY_PLATFORM_WINDOWS
+	if (!pWrappedResource)
+		return;
+
+	va_list args;
+	va_start(args, name);
+
+	char* buffer = (char*)_alloca(512);
+	if (_vsnprintf(buffer, 512, name, args) < 0)
+		return;
+
+	pWrappedResource->SetDebugName(buffer);
+
+	va_end(args);
+#endif
+}
+
+template<class ID3D11DeviceChildDerivative>
+inline std::string GetDebugName(ID3D11DeviceChildDerivative* pWrappedResource)
+{
+#if !defined(RELEASE) && CRY_PLATFORM_WINDOWS
+	if (!pWrappedResource)
+		return "nullptr";
+
+	return pWrappedResource->GetDebugName();
+#endif
+
+	return "";
+}

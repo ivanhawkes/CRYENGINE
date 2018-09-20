@@ -2,13 +2,14 @@
 
 #include "stdafx.h"
 #include "TopRendererWnd.h"
-#include ".\Terrain\Heightmap.h"
+
+#include "Terrain/Heightmap.h"
+#include "Terrain/TerrainTexGen.h"
 #include "Vegetation/VegetationMap.h"
 #include "ViewManager.h"
-#include <Preferences/ViewportPreferences.h>
 
-#include ".\Terrain\TerrainTexGen.h"
-#include "Controls/DynamicPopupMenu.h"
+#include <Controls/DynamicPopupMenu.h>
+#include <Preferences/ViewportPreferences.h>
 
 // Size of the surface texture
 #define SURFACE_TEXTURE_WIDTH 512
@@ -502,4 +503,3 @@ void CTopRendererWnd::SerializeDisplayOptions(Serialization::IArchive& ar)
 
 	C2DViewport::SerializeDisplayOptions(ar);
 }
-

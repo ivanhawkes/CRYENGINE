@@ -6,21 +6,41 @@ start_sources()
 sources_platform(ALL)
 add_sources("CryAudioImpl_uber_0.cpp"
 	SOURCE_GROUP "Header Files"
-		"ATLEntities.h"
-		"AudioImpl.h"
-		"AudioImplCVars.h"
 		"Common.h"
+		"CVars.h"
+		"Debug.h"
+		"Environment.h"
+		"Event.h"
+		"File.h"
 		"FileIOHandler.h"
 		"GlobalData.h"
+		"Impl.h"
+		"Listener.h"
+		"Object.h"
+		"Parameter.h"
 		"resource.h"
+		"Setting.h"
+		"StandaloneFile.h"
 		"stdafx.h"
+		"SwitchState.h"
+		"Trigger.h"
 	SOURCE_GROUP "Source Files"
-		"AudioImpl.cpp"
-		"AudioImplCVars.cpp"
 		"Common.cpp"
 		"CryAudioImpl.cpp"
+		"CVars.cpp"
+		"Debug.cpp"
+		"Environment.cpp"
+		"Event.cpp"
+		"File.cpp"
 		"FileIOHandler.cpp"
-		"ATLEntities.cpp"
+		"Impl.cpp"
+		"Listener.cpp"
+		"Object.cpp"
+		"Parameter.cpp"
+		"Setting.cpp"
+		"StandaloneFile.cpp"
+		"SwitchState.cpp"
+		"Trigger.cpp"
 )
 
 add_sources("NoUberFile"
@@ -106,6 +126,8 @@ if (AUDIO_WWISE)
 		AkHarmonizerFX
 		AkMatrixReverbFX
 		AkMeterFX
+		AkMotionSourceSource
+		AkOpusDecoder
 		AkParametricEQFX
 		AkPeakLimiterFX
 		AkPitchShifterFX
@@ -138,7 +160,6 @@ if (AUDIO_WWISE)
 		iZTrashFiltersFX
 		iZTrashMultibandDistortionFX
 		AuroHeadphoneFX
-		AuroPannerMixer
 	)
 
 	set( COMMON_WWISE_LIBS ${WWISE_CORE_LIBS} ${WWISE_PLUGIN_LIBS} )
@@ -176,7 +197,7 @@ if (AUDIO_WWISE)
 	set( DARWIN_RELEASE_LIBS ${COMMON_WWISE_LIBS} ${DARWIN_WWISE_LIBS} )
 	set( DARWIN_NONRELEASE_LIBS ${COMM_CENTRAL_LIBS} ${DARWIN_RELEASE_LIBS} )
 
-	set( ANDROID_WWISE_LIBS	CrankcaseAudioREVModelPlayerFX AuroHeadphoneFX AuroPannerMixer AkMotionGeneratorSource AkMotionSink)
+	set( ANDROID_WWISE_LIBS	CrankcaseAudioREVModelPlayerFX AuroHeadphoneFX AkMotionGeneratorSource AkMotionSink)
 	make_library(ANDROID_WWISE_LIBS "${WWISE_LIB_PATH}")
 
 	set( ANDROID_RELEASE_LIBS ${COMMON_WWISE_LIBS} ${ANDROID_WWISE_LIBS} )

@@ -330,7 +330,6 @@ void CDialogFolderCtrl::Reload()
 			// continue stripping
 			groupName = fullClassName.Tokenize(tokens, pos);
 		}
-		;
 
 		// short node name without ':'. used for display in last column
 		nodeShortName = fullClassName.Mid(midPos);
@@ -1548,4 +1547,3 @@ bool CDialogEditorDialog::DoSourceControlOp(CEditorDialogScript* pScript, ESourc
 	}
 	return bRes;
 }
-

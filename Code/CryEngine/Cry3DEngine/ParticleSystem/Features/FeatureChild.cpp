@@ -1,8 +1,9 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FeatureCommon.h"
 #include "FeatureCollision.h"
+#include "FeatureMotion.h"
 
 namespace pfx2
 {
@@ -38,20 +39,18 @@ public:
 
 	static uint DefaultForType() { return EFT_Child; }
 
-	void AddSubInstances(CParticleComponentRuntime& runtime) override
+	void AddSubInstances(CParticleComponentRuntime& runtime, TDynArray<SInstance>& instances) override
 	{
 		CParticleContainer& parentContainer = runtime.GetParentContainer();
 		IFStream normAges = parentContainer.GetIFStream(EPDT_NormalAge);
 		IFStream lifeTimes = parentContainer.GetIFStream(EPDT_LifeTime);
 
-		THeapArray<SInstance> triggers(runtime.MemHeap());
-		triggers.reserve(parentContainer.GetNumParticles());
+		instances.reserve(parentContainer.GetNumParticles());
 		for (auto particleId : parentContainer.GetSpawnedRange())
 		{
 			const float delay = runtime.DeltaTime() - normAges.Load(particleId) * lifeTimes.Load(particleId);
-			triggers.emplace_back(particleId, delay);
+			instances.emplace_back(particleId, delay);
 		}
-		runtime.AddSubInstances(triggers);
 	}
 };
 
@@ -66,15 +65,14 @@ public:
 
 	bool IsDelayed() const override { return true; }
 
-	void AddSubInstances(CParticleComponentRuntime& runtime) override
+	void AddSubInstances(CParticleComponentRuntime& runtime, TDynArray<SInstance>& instances) override
 	{
 		CParticleContainer& parentContainer = runtime.GetParentContainer();
 		
 		IFStream normAges = parentContainer.GetIFStream(EPDT_NormalAge);
 		IFStream lifeTimes = parentContainer.GetIFStream(EPDT_LifeTime);
 
-		THeapArray<SInstance> triggers(runtime.MemHeap());
-		triggers.reserve(parentContainer.GetNumParticles());
+		instances.reserve(parentContainer.GetNumParticles());
 		for (auto particleId : parentContainer.GetFullRange())
 		{
 			const float normAge = normAges.Load(particleId);
@@ -82,10 +80,9 @@ public:
 			{
 				const float overAge = (normAge - 1.0f) * lifeTimes.Load(particleId);
 				const float delay = runtime.DeltaTime() - overAge;
-				triggers.emplace_back(particleId, delay);
+				instances.emplace_back(particleId, delay);
 			}
 		}
-		runtime.AddSubInstances(triggers);
 	}
 };
 
@@ -93,29 +90,56 @@ CRY_PFX2_IMPLEMENT_COMPONENT_FEATURE(CParticleFeature, CFeatureChildOnDeath, "Ch
 
 //////////////////////////////////////////////////////////////////////////
 
+SERIALIZATION_DECLARE_ENUM(ESurfaceRequirement,
+	Any,
+	Only,
+	Not
+)
+
 class CFeatureChildOnCollide : public CFeatureChildBase
 {
 public:
 	CRY_PFX2_DECLARE_FEATURE
 
+	void Serialize(Serialization::IArchive& ar) override
+	{
+		SERIALIZE_VAR(ar, m_surfaceRequirement);
+		if (m_surfaceRequirement != ESurfaceRequirement::Any)
+			SERIALIZE_VAR(ar, m_surface);
+	}
+
 	bool IsDelayed() const override { return true; }
 
-	void AddSubInstances(CParticleComponentRuntime& runtime) override
+	void AddSubInstances(CParticleComponentRuntime& runtime, TDynArray<SInstance>& instances) override
 	{
 		CParticleContainer& parentContainer = runtime.GetParentContainer();
-		THeapArray<SInstance> triggers(runtime.MemHeap());
-		triggers.reserve(parentContainer.GetNumParticles());
+		instances.reserve(parentContainer.GetNumParticles());
 		
 		const auto contactPoints = parentContainer.IStream(EPDT_ContactPoint);
 
 		for (auto particleId : parentContainer.GetFullRange())
 		{
-			const SContactPoint contact = contactPoints.Load(particleId);
-			if (contact.m_state.collided)
-				triggers.emplace_back(particleId, contact.m_time);
+			const SContactPoint& contact = contactPoints[particleId];
+			if (contact.m_collided)
+			{
+				if (m_surfaceRequirement == ESurfaceRequirement::Only)
+				{
+					if (contact.m_pSurfaceType->GetId() != m_surface)
+						continue;
+				}
+				else if (m_surfaceRequirement == ESurfaceRequirement::Not)
+				{
+					if (contact.m_pSurfaceType->GetId() == m_surface)
+						continue;
+				}
+				instances.emplace_back(particleId, contact.m_time);
+			}
 		}
-		runtime.AddSubInstances(triggers);
 	}
+
+private:
+	ESurfaceRequirement m_surfaceRequirement;
+	ESurfaceType        m_surface;
 };
 
 CRY_PFX2_IMPLEMENT_COMPONENT_FEATURE(CParticleFeature, CFeatureChildOnCollide, "Child", "OnCollide", colorChild);

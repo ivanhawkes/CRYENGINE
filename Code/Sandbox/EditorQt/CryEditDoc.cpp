@@ -66,9 +66,7 @@ static const char* kLastLoadPathFilename = "lastLoadPath.preset";
 static const char* kLevelSaveAsCopyList[] =
 {
 	"level.pak",
-	"terraintexture.pak",
 	"filelist.xml",
-	"levelshadercache.pak"
 	"tags.txt"
 };
 
@@ -100,17 +98,6 @@ void DisablePhysicsAndAISimulation()
 		{
 			pAction->setChecked(false);
 		}
-	}
-}
-
-void CallAudioSystemOnLoad(const string& szFilename)
-{
-	string fileName = PathUtil::GetFileName(szFilename.GetString());
-	string const levelName = PathUtil::GetFileName(fileName.GetBuffer());
-
-	if (!levelName.empty() && levelName.compareNoCase("Untitled") != 0)
-	{
-		gEnv->pAudioSystem->OnLoadLevel(levelName.c_str());
 	}
 }
 
@@ -238,6 +225,34 @@ void CreateLevelIfNeeded()
 	}
 }
 
+std::vector<string> g_levelFiles;
+
+void CollectAllLevelFiles()
+{
+	if (!g_levelFiles.empty())
+	{
+		return;
+	}
+
+	g_levelFiles.reserve(8 + CMission::GetDataFilesCount());
+	g_levelFiles.push_back("filelist.xml");
+	g_levelFiles.push_back("level.pak");
+	g_levelFiles.push_back("tags.txt");
+	g_levelFiles.push_back("tags.json");
+	g_levelFiles.push_back("terraintexture.pak");
+
+	const string levelDataFolder = "LevelData/";
+	
+	g_levelFiles.push_back(levelDataFolder + CMission::GetObjectivesFileName());
+
+	for (int i = 0; i < CMission::GetDataFilesCount(); ++i)
+	{
+		g_levelFiles.push_back(levelDataFolder + CMission::GetDataFilename(i));
+	}
+	g_levelFiles.push_back(levelDataFolder + GetIEditorImpl()->GetGameTokenManager()->GetDataFilename());
+	g_levelFiles.push_back(levelDataFolder + GetIEditorImpl()->GetVegetationMap()->GetDataFilename());
+}
+
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -283,6 +298,11 @@ CCryEditDoc::~CCryEditDoc()
 	ClearMissions();
 	GetIEditorImpl()->GetTerrainManager()->ClearLayers();
 	delete m_pLevelShaderCache;
+}
+
+const std::vector<string>& CCryEditDoc::GetLevelFilenames()
+{
+	return Private_CryEditDoc::g_levelFiles;
 }
 
 bool CCryEditDoc::Save()
@@ -332,9 +352,6 @@ void CCryEditDoc::DeleteContents()
 
 	// Load scripts data
 	SetModifiedFlag(FALSE);
-
-	// Unload level specific audio binary data.
-	gEnv->pAudioSystem->OnUnloadLevel();
 
 	GetIEditorImpl()->GetIUndoManager()->Resume();
 
@@ -416,8 +433,6 @@ void CCryEditDoc::Load(TDocMultiArchive& arrXmlAr, const string& filename)
 #ifdef PROFILE_LOADING_WITH_VTUNE
 	VTResume();
 #endif
-
-	CallAudioSystemOnLoad(filename);
 
 	string currentMissionName = GetCurrentMissionName(arrXmlAr);
 
@@ -893,8 +908,6 @@ BOOL CCryEditDoc::DoSaveDocument(LPCTSTR filename, TSaveDocContext& context)
 
 	bool& bSaved = context.bSaved;
 
-	bSaved = GetIEditorImpl()->GetTerrainManager()->WouldHeightmapSaveSucceed();
-
 	if (bSaved)
 	{
 		bSaved = SaveLevel(PathUtil::AbsolutePathToCryPakPath(filename).c_str());
@@ -942,6 +955,7 @@ static void GetUserSettingsFile(const string& levelFolder, string& userSettings)
 
 bool CCryEditDoc::SaveLevel(const string& filename)
 {
+	using namespace Private_CryEditDoc;
 	LOADING_TIME_PROFILE_SECTION;
 	CWaitCursor wait;
 
@@ -954,56 +968,18 @@ bool CCryEditDoc::SaveLevel(const string& filename)
 	CFileUtil::CreateDirectory(levelFolder);
 	GetIEditorImpl()->GetGameEngine()->SetLevelPath(levelFolder);
 
-	// need to copy other level data before saving to different folder
-	const string oldLevelPath = PathUtil::AbsolutePathToCryPakPath(GetPathName().GetString()).c_str();
-	const string oldLevelFolder = PathUtil::GetPathWithoutFilename(oldLevelPath);
-
-	if (oldLevelFolder != levelFolder)
-	{
-		LOADING_TIME_PROFILE_SECTION_NAMED("CCryEditDoc::SaveLevel() level folder changed");
-
-		// make sure we stop streaming from level.pak
-		gEnv->p3DEngine->CloseTerrainTextureFile();
-
-		ICryPak* pIPak = GetIEditorImpl()->GetSystem()->GetIPak();
-		pIPak->Lock();
-
-		for (unsigned int i = 0; i < sizeof(kLevelSaveAsCopyList) / sizeof(char*); ++i)
-		{
-			// if we're saving a pak file, ensure we do not have an existing version of that pak file open in memory
-			// causes nasty problems when we reload the pak with different file contents and have old header info in mem
-			if (strstr(kLevelSaveAsCopyList[i], ".pak"))
-			{
-				string pakPath = levelFolder + "/" + kLevelSaveAsCopyList[i];
-				pIPak->ClosePack(pakPath);
-			}
-
-			CFileUtil::CopyFile(oldLevelFolder + "/" + kLevelSaveAsCopyList[i], levelFolder + "/" + kLevelSaveAsCopyList[i]);
-		}
-
-		pIPak->Unlock();
-	}
+	CopyFilesIfSavedToNewLocation(levelFolder);
 
 	CryLog("Saving level file %s", filename.c_str());
 	{
-		// Make a backup of file.
-		if (gEditorFilePreferences.filesBackup)
-		{
-			CFileUtil::BackupFile(filename.c_str());
-		}
+		CTempFileHelper helper(filename);
 
 		CXmlArchive xmlAr;
 		Save(xmlAr);
-		if (!xmlAr.SaveToFile(filename))
-		{
-			return false;
-		}
-	}
 
-	// Save Heightmap and terrain data
-	GetIEditorImpl()->GetTerrainManager()->Save(gEditorFilePreferences.filesBackup);
-	// Save TerrainTexture
-	GetIEditorImpl()->GetTerrainManager()->SaveTexture(gEditorFilePreferences.filesBackup);
+		xmlAr.SaveToFile(string(helper.GetTempFilePath()));
+		helper.UpdateFile(gEditorFilePreferences.filesBackup);
+	}
 
 	// Save vegetation
 	if (GetIEditorImpl()->GetVegetationMap())
@@ -1015,6 +991,54 @@ bool CCryEditDoc::SaveLevel(const string& filename)
 	// Commit changes to the disk.
 	_flushall();
 	return true;
+}
+
+void CCryEditDoc::CopyFilesIfSavedToNewLocation(const string& levelFolder)
+{
+	// need to copy other level data before saving to different folder
+	const string oldLevelPath = PathUtil::AbsolutePathToCryPakPath(GetPathName().GetString()).c_str();
+	const string oldLevelFolder = PathUtil::GetPathWithoutFilename(oldLevelPath);
+
+	if (oldLevelFolder != levelFolder)
+	{
+		LOADING_TIME_PROFILE_SECTION_NAMED("CCryEditDoc::SaveLevel() level folder changed");
+
+		// make sure we stop streaming from level.pak
+		gEnv->p3DEngine->CloseTerrainTextureFile();
+
+		auto levelPath = PathUtil::MakeGamePath(GetPathName());
+		levelPath = levelPath.substr(0, levelPath.rfind('/'));
+		auto levelPathLength = levelPath.size() + 1;
+
+		std::vector<string> filesToCopy = GetIEditorImpl()->GetObjectManager()->GetLayersManager()->GetFiles();
+		for (string& fileName : filesToCopy)
+		{
+			fileName = fileName.substr(levelPathLength, fileName.size() - levelPathLength);
+		}
+		for (unsigned int i = 0; i < sizeof(kLevelSaveAsCopyList) / sizeof(char*); ++i)
+		{
+			filesToCopy.push_back(kLevelSaveAsCopyList[i]);
+		}
+
+		ICryPak* pIPak = GetIEditorImpl()->GetSystem()->GetIPak();
+		pIPak->MakeDir(PathUtil::Make(levelFolder, "LevelData"));
+		pIPak->Lock();
+
+		for (const string& fileName : filesToCopy)
+		{
+			// if we're saving a pak file, ensure we do not have an existing version of that pak file open in memory
+			// causes nasty problems when we reload the pak with different file contents and have old header info in mem
+			if (strstr(fileName, ".pak"))
+			{
+				string pakPath = levelFolder + "/" + fileName;
+				pIPak->ClosePack(pakPath);
+			}
+
+			CFileUtil::CopyFile(oldLevelFolder + "/" + fileName, levelFolder + "/" + fileName);
+		}
+
+		pIPak->Unlock();
+	}
 }
 
 bool CCryEditDoc::LoadLevel(TDocMultiArchive& arrXmlAr, const string& filename)
@@ -1066,7 +1090,7 @@ QString CCryEditDoc::GetLastLoadedLevelName()
 	QString lastLoadedLevel = lastUsedLevelPathNode->getContent();
 
 	// Validate that the last loaded level was used within this project
-	LevelFileUtils::AbsolutePath basePath = LevelFileUtils::GetUserBasePath();
+	LevelFileUtils::AbsolutePath basePath = LevelFileUtils::GetAssetBasePathAbsolute();
 	if (!lastLoadedLevel.startsWith(basePath))
 	{
 		return "";
@@ -1161,6 +1185,19 @@ void CCryEditDoc::SaveAutoBackup(bool bForce)
 	                                  levelName.c_str(),
 	                                  CLevelType::GetFileExtensionStatic());
 
+	struct BackupLayers
+	{
+		BackupLayers()
+		{
+			GetIEditorImpl()->GetObjectManager()->GetLayersManager()->StartBackup();
+		}
+		~BackupLayers()
+		{
+			GetIEditorImpl()->GetObjectManager()->GetLayersManager()->EndBackup();
+		}
+	};
+
+	BackupLayers backup;
 	SaveLevel(filename);
 	GetIEditorImpl()->GetGameEngine()->SetLevelPath(levelPath);
 
@@ -1566,4 +1603,3 @@ bool PySaveLevel()
 REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PySaveLevel, general, save_level,
                                      "Saves the current level.",
                                      "general.save_level()");
-

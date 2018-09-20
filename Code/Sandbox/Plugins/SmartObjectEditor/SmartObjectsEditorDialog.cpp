@@ -1,32 +1,28 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include <CryAISystem/IAIAction.h>
-#include <CryAISystem/IAISystem.h>
-#include <CryAISystem/IAgent.h>
+#include "SmartObjectsEditorDialog.h"
 
-#include "QtViewPane.h"
-#include "Objects/EntityObject.h"
-#include "Objects/SelectionGroup.h"
-#include "SmartObject.h"
-#include "GameEngine.h"
-#include "Util/MFCUtil.h"
-
-#include "AI\AIManager.h"
 #include "ItemDescriptionDlg.h"
+#include "SmartObject.h"
 #include "SmartObjectClassDialog.h"
 #include "SmartObjectHelperDialog.h"
+#include "SmartObjectHelperObject.h"
 #include "SmartObjectTemplateDialog.h"
 
-#include "HyperGraph\FlowGraphManager.h"
-#include "HyperGraph\FlowGraph.h"
-#include "SmartObjectHelperObject.h"
-#include "SmartObjectsEditorDialog.h"
-#include "Controls/QuestionDialog.h"
-#include "Controls/SharedFonts.h"
-#include "ClassFactory.h"
-#include "Objects/ObjectManager.h"
-#include "Util/FileUtil.h"
+// EditorQt
+#include <AI/AIManager.h>
+#include <HyperGraph/FlowGraphManager.h>
+#include <HyperGraph/FlowGraph.h>
+#include <Objects/EntityObject.h>
+#include <Objects/ObjectManager.h>
+#include <Objects/SelectionGroup.h>
+#include <GameEngine.h>
+
+// MFC
+#include <Controls/SharedFonts.h>
+#include <Util/FileUtil.h>
+#include <Util/MFCUtil.h>
 
 #define SOED_DIALOGFRAME_CLASSNAME "SmartObjectsEditorDialog"
 #define CLASS_TEMPLATES_FOLDER     "Libs/SmartObjects/ClassTemplates/"
@@ -1285,13 +1281,13 @@ class CSmartObjectsEditorViewClass : public IViewPaneClass
 	//////////////////////////////////////////////////////////////////////////
 	// IClassDesc
 	//////////////////////////////////////////////////////////////////////////
-	virtual ESystemClassID SystemClassID()	 override { return ESYSTEM_CLASS_VIEWPANE; };
-	virtual const char*    ClassName()       override { return "Smart Objects Editor"; };
-	virtual const char*    Category()        override { return "Game"; };
+	virtual ESystemClassID SystemClassID()	 override { return ESYSTEM_CLASS_VIEWPANE; }
+	virtual const char*    ClassName()       override { return "Smart Objects Editor"; }
+	virtual const char*    Category()        override { return "Game"; }
 	virtual const char*    GetMenuPath()     override { return "Deprecated"; }
-	virtual CRuntimeClass* GetRuntimeClass() override { return RUNTIME_CLASS(CSmartObjectsEditorDialog); };
-	virtual const char*    GetPaneTitle()    override { return _T("Smart Objects Editor"); };
-	virtual bool           SinglePane()      override { return true; };
+	virtual CRuntimeClass* GetRuntimeClass() override { return RUNTIME_CLASS(CSmartObjectsEditorDialog); }
+	virtual const char*    GetPaneTitle()    override { return _T("Smart Objects Editor"); }
+	virtual bool           SinglePane()      override { return true; }
 };
 
 REGISTER_CLASS_DESC(CSmartObjectsEditorViewClass)
@@ -2030,7 +2026,6 @@ void CSOLibrary::String2Classes(const string& sClass, SetStrings& classes)
 
 		start = end + 1;
 	}
-	;
 }
 
 void CSmartObjectsEditorDialog::ParseClassesFromProperties(CBaseObject* pObject, SetStrings& classes)
@@ -2831,7 +2826,7 @@ void CSmartObjectsEditorDialog::OnHelpersEdit()
 			{
 				if (it->second->GetName() == sSelectedHelper.GetString())
 				{
-					GetIEditor()->SelectObject(it->second);
+					GetIEditor()->GetObjectManager()->AddObjectToSelection(it->second);
 					GetIEditor()->GetObjectManager()->UnselectObject(pSelectedObject);
 					break;
 				}
@@ -2883,8 +2878,7 @@ void CSmartObjectsEditorDialog::OnHelpersNew()
 					CBaseObject* pChild = pSelected->GetChild(i);
 					if (pChild->GetName() == helper.name.GetString())
 					{
-						GetIEditor()->ClearSelection();
-						GetIEditor()->SelectObject(pChild);
+						GetIEditor()->GetObjectManager()->SelectObject(pChild);
 						break;
 					}
 				}
@@ -4164,4 +4158,3 @@ void CSmartObjectsEditorDialog::SetTemplateDefaults(SmartObjectCondition& condit
 
 	SetTemplateDefaults(condition, param->pNext, message);
 }
-

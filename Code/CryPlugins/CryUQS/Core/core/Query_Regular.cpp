@@ -283,13 +283,15 @@ namespace UQS
 
 		CQuery_Regular::EPhaseStatus CQuery_Regular::Phase1_PrepareGenerationPhase(const SPhaseUpdateContext& phaseUpdateContext)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			//
 			// instantiate the generator
 			//
 
 			const CGeneratorBlueprint* pGenBP = m_pQueryBlueprint->GetGeneratorBlueprint();
 			CRY_ASSERT(pGenBP);   // should have been detected by OnInstantiateFromQueryBlueprint() already
-			m_pGenerator = pGenBP->InstantiateGenerator(m_blackboard, phaseUpdateContext.error);
+			m_pGenerator = pGenBP->InstantiateGenerator(m_queryContext, phaseUpdateContext.error);
 			if (!m_pGenerator)
 			{
 				return EPhaseStatus::ExceptionOccurred;
@@ -311,7 +313,7 @@ namespace UQS
 		{
 			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
 
-			const Client::IGenerator::SUpdateContext updateContext(m_queryID, m_blackboard, phaseUpdateContext.error);
+			const Client::IGenerator::SUpdateContext updateContext(m_queryContext, phaseUpdateContext.error);
 			const Client::IGenerator::EUpdateStatus generatorStatus = m_pGenerator->Update(updateContext, m_generatedItems);
 
 			switch (generatorStatus)
@@ -339,6 +341,8 @@ namespace UQS
 
 		CQuery_Regular::EPhaseStatus CQuery_Regular::Phase3_CreateDebugRepresentationsOfGeneratedItemsIfHistoryLoggingIsDesired(const SPhaseUpdateContext& phaseUpdateContext)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			if (m_pHistory)
 			{
 				const Client::IItemFactory& itemFactory = m_generatedItems.GetItemFactory();
@@ -367,12 +371,14 @@ namespace UQS
 
 		CQuery_Regular::EPhaseStatus CQuery_Regular::Phase4_PrepareEvaluationPhase(const SPhaseUpdateContext& phaseUpdateContext)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			//
 			// make the generated items accessible to all functions in all evaluators from now on
 			//
 
 			m_pItemIterationContext.reset(new SItemIterationContext(m_generatedItems));
-			m_blackboard.pItemIterationContext = m_pItemIterationContext.get();
+			m_queryContext.pItemIterationContext = m_pItemIterationContext.get();
 
 			//
 			// - instantiate the function-call-hierarchies of instant-evaluators and deferred-evaluators
@@ -389,7 +395,7 @@ namespace UQS
 				for (size_t i = 0; i < numInstantEvaluators; ++i)
 				{
 					std::unique_ptr<CFunctionCallHierarchy> pFunctionCallHierarchy(new CFunctionCallHierarchy);
-					if (!instantEvaluatorBlueprints[i]->InstantiateFunctionCallHierarchy(*pFunctionCallHierarchy, m_blackboard, phaseUpdateContext.error))
+					if (!instantEvaluatorBlueprints[i]->InstantiateFunctionCallHierarchy(*pFunctionCallHierarchy, m_queryContext, phaseUpdateContext.error))
 					{
 						return EPhaseStatus::ExceptionOccurred;
 					}
@@ -406,7 +412,7 @@ namespace UQS
 				for (size_t i = 0; i < numDeferredEvaluators; ++i)
 				{
 					std::unique_ptr<CFunctionCallHierarchy> pFunctionCallHierarchy(new CFunctionCallHierarchy);
-					if (!deferredEvaluatorBlueprints[i]->InstantiateFunctionCallHierarchy(*pFunctionCallHierarchy, m_blackboard, phaseUpdateContext.error))
+					if (!deferredEvaluatorBlueprints[i]->InstantiateFunctionCallHierarchy(*pFunctionCallHierarchy, m_queryContext, phaseUpdateContext.error))
 					{
 						return EPhaseStatus::ExceptionOccurred;
 					}
@@ -479,6 +485,8 @@ namespace UQS
 
 		void CQuery_Regular::RunInstantEvaluator(const SInstantEvaluatorWithIndex& instantEvaluatorToRun, SItemWorkingData& workingDataToWriteResultTo)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			CRY_ASSERT(workingDataToWriteResultTo.bitsDiscardedByInstantEvaluators == 0);
 			CRY_ASSERT(workingDataToWriteResultTo.bitsWorkingDeferredEvaluators == 0);
 			CRY_ASSERT(workingDataToWriteResultTo.bitsDiscardedByDeferredEvaluators == 0);
@@ -509,7 +517,7 @@ namespace UQS
 			{
 				Shared::CUqsString exceptionMessageFromFunctionCalls;
 				bool bExceptionOccurredInFunctionCalls = false;
-				const Client::IFunction::SExecuteContext executeContext(workingDataToWriteResultTo.indexInGeneratedItems, m_blackboard, exceptionMessageFromFunctionCalls, bExceptionOccurredInFunctionCalls);
+				const Client::IFunction::SExecuteContext executeContext(workingDataToWriteResultTo.indexInGeneratedItems, m_queryContext, exceptionMessageFromFunctionCalls, bExceptionOccurredInFunctionCalls);
 				const CFunctionCallHierarchy* pFunctionCalls = m_functionCallHierarchyPerInstantEvalBP[instantEvaluatorIndex].get();
 				pFunctionCalls->ExecuteAll(executeContext, pParams, *instantEvaluatorToRun.pInputParameterRegistry);
 
@@ -529,7 +537,7 @@ namespace UQS
 			SItemEvaluationResult evaluationResult;
 			Shared::CUqsString exceptionMessageFromInstantEvaluatorHimself;
 			const Client::IInstantEvaluator* pInstantEvaluator = instantEvaluatorToRun.pInstantEvaluator.get();
-			const Client::IInstantEvaluator::SRunContext runContext(evaluationResult, m_blackboard, exceptionMessageFromInstantEvaluatorHimself);
+			const Client::IInstantEvaluator::SRunContext runContext(evaluationResult, m_queryContext, exceptionMessageFromInstantEvaluatorHimself);
 			const Client::IInstantEvaluator::ERunStatus status = pInstantEvaluator->Run(runContext, pParams);
 
 			switch(status)
@@ -627,7 +635,8 @@ namespace UQS
 
 				if (bDiscardedItem)
 				{
-					m_remainingItemWorkingDatasToInspect.erase(m_remainingItemWorkingDatasToInspect.begin() + m_remainingItemWorkingDatasIndexForCheapInstantEvaluators);
+					m_remainingItemWorkingDatasToInspect[m_remainingItemWorkingDatasIndexForCheapInstantEvaluators] = m_remainingItemWorkingDatasToInspect.back();
+					m_remainingItemWorkingDatasToInspect.pop_back();
 				}
 				else
 				{
@@ -651,6 +660,8 @@ namespace UQS
 
 		CQuery_Regular::EPhaseStatus CQuery_Regular::Phase6_SortByScoreSoFar(const SPhaseUpdateContext& phaseUpdateContext)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			// sort the remaining items such that the ones with higher scores come first
 			auto sorter = [](const SItemWorkingData* pLHS, const SItemWorkingData* pRHS)
 			{
@@ -664,6 +675,8 @@ namespace UQS
 
 		void CQuery_Regular::UpdateDeferredTasks()
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			for (auto it = m_deferredTasks.begin(); it != m_deferredTasks.end(); )
 			{
 				SDeferredTask& taskToUpdate = *it;
@@ -685,6 +698,8 @@ namespace UQS
 
 		void CQuery_Regular::UpdateDeferredTask(SDeferredTask& taskToUpdate)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			CRY_ASSERT(taskToUpdate.pWorkingData->bitsDiscardedByInstantEvaluators == 0);
 			CRY_ASSERT(taskToUpdate.pWorkingData->bitsDiscardedByDeferredEvaluators == 0);
 			CRY_ASSERT(taskToUpdate.pWorkingData->bitsWorkingDeferredEvaluators != 0);
@@ -726,7 +741,7 @@ namespace UQS
 
 				SItemEvaluationResult evaluationResult;
 				Shared::CUqsString exceptionMessageFromDeferredEvaluatorHimself;
-				const Client::IDeferredEvaluator::SUpdateContext evaluatorUpdateContext(evaluationResult, m_blackboard, exceptionMessageFromDeferredEvaluatorHimself);
+				const Client::IDeferredEvaluator::SUpdateContext evaluatorUpdateContext(evaluationResult, m_queryContext, exceptionMessageFromDeferredEvaluatorHimself);
 				const Client::IDeferredEvaluator::EUpdateStatus evaluatorStatus = de.pDeferredEvaluator->Update(evaluatorUpdateContext);
 
 				switch (evaluatorStatus)
@@ -1006,6 +1021,8 @@ namespace UQS
 
 		void CQuery_Regular::StartMoreEvaluatorsOnRemainingItems(const SPhaseUpdateContext& phaseUpdateContext)
 		{
+			CRY_PROFILE_FUNCTION_ARG(UQS_PROFILED_SUBSYSTEM_TO_USE, m_pQueryBlueprint->GetName());
+
 			//
 			// still more items to inspect?
 			//
@@ -1164,7 +1181,7 @@ namespace UQS
 			// function execution context (used for all function calls)
 			Shared::CUqsString exceptionMessageFromFunctionCalls;
 			bool bExceptionOccurredInFunctionCalls = false;
-			const Client::IFunction::SExecuteContext executeContext(pWorkingDataToInspectNext->indexInGeneratedItems, m_blackboard, exceptionMessageFromFunctionCalls, bExceptionOccurredInFunctionCalls);
+			const Client::IFunction::SExecuteContext executeContext(pWorkingDataToInspectNext->indexInGeneratedItems, m_queryContext, exceptionMessageFromFunctionCalls, bExceptionOccurredInFunctionCalls);
 
 			// fill the new task with all deferred-evaluators
 			for (size_t deferredEvaluatorBlueprintIndex = 0; deferredEvaluatorBlueprintIndex < numDeferredEvaluatorBlueprints; ++deferredEvaluatorBlueprintIndex)

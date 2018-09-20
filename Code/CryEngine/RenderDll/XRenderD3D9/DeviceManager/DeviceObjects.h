@@ -53,9 +53,9 @@ struct SInputLayoutCompositionDescriptor
 	const bool bInstanced;
 	const uint8_t ShaderMask;
 
-	static uint8_t GenerateShaderMask(const InputLayoutHandle VertexFormat, ID3D11ShaderReflection* pShaderReflection);
+	static uint8_t GenerateShaderMask(const InputLayoutHandle VertexFormat, D3DShaderReflection* pShaderReflection);
 
-	SInputLayoutCompositionDescriptor(InputLayoutHandle VertexFormat, int Stream, ID3D11ShaderReflection* pShaderReflection) noexcept
+	SInputLayoutCompositionDescriptor(InputLayoutHandle VertexFormat, int Stream, D3DShaderReflection* pShaderReflection) noexcept
 		: VertexFormat(VertexFormat), StreamMask(static_cast<uint8_t>(Stream % MASK(VSF_NUM))), bInstanced((StreamMask & VSM_INSTANCED) != 0), ShaderMask(GenerateShaderMask(VertexFormat, pShaderReflection))
 	{}
 
@@ -112,23 +112,8 @@ public:
 		memset(&m_singleton, 0xdf, sizeof(m_singleton));
 	}
 
-	void OnEndFrame()
-	{
-#if (CRY_RENDERER_DIRECT3D >= 110) && (CRY_RENDERER_DIRECT3D < 120)
-		m_pDX11Scheduler->EndOfFrame(false);
-
-	#if CRY_PLATFORM_DURANGO
-		m_texturePool.RT_Tick();
-	#endif
-#endif
-	}
-
-	void OnBeginFrame()
-	{
-#if CRY_RENDERER_VULKAN
-		UpdateDeferredUploads();
-#endif
-	}
+	void OnEndFrame(int frameID);
+	void OnBeginFrame(int frameID);
 
 	UINT64 QueryFormatSupport(D3DFormat Format);
 
@@ -179,9 +164,9 @@ public:
 	CDeviceGraphicsPSOPtr    CreateGraphicsPSO(const CDeviceGraphicsPSODesc& psoDesc);
 	CDeviceComputePSOPtr     CreateComputePSO(const CDeviceComputePSODesc& psoDesc);
 
-	void                     ReloadPipelineStates();
+	void                     ReloadPipelineStates(int currentFrameID);
 	void                     UpdatePipelineStates();
-	void                     TrimPipelineStates();
+	void                     TrimPipelineStates(int currentFrameID, int trimBeforeFrameID = std::numeric_limits<int>::max());
 
 	////////////////////////////////////////////////////////////////////////////
 	// Input dataset(s) API
@@ -420,6 +405,7 @@ private:
 
 	////////////////////////////////////////////////////////////////////////////
 	// PipelineState API
+	static const int UnusedPsoKeepAliveFrames = MAX_FRAMES_IN_FLIGHT;
 
 	CDeviceGraphicsPSOPtr    CreateGraphicsPSOImpl(const CDeviceGraphicsPSODesc& psoDesc) const;
 	CDeviceComputePSOPtr     CreateComputePSOImpl(const CDeviceComputePSODesc& psoDesc) const;
@@ -587,7 +573,7 @@ public:
 	HRESULT BeginTileFromLinear2D(CDeviceTexture* pDst, const STileRequest* pSubresources, size_t nSubresources, UINT64& fenceOut);
 
 //private:
-	typedef std::map<SMinimisedTexture2DDesc, SDeviceTextureDesc, std::less<SMinimisedTexture2DDesc>, stl::STLGlobalAllocator<std::pair<SMinimisedTexture2DDesc, SDeviceTextureDesc>>> TLayoutTableMap;
+	typedef std::map<SMinimisedTexture2DDesc, SDeviceTextureDesc, std::less<SMinimisedTexture2DDesc>, stl::STLGlobalAllocator<std::pair<const SMinimisedTexture2DDesc, SDeviceTextureDesc>>> TLayoutTableMap;
 
 	static bool               InPlaceConstructable(const D3D11_TEXTURE2D_DESC& Desc, uint32 eFlags);
 	HRESULT                   CreateInPlaceTexture2D(const D3D11_TEXTURE2D_DESC& Desc, uint32 eFlags, const STexturePayload* pTI, CDeviceTexture*& pDevTexOut);

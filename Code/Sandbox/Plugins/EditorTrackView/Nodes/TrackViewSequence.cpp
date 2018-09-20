@@ -469,7 +469,7 @@ void CTrackViewSequence::SelectSelectedNodesInViewport()
 
 	for (auto iter = entitiesToBeSelected.begin(); iter != entitiesToBeSelected.end(); ++iter)
 	{
-		GetIEditor()->SelectObject(*iter);
+		GetIEditor()->GetObjectManager()->AddObjectToSelection(*iter);
 	}
 }
 
@@ -1017,4 +1017,3 @@ void CTrackViewSequence::Serialize(Serialization::IArchive& ar)
 		ar(m_pAnimSequence->GetAudioTrigger(), "audioTrigger", "+Audio Trigger");
 	}
 }
-

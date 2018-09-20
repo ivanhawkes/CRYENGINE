@@ -397,8 +397,6 @@ QString ReplaceExtension(const QString& str, const char* ext)
 	return QtUtil::ToQString(PathUtil::ReplaceExtension(QtUtil::ToString(str), ext));
 }
 
-//////////////////////////////////////////////////////////////////////////
-
 inline string AbsoluteToRelativePath(const string& absolutePath, const char* dirPathRelativeTo)
 {
 	CryPathString path(absolutePath);
@@ -517,7 +515,18 @@ bool FileExists(const string& path)
 	return inf.exists() && inf.isFile();
 }
 
-EDITOR_COMMON_API bool IsValidFileName(const QString& name)
+bool FolderExists(const string& path)
+{
+	QFileInfo inf(QtUtil::ToQString(path));
+	return inf.exists() && inf.isDir();
+}
+
+bool IsFileInPakOnly(const string& path)
+{
+	return !FileExists(path) && GetISystem()->GetIPak()->IsFileExist(PathUtil::AbsolutePathToGamePath(path), ICryPak::eFileLocation_InPak);
+}
+
+bool IsValidFileName(const QString& name)
 {
 	if (name.isEmpty())
 		return false;

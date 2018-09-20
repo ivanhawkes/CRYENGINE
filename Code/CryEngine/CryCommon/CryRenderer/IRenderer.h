@@ -13,8 +13,6 @@
 
 #include <CryMath/Cry_Geo.h>
 #include <CryRenderer/IFlares.h> // <> required for Interfuscator
-#include <CryThreading/IJobManager.h>
-
 #include <CryExtension/ClassWeaver.h>
 #include <CrySystem/IEngineModule.h>
 #include <CrySystem/TimeValue.h>
@@ -308,6 +306,7 @@ class IManager;
 #define STR_ORBIS_SHADER_TARGET   "ORBIS"
 #define STR_DURANGO_SHADER_TARGET "DURANGO"
 #define STR_D3D11_SHADER_TARGET   "D3D11"
+#define STR_D3D12_SHADER_TARGET   "D3D12"
 #define STR_GL4_SHADER_TARGET     "GL4"
 #define STR_GLES3_SHADER_TARGET   "GLES3"
 #define STR_VULKAN_SHADER_TARGET  "VULKAN"
@@ -344,11 +343,11 @@ class IManager;
 
 #define RFT_HW_HDR           0x80000     // Hardware supports high dynamic range rendering.
 
-#define RFT_HW_SM20          0x100000    // Shader model 2.0
-#define RFT_HW_SM2X          0x200000    // Shader model 2.X
-#define RFT_HW_SM30          0x400000    // Shader model 3.0
-#define RFT_HW_SM40          0x800000    // Shader model 4.0
-#define RFT_HW_SM50          0x1000000   // Shader model 5.0
+#define RFT_HW_SM40          0x0100000   // Shader model 4.0
+#define RFT_HW_SM50          0x0200000   // Shader model 5.0
+#define RFT_HW_SM51          0x0400000   // Shader model 5.1
+#define RFT_HW_SM60          0x0800000   // Shader model 6.0, 6.1
+#define RFT_HW_SM62          0x1000000   // Shader model 6.2
 
 #define RFT_FREE_0x2000000   0x2000000
 #define RFT_FREE_0x4000000   0x4000000
@@ -1239,7 +1238,7 @@ struct IRenderer//: public IRendererCallbackServer
 
 	//! Load lightmap for name.
 	virtual int  EF_LoadLightmap(const char* name) = 0;
-	virtual DynArray<uint16_t> EF_RenderEnvironmentCubeHDR(size_t size, const Vec3& Pos) = 0;
+	virtual DynArray<uint16_t> EF_RenderEnvironmentCubeHDR(int size, const Vec3& Pos) = 0;
 	// Writes a TIF file to the system with the requested preset
 	// Intended for use with EF_RenderEnvironmentCubeHDR
 	virtual bool WriteTIFToDisk(const void* pData, int width, int height, int bytesPerChannel, int numChannels, bool bFloat, const char* szPreset, const char* szFileName) = 0;
@@ -1544,7 +1543,7 @@ struct IRenderer//: public IRendererCallbackServer
 	virtual int                                         GetMaxTextureSize() = 0;
 
 	virtual const char*                                 GetTextureFormatName(ETEX_Format eTF) = 0;
-	virtual int                                         GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF) = 0;
+	virtual uint32                                      GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF) = 0;
 	virtual bool                                        IsTextureFormatSupported(ETEX_Format eTF) = 0;
 
 	virtual void                                        SetDefaultMaterials(IMaterial* pDefMat, IMaterial* pTerrainDefMat) = 0;
@@ -1676,6 +1675,8 @@ struct IRenderer//: public IRendererCallbackServer
 
 	virtual bool  LoadShaderLevelCache() = 0;
 	virtual void  UnloadShaderLevelCache() = 0;
+
+	virtual void  ClearShaderPipelineStateCache() = 0;
 
 	virtual void  SetRendererCVar(ICVar* pCVar, const char* pArgText, const bool bSilentMode = false) = 0;
 

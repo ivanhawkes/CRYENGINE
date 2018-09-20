@@ -99,13 +99,14 @@ struct SParticleInstanceCB
 
 enum class EParticlePSOMode
 {
-	NoLigthing,
+	NoLighting,
 	WithLighting,
-	NoLigthingRecursive,
+	NoLightingRecursive,
 	WithLightingRecursive,
 	DebugSolid,
 	DebugWireframe,
 	VolumetricFog,
+	Mobile,
 	Count
 };
 
@@ -118,6 +119,9 @@ public:
 		m_pPerDrawCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SParticleInstanceCB), true);
 		m_pShaderDataCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(SParticleShaderData));
 		m_pPerDrawExtraRS = GetDeviceObjectFactory().CreateResourceSet(CDeviceResourceSet::EFlags_ForceSetAllState);
+
+		if (m_pPerDrawCB) m_pPerDrawCB->SetDebugName("Particle Per-Draw CB");
+		if (m_pShaderDataCB) m_pShaderDataCB->SetDebugName("Particle Per-Draw Extra CB");
 	}
 
 // private:
@@ -213,6 +217,11 @@ void CREParticle::ResetPool()
 
 void CREParticle::Reset(IParticleVertexCreator* pVC, int nThreadId, uint allocId)
 {
+	if (m_pVertexCreator)
+	{
+		assert(m_pVertexCreator == pVC);
+		assert(m_nThreadId == nThreadId);
+	}
 	m_pVertexCreator = pVC;
 	m_pGpuRuntime = nullptr;
 	m_nThreadId = nThreadId;
@@ -334,7 +343,13 @@ void CRenderer::PrepareParticleRenderObjects(Array<const SAddParticlesToSceneJob
 	WaitForParticleBuffer(passInfo.GetFrameID());
 
 	// == now create the render elements and start processing those == //
-	const bool useComputeVerticesJob = passInfo.IsGeneralPass();
+	ICVar* pVar = gEnv->pConsole->GetCVar("e_ParticlesDebug");
+	const bool computeSync = pVar && (pVar->GetIVal() & AlphaBit('v'));
+	const bool useComputeVerticesJob = !computeSync && passInfo.IsGeneralPass();
+	if (useComputeVerticesJob)
+	{
+		m_ComputeVerticesJobState.SetRunning();
+	}
 
 	SCameraInfo camInfo(passInfo);
 	const bool bParticleTessellation = m_bDeviceSupportsTessellation && CV_r_ParticlesTessellation != 0;
@@ -363,8 +378,12 @@ void CRenderer::PrepareParticleRenderObjects(Array<const SAddParticlesToSceneJob
 		size_t ij = &job - aJobs.data();
 		CREParticle* pRE = static_cast<CREParticle*>(pRenderObject->m_pRE);
 
+		// Clamp AABB
+		auto aabb = job.aabb;
+		if (aabb.IsReset())
+			aabb = AABB{ .0f };
 		if (pRenderObject->m_pCompiledObject)
-			pRenderObject->m_pCompiledObject->m_aabb = AABB{ job.aabb.min, job.aabb.max };
+			pRenderObject->m_pCompiledObject->m_aabb = aabb;
 
 		// generate the RenderItem entries for this Particle Element
 		assert(pRenderObject->m_bPermanent);
@@ -374,7 +393,7 @@ void CRenderer::PrepareParticleRenderObjects(Array<const SAddParticlesToSceneJob
 		if (!pRE->AddedToView())
 		{
 			// Update particle AABB
-			pRE->SetBBox(job.aabb.min, job.aabb.max);
+			pRE->SetBBox(aabb.min, aabb.max);
 
 			passInfo.GetRenderView()->AddRenderItem(
 				pRE, pRenderObject, shaderItem, nList, nBatchFlags, 
@@ -420,6 +439,11 @@ void CRenderer::PrepareParticleRenderObjects(Array<const SAddParticlesToSceneJob
 		}
 
 		passInfo.GetRendItemSorter().IncreaseParticleCounter();
+	}
+
+	if (useComputeVerticesJob)
+	{
+		m_ComputeVerticesJobState.SetStopped();
 	}
 }
 
@@ -606,7 +630,7 @@ bool CREParticle::Compile(CRenderObject* pRenderObject, CRenderView *pRenderView
 		switch (desc.renderState & OS_TRANSPARENT)
 		{
 		case OS_ALPHA_BLEND:
-			if (bDepthFixup)
+			if (bDepthFixup && CRendererCVars::CV_r_HDRTexFormat)
 				psoDesc.m_RenderState |= GS_BLALPHA_MIN | GS_BLSRC_SRC1ALPHA | GS_BLDST_ONEMINUSSRC1ALPHA;
 			else
 				psoDesc.m_RenderState |= GS_BLALPHA_MIN | GS_BLSRC_SRCALPHA | GS_BLDST_ONEMINUSSRCALPHA;
@@ -621,11 +645,16 @@ bool CREParticle::Compile(CRenderObject* pRenderObject, CRenderView *pRenderView
 
 		if (desc.renderState & OS_NODEPTH_TEST)
 			psoDesc.m_RenderState |= GS_NODEPTHTEST;
+
+		if (bDepthFixup && !CRendererCVars::CV_r_HDRTexFormat)
+			psoDesc.m_ShaderFlags_RT |= g_HWSR_MaskBit[HWSR_SAMPLE1];
 	};
 
 	bool bCompiled = true;
+
+#if RENDERER_ENABLE_FULL_PIPELINE
 	bCompiled &= graphicsPipeline.GetSceneForwardStage()->CreatePipelineState(stateDesc, pGraphicsPSO, CSceneForwardStage::ePass_Forward, customForwardState);
-	m_pCompiledParticle->m_pGraphicsPSOs[uint(EParticlePSOMode::NoLigthing)] = pGraphicsPSO;
+	m_pCompiledParticle->m_pGraphicsPSOs[uint(EParticlePSOMode::NoLighting)] = pGraphicsPSO;
 
 	stateDesc.objectRuntimeMask |= g_HWSR_MaskBit[HWSR_LIGHTVOLUME0];
 	bCompiled &= graphicsPipeline.GetSceneForwardStage()->CreatePipelineState(stateDesc, pGraphicsPSO, CSceneForwardStage::ePass_Forward, customForwardState);
@@ -634,7 +663,7 @@ bool CREParticle::Compile(CRenderObject* pRenderObject, CRenderView *pRenderView
 	stateDesc.objectRuntimeMask &= ~g_HWSR_MaskBit[HWSR_VOLUMETRIC_FOG]; // volumetric fog supports only general pass currently.
 	stateDesc.objectRuntimeMask &= ~g_HWSR_MaskBit[HWSR_LIGHTVOLUME0];
 	bCompiled &= graphicsPipeline.GetSceneForwardStage()->CreatePipelineState(stateDesc, pGraphicsPSO, CSceneForwardStage::ePass_ForwardRecursive, customForwardState);
-	m_pCompiledParticle->m_pGraphicsPSOs[uint(EParticlePSOMode::NoLigthingRecursive)] = pGraphicsPSO;
+	m_pCompiledParticle->m_pGraphicsPSOs[uint(EParticlePSOMode::NoLightingRecursive)] = pGraphicsPSO;
 
 	stateDesc.objectRuntimeMask |= g_HWSR_MaskBit[HWSR_LIGHTVOLUME0];
 	bCompiled &= graphicsPipeline.GetSceneForwardStage()->CreatePipelineState(stateDesc, pGraphicsPSO, CSceneForwardStage::ePass_ForwardRecursive, customForwardState);
@@ -647,6 +676,13 @@ bool CREParticle::Compile(CRenderObject* pRenderObject, CRenderView *pRenderView
 
 	bCompiled &= graphicsPipeline.GetSceneCustomStage()->CreatePipelineState(stateDesc, CSceneCustomStage::ePass_DebugViewWireframe, pGraphicsPSO);
 	m_pCompiledParticle->m_pGraphicsPSOs[uint(EParticlePSOMode::DebugWireframe)] = pGraphicsPSO;
+#endif
+
+#if RENDERER_ENABLE_MOBILE_PIPELINE
+	stateDesc.objectRuntimeMask &= ~(g_HWSR_MaskBit[HWSR_LIGHTVOLUME0] | g_HWSR_MaskBit[HWSR_VOLUMETRIC_FOG] | g_HWSR_MaskBit[HWSR_DEBUG0]);
+	bCompiled &= graphicsPipeline.GetSceneForwardStage()->CreatePipelineState(stateDesc, pGraphicsPSO, CSceneForwardStage::ePass_ForwardMobile, customForwardState);
+	m_pCompiledParticle->m_pGraphicsPSOs[uint(EParticlePSOMode::Mobile)] = pGraphicsPSO;
+#endif
 
 	if (!bCompiled)
 		return false;
@@ -729,8 +765,9 @@ CDeviceGraphicsPSOPtr CREParticle::GetGraphicsPSO(CRenderObject* pRenderObject, 
 	const bool isWireframe = isDebug && context.passID == CSceneCustomStage::ePass_DebugViewWireframe;
 	const bool isVolFog = context.stageID == eStage_VolumetricFog;
 	const bool isRecursive = context.stageID == eStage_SceneForward && context.passID == CSceneForwardStage::ePass_ForwardRecursive;
+	const bool isMobile = context.stageID == eStage_SceneForward && context.passID == CSceneForwardStage::ePass_ForwardMobile;
 
-	EParticlePSOMode mode = isRecursive ? EParticlePSOMode::NoLigthingRecursive : EParticlePSOMode::NoLigthing;
+	EParticlePSOMode mode = isRecursive ? EParticlePSOMode::NoLightingRecursive : EParticlePSOMode::NoLighting;
 	if (isWireframe)
 	{
 		mode = EParticlePSOMode::DebugWireframe;
@@ -742,6 +779,10 @@ CDeviceGraphicsPSOPtr CREParticle::GetGraphicsPSO(CRenderObject* pRenderObject, 
 	else if (isVolFog)
 	{
 		mode = EParticlePSOMode::VolumetricFog;
+	}
+	else if (isMobile)
+	{
+		mode = EParticlePSOMode::Mobile;
 	}
 	else if (lightVolumes.HasVolumes() && (pRenderObject->m_ObjFlags & FOB_LIGHTVOLUME) && lightVolumes.HasLights(lightVolumeId))
 	{

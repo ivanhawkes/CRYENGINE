@@ -237,9 +237,6 @@ CCompiledRenderObject* CRenderView::AllocCompiledObject(CRenderObject* pObj, CRe
 {
 	CCompiledRenderObject* pCompiledObject = CCompiledRenderObject::AllocateFromPool();
 	pCompiledObject->Init(shaderItem, pElem);
-
-	// Assign any compiled object to the RenderObject, just to be used as a root reference for constant buffer sharing
-	pObj->m_pCompiledObject = pCompiledObject;
 	pCompiledObject->m_pRO = pObj;
 
 	return pCompiledObject;
@@ -334,9 +331,9 @@ void CRenderView::CalculateViewInfo()
 }
 
 //////////////////////////////////////////////////////////////////////////
-bool CRenderView::IsHDRModeEnabled() const
+bool CRenderView::AllowsHDRRendering() const
 { 
-	return (m_shaderRenderingFlags & SHDF_ALLOWHDR) && gcpRendD3D->IsHDRModeEnabled();
+	return (m_shaderRenderingFlags & SHDF_ALLOWHDR);
 }
 
 bool CRenderView::IsPostProcessingEnabled() const
@@ -368,7 +365,7 @@ void CRenderView::SwitchUsageMode(EUsageMode mode)
 			auto lambda_job_after_write = [this] {
 				Job_PostWrite();
 			};
-			m_jobstate_Write.RegisterPostJobCallback("JobRenderViewPostWrite", lambda_job_after_write, JobManager::eRegularPriority, &m_jobstate_PostWrite);
+			m_jobstate_Write.RegisterPostJob("JobRenderViewPostWrite", lambda_job_after_write, JobManager::eRegularPriority, &m_jobstate_PostWrite);
 		}
 
 		// If no items will be written, next SetStopped call will trigger post job
@@ -894,12 +891,19 @@ CCamera::EEye CRenderView::GetCurrentEye() const
 //////////////////////////////////////////////////////////////////////////
 CTexture* CRenderView::GetColorTarget() const
 {
+	// Toggle back-buffer on first use
+	if (m_bRenderToSwapChain)
+		m_pRenderOutput->GetDisplayContext()->PostPresent();
+
 	CRY_ASSERT(m_pColorTarget);
 	return m_pColorTarget.get();
 }
 
 CTexture* CRenderView::GetDepthTarget() const
 {
+	if (m_pRenderOutput && !m_pDepthTarget)
+		return m_pRenderOutput->GetDepthTarget();
+
 	CRY_ASSERT(m_pDepthTarget);
 	return m_pDepthTarget.get();
 }
@@ -947,7 +951,8 @@ void CRenderView::ChangeRenderResolution(uint32_t renderWidth, uint32_t renderHe
 	CRY_ASSERT((renderHeight % GetOutputResolution()[1]) == 0);
 
 	// No changes do not need to resize
-	if (m_RenderWidth == renderWidth && m_RenderHeight == renderHeight && !bForce)
+	if (m_RenderWidth  == renderWidth &&
+	    m_RenderHeight == renderHeight && !bForce)
 	{ 
 		CRY_ASSERT(m_pDepthTarget->GetWidth() >= renderWidth && m_pDepthTarget->GetHeight() >= renderHeight);
 		CRY_ASSERT(m_pColorTarget->GetWidth() >= renderWidth && m_pColorTarget->GetHeight() >= renderHeight);
@@ -956,22 +961,22 @@ void CRenderView::ChangeRenderResolution(uint32_t renderWidth, uint32_t renderHe
 
 	m_RenderWidth  = renderWidth;
 	m_RenderHeight = renderHeight;
-	if (renderWidth == GetOutputResolution()[0] && renderHeight == GetOutputResolution()[1] && m_pRenderOutput) 
+	if (renderWidth  == GetOutputResolution()[0] &&
+	    renderHeight == GetOutputResolution()[1] && m_pRenderOutput) 
 	{
 		m_pColorTarget = m_pRenderOutput->GetColorTarget();
-		m_pDepthTarget = !m_pRenderOutput->RequiresTemporaryDepthBuffer() ?
-			m_pRenderOutput->GetDepthTarget() :
-			nullptr;
+		m_pDepthTarget = m_pRenderOutput->GetDepthTarget();
+
+		m_bRenderToSwapChain = m_pRenderOutput->m_bRenderToSwapChain;
 	}
 	else
 	{
 		m_pColorTarget = CRendererResources::s_ptexHDRTarget;
-		m_pDepthTarget = nullptr;
-	}
+		m_pDepthTarget = nullptr; // Allocate temporary depth target
+		m_pDepthTarget.Assign_NoAddRef(CRendererResources::CreateDepthTarget(renderWidth, renderHeight, Clr_Transparent, eTF_Unknown));
 
-	// Allocate temporary depth target
-	if (!m_pDepthTarget)
-		m_pDepthTarget.Assign_NoAddRef(CRendererResources::CreateDepthTarget(renderWidth, renderHeight, Clr_Empty, eTF_Unknown));
+		m_bRenderToSwapChain = false;
+	}
 
 	CRY_ASSERT(m_pColorTarget->GetWidth() >= renderWidth && m_pColorTarget->GetHeight() >= renderHeight);
 }
@@ -1030,23 +1035,6 @@ void CRenderView::AddPermanentObjectImpl(CPermanentRenderObject* pObject, const 
 void CRenderView::AddPermanentObject(CRenderObject* pObject, const SRenderingPassInfo& passInfo)
 {
 	assert(pObject->m_bPermanent);
-
-#ifndef NDEBUG
-	// Expand normal render items
-	for (auto& record : m_permanentObjects)
-	{
-		CPermanentRenderObject* RESTRICT_POINTER pRenderObject = record.pRenderObject;
-		assert(pRenderObject->m_bPermanent);
-
-		CRY_ASSERT_MESSAGE(pRenderObject != pObject, "Adding RenderObject twice is suspicious!");
-		if (pRenderObject == pObject)
-		{
-			// Record already exists, update instance data.
-			return;
-		}
-	}
-#endif
-
 	AddPermanentObjectImpl(static_cast<CPermanentRenderObject*>(pObject), passInfo);
 }
 
@@ -1570,9 +1558,7 @@ void CRenderView::AddRenderItem(CRenderElement* pElem, CRenderObject* RESTRICT_P
 		pri.m_nBatchFlags = nBatchFlags;
 		pri.m_objSort = ri.ObjSort;
 		pri.m_nRenderList = nList;
-
-		pri.m_pCompiledObject = ri.pCompiledObject;
-		pri.m_nBatchFlags |= ri.pCompiledObject ? FB_COMPILED_OBJECT : 0;
+		pri.m_pCompiledObject = nullptr;
 
 		pri.m_aabb = aabb;
 
@@ -1610,6 +1596,7 @@ void CRenderView::AddRenderItem(CRenderElement* pElem, CRenderObject* RESTRICT_P
 		{
 			// Allocate new CompiledRenderObject.
 			ri.pCompiledObject = AllocCompiledObject(pObj, pElem, shaderItem);
+			pObj->m_pCompiledObject = ri.pCompiledObject;
 			ri.nBatchFlags |= ri.pCompiledObject ? FB_COMPILED_OBJECT : 0;
 
 			// Add to temporary objects to compile
@@ -1765,9 +1752,6 @@ void CRenderView::ExpandPermanentRenderObjects()
 					!pRenderObject->m_bAllCompiledValid;
 
 				auto& permanent_items = pRenderObject->m_permanentRenderItems[renderPassType];
-				auto& RESTRICT_REFERENCE shadow_items = pRenderObject->m_permanentRenderItems[CPermanentRenderObject::eRenderPass_Shadows];
-				int num_shadow_items = shadow_items.size();
-
 				size_t numItems = permanent_items.size();
 				assert(numItems < 128); // Sanity check, otherwise too many chunks in the mesh
 				for (size_t i = 0; i < numItems; i++)
@@ -1777,25 +1761,28 @@ void CRenderView::ExpandPermanentRenderObjects()
 					SShaderItem shaderItem;
 					SRendItem::ExtractShaderItem(pri.m_sortValue, shaderItem);
 
-					if (!(volatile CCompiledRenderObject*)pri.m_pCompiledObject)
+					if (!pri.m_pCompiledObject)
 					{
-						bool bRequireCompiledRenderObject = false;
 						// This item will need a temporary compiled object
-						if (pri.m_pRenderElement && (pri.m_pRenderElement->mfGetType() == eDATA_Mesh || pri.m_pRenderElement->mfGetType() == eDATA_Particle))
-						{
-							bRequireCompiledRenderObject = true;
-						}
-
+						const bool bRequireCompiledRenderObject = pri.m_pRenderElement && 
+							(pri.m_pRenderElement->mfGetType() == eDATA_Mesh || pri.m_pRenderElement->mfGetType() == eDATA_Particle);
 						if (bRequireCompiledRenderObject)
 						{
-							static CryCriticalSectionNonRecursive allocCS;
-							AUTO_LOCK_T(CryCriticalSectionNonRecursive, allocCS);
-
-							if (((volatile CCompiledRenderObject*)pri.m_pCompiledObject) == nullptr)
+							auto allocatedCompiledObject = AllocCompiledObject(pRenderObject, pri.m_pRenderElement, shaderItem); // Allocate new CompiledRenderObject
+							if (CryInterlockedCompareExchangePointer((void* volatile*)&pri.m_pCompiledObject, allocatedCompiledObject, nullptr) != nullptr)
 							{
-								pri.m_pCompiledObject = AllocCompiledObject(pRenderObject, pri.m_pRenderElement, shaderItem); // Allocate new CompiledRenderObject.
+								// Exchange failed, release the newly acquired compiled object.
+								CCompiledRenderObject::FreeToPool(allocatedCompiledObject);
+							}
+							else 
+							{
 								pri.m_nBatchFlags |= pri.m_pCompiledObject ? FB_COMPILED_OBJECT : 0;
 								needsCompilation = true;
+
+								// We might need to update the root compiled object.
+								// We update it only once, first comes - wins.
+								if (i == 0)
+									CryInterlockedCompareExchangePointer((void* volatile*)&pRenderObject->m_pCompiledObject, pri.m_pCompiledObject, nullptr);
 							}
 						}
 					}

@@ -17,12 +17,26 @@
 
 namespace NCryDX12 {
 
-auto GetDebugName = [](ID3D12Resource* pO) -> const char* { UINT len = 511; static char name[512] = "unknown"; pO->GetPrivateData(WKPDID_D3DDebugObjectName, &len, name); name[len] = '\0'; return name; };
-
 //---------------------------------------------------------------------------------------------------------------------
 CDevice* CDevice::Create(CCryDX12GIAdapter* pAdapter, D3D_FEATURE_LEVEL* pFeatureLevel)
 {
 	ID3D12Device* pDevice12 = NULL;
+
+#if USE_DXC
+	// Enable shader model 6.x
+	if (CRenderer::ShaderTargetFlag & SF_D3D12)
+	{
+		HRESULT res = D3D12EnableExperimentalFeatures(1, &D3D12ExperimentalShaderModels, nullptr, nullptr);
+		DX12_ASSERT(res == S_OK, "Enabling experimental features for D3D12 Device didn't work!");
+
+		// Disable shader model 6.x if it can't be enabled
+		if (res != S_OK)
+			CRenderer::ShaderTargetFlag = (CRenderer::ShaderTargetFlag & ~SF_D3D12) | SF_D3D11;
+	}
+#else
+	// Disable shader model 6.x if it isn't possible
+	CRenderer::ShaderTargetFlag = (CRenderer::ShaderTargetFlag & ~SF_D3D12) | SF_D3D11;
+#endif
 
 	if (CRenderer::CV_r_EnableDebugLayer)
 	{
@@ -644,7 +658,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE CDevice::CacheSampler(const D3D12_SAMPLER_DESC* pDes
 		GetD3D12Device()->CreateSampler(pDesc, dstHandle);
 
 		auto insertResult = m_SamplerCacheLookupTable.emplace(hHash, dstHandle);
-		DX12_ASSERT(insertResult.second);
+		DX12_ASSERT(insertResult.second, "Sampler not inserted into the cache!");
 		itCachedSampler = insertResult.first;
 	}
 
@@ -688,7 +702,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE CDevice::CacheShaderResourceView(const D3D12_SHADER_
 		GetD3D12Device()->CreateShaderResourceView(pResource, &Desc, dstHandle);
 
 		auto insertResult = m_ShaderResourceDescriptorLookupTable.emplace(hHash, dstHandle);
-		DX12_ASSERT(insertResult.second);
+		DX12_ASSERT(insertResult.second, "SRV not inserted into the cache!");
 		itCachedSRV = insertResult.first;
 	}
 
@@ -725,7 +739,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE CDevice::CacheUnorderedAccessView(const D3D12_UNORDE
 		GetD3D12Device()->CreateUnorderedAccessView(pResource, nullptr, pDesc, dstHandle);
 
 		auto insertResult = m_UnorderedAccessDescriptorLookupTable.emplace(hHash, dstHandle);
-		DX12_ASSERT(insertResult.second);
+		DX12_ASSERT(insertResult.second, "UAV not inserted into the cache!");
 		itCachedUAV = insertResult.first;
 	}
 
@@ -762,7 +776,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE CDevice::CacheDepthStencilView(const D3D12_DEPTH_STE
 		GetD3D12Device()->CreateDepthStencilView(pResource, pDesc, dstHandle);
 
 		auto insertResult = m_DepthStencilDescriptorLookupTable.emplace(hHash, dstHandle);
-		DX12_ASSERT(insertResult.second);
+		DX12_ASSERT(insertResult.second, "DSV not inserted into the cache!");
 		itCachedDSV = insertResult.first;
 	}
 
@@ -799,7 +813,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE CDevice::CacheRenderTargetView(const D3D12_RENDER_TA
 		GetD3D12Device()->CreateRenderTargetView(pResource, pDesc, dstHandle);
 
 		auto insertResult = m_RenderTargetDescriptorLookupTable.emplace(hHash, dstHandle);
-		DX12_ASSERT(insertResult.second);
+		DX12_ASSERT(insertResult.second, "RTV not inserted into the cache!");
 		itCachedRTV = insertResult.first;
 	}
 
@@ -880,6 +894,7 @@ HRESULT STDMETHODCALLTYPE CDevice::DuplicateCommittedResource(
 
 		*ppOutputResource = outputResource;
 
+		SetDebugName(pInputResource, GetDebugName(outputResource).c_str());
 		return S_OK;
 	}
 
@@ -959,6 +974,7 @@ HRESULT STDMETHODCALLTYPE CDevice::CreateOrReuseCommittedResource(
 			{
 				// Guaranteed O(1) lookup
 				*ppvResource = result->second.front().pObject;
+				ClearDebugName(result->second.front().pObject);
 
 				result->second.pop_front();
 				if (!result->second.size())
@@ -1024,7 +1040,7 @@ void CDevice::FlushReleaseHeap(const UINT64 (&completedFenceValues)[CMDQUEUE_NUM
 				else
 				{
 					ULONG counter = it->first->Release();
-					DX12_ASSERT(counter == 0, "Ref-Counter of D3D12 resource %s is not 0, memory will leak!", GetDebugName(it->first));
+					DX12_ASSERT(counter == 0, "Ref-Counter of D3D12 resource %s is not 0 but %d, memory will leak!", GetDebugName(it->first).c_str(), counter);
 
 					releases++;
 				}
@@ -1053,7 +1069,7 @@ void CDevice::FlushReleaseHeap(const UINT64 (&completedFenceValues)[CMDQUEUE_NUM
 				// given up for release, they can continue being in use
 				// This means the ref-count here doesn't necessarily need to be 0
 				ULONG counter = it->second.back().pObject->Release();
-				DX12_ASSERT(counter == 0, "Ref-Counter of D3D12 resource %s is not 0, memory will leak!", GetDebugName(it->second.back().pObject));
+				DX12_ASSERT(counter == 0, "Ref-Counter of D3D12 resource %s is not 0 but %d, memory will leak!", GetDebugName(it->second.back().pObject).c_str(), counter);
 
 				it->second.pop_back();
 				evictions++;
@@ -1205,17 +1221,24 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], ID3D12Reso
 		const bool isGPUOnly =
 			hashableBlob.sHeapProperties.Type == D3D11_USAGE_DEFAULT;
 
-		// GPU-only resources can't race each other when they are managed by ref-counts/pools
-		if (isGPUOnly && bReusable)
+		UINT64 fenceValuesWithPrunningDelay[CMDQUEUE_NUM];
+		const FVAL64 (&completedFenceValues)[CMDQUEUE_NUM] = m_Scheduler.GetFenceManager().GetLastCompletedFenceValues();
+		MaxFenceValues(fenceValuesWithPrunningDelay, fenceValues, completedFenceValues);
+		const bool isUnused =
+			SmallerEqualFenceValues(fenceValuesWithPrunningDelay, completedFenceValues);
+
+		// GPU-only resources can't race with itself when they are managed by ref-counts/pools
+		// CPU-write resources can be recycled immediately if they have been used up already
+		if ((isGPUOnly | isUnused) & bReusable)
 		{
 			CryAutoLock<CryCriticalSectionNonRecursive> lThreadSafeScope(m_RecycleHeapTheadSafeScope);
 
 			RecycleInfo recycleInfo;
 
 			recycleInfo.pObject = pObject;
-			recycleInfo.fenceValues[CMDQUEUE_GRAPHICS] = fenceValues[CMDQUEUE_GRAPHICS];
-			recycleInfo.fenceValues[CMDQUEUE_COMPUTE] = fenceValues[CMDQUEUE_COMPUTE];
-			recycleInfo.fenceValues[CMDQUEUE_COPY] = fenceValues[CMDQUEUE_COPY];
+			recycleInfo.fenceValues[CMDQUEUE_GRAPHICS] = fenceValuesWithPrunningDelay[CMDQUEUE_GRAPHICS];
+			recycleInfo.fenceValues[CMDQUEUE_COMPUTE] = fenceValuesWithPrunningDelay[CMDQUEUE_COMPUTE];
+			recycleInfo.fenceValues[CMDQUEUE_COPY] = fenceValuesWithPrunningDelay[CMDQUEUE_COPY];
 
 			auto& sorted = m_RecycleHeap[hHash];
 #if OUT_OF_ODER_RELEASE_LATER
@@ -1235,7 +1258,7 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], ID3D12Reso
 				pObject->AddRef();
 			}
 		}
-		else
+		else if (!isUnused)
 		{
 			CryAutoLock<CryCriticalSectionNonRecursive> lThreadSafeScope(m_ReleaseHeapTheadSafeScope);
 
@@ -1243,9 +1266,9 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], ID3D12Reso
 
 			releaseInfo.hHash = ComputeSmallHash<sizeof(hashableBlob)>(&hashableBlob);
 			releaseInfo.bFlags = bReusable ? 1 : 0;
-			releaseInfo.fenceValues[CMDQUEUE_GRAPHICS] = fenceValues[CMDQUEUE_GRAPHICS];
-			releaseInfo.fenceValues[CMDQUEUE_COMPUTE] = fenceValues[CMDQUEUE_COMPUTE];
-			releaseInfo.fenceValues[CMDQUEUE_COPY] = fenceValues[CMDQUEUE_COPY];
+			releaseInfo.fenceValues[CMDQUEUE_GRAPHICS] = fenceValuesWithPrunningDelay[CMDQUEUE_GRAPHICS];
+			releaseInfo.fenceValues[CMDQUEUE_COMPUTE] = fenceValuesWithPrunningDelay[CMDQUEUE_COMPUTE];
+			releaseInfo.fenceValues[CMDQUEUE_COPY] = fenceValuesWithPrunningDelay[CMDQUEUE_COPY];
 
 			std::pair<TReleaseHeap::iterator, bool> result = m_ReleaseHeap.emplace(pObject, std::move(releaseInfo));
 
@@ -1255,6 +1278,11 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], ID3D12Reso
 				pObject->AddRef();
 			}
 		}
+
+#if 0	// NOTE: Use the code-fragment to detect resources without names
+		if (GetDebugName(pObject).empty())
+			__debugbreak();
+#endif
 	}
 }
 

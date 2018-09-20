@@ -2,12 +2,11 @@
 
 #pragma once
 
-#include "Dialogs/BaseFrameWnd.h"
-#include "Controls/RollupCtrl.h"
+#include <Dialogs/BaseFrameWnd.h>
+#include <IEditor.h>
 
 struct SNoiseParams;
 class CHeightmap;
-class CTopRendererWnd;
 
 //TODO : This class should be entirely deleted, the UI is not used, but it should be made into a terrain manager
 class CTerrainDialog : public CBaseFrameWnd, public IEditorNotifyListener
@@ -26,15 +25,10 @@ public:
 
 public:
 	void  Flatten(float fFactor);
-	float ExpCurve(float v, unsigned int iCover, float fSharpness);
-
-	void  InvalidateViewport();
 	void  InvalidateTerrain();
 
 	// CBaseFrameWnd implementation
 	virtual LRESULT OnDockingPaneNotify(WPARAM wParam, LPARAM lParam);
-
-	afx_msg LRESULT OnKickIdle(WPARAM wParam, LPARAM);
 
 	virtual BOOL OnInitDialog();
 	afx_msg void OnTerrainLoad();
@@ -59,16 +53,9 @@ public:
 	afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
 	afx_msg void OnHold();
 	afx_msg void OnFetch();
-	afx_msg void OnOptionsShowMapObjects();
-	afx_msg void OnOptionsShowWater();
-	afx_msg void OnOptionsEditTerrainCurve();
-	afx_msg void OnOptionsShowGrid();
 	afx_msg void OnSetWaterLevel();
 	afx_msg void OnSetMaxHeight();
 	afx_msg void OnSetUnitSize();
-	afx_msg void OnShowWaterUpdateUI(CCmdUI* pCmdUI);
-	afx_msg void OnShowMapObjectsUpdateUI(CCmdUI* pCmdUI);
-	afx_msg void OnShowGridUpdateUI(CCmdUI* pCmdUI);
 	afx_msg void OnCustomize();
 	afx_msg void OnExportShortcuts();
 	afx_msg void OnImportShortcuts();
@@ -90,7 +77,6 @@ private:
 	CHeightmap*      m_pHeightmap;
 
 	CXTPStatusBar    m_wndStatusBar;
-	CTopRendererWnd* m_pViewport;
 
 	//Panes
 	CXTPDockingPane* m_pDockPane_Rollup;

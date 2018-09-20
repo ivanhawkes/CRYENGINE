@@ -2,15 +2,11 @@
 
 #pragma once
 
-#include "IViewportManager.h"
-#include "Viewport.h"
-#include "QtViewPane.h"
-#include "SandboxAPI.h"
+#include <IViewportManager.h>
+#include <Viewport.h>
 
 #include <CryMath/Cry_Geo.h>
 
-// forward declaration.
-class CViewport;
 class QWidget;
 
 // Description of viewport.
@@ -138,8 +134,6 @@ private:
 	void UnregisterViewport(CViewport* vp);
 
 private:
-	//////////////////////////////////////////////////////////////////////////
-	//FIELDS.
 	AABB m_updateRegion;
 
 	//! Origin of 2d viewports.

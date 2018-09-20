@@ -44,7 +44,10 @@ CConstantBufferPtr CRenderObjectsPools::AllocatePerDrawConstantBuffer()
 		"HLSL_PerDrawConstantBuffer_TerrainVegetation has not the largest constant buffer size."
 	);
 
-	return gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(HLSL_PerDrawConstantBuffer_TeVe));
+	auto pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(HLSL_PerDrawConstantBuffer_TeVe));
+	if (pCB) pCB->SetDebugName("Generic Per-Draw CB");
+
+	return pCB;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -153,6 +156,8 @@ void CCompiledRenderObject::CompilePerDrawCB(CRenderObject* pRenderObject)
 	const CCompiledRenderObject* pRootCompiled = pRenderObject->m_pCompiledObject;
 	if (pRootCompiled && pRootCompiled != this && pRootCompiled->m_perDrawCB)
 	{
+		CRY_ASSERT(pRenderObject->m_bPermanent);
+
 		// If root object have per instance constant buffer, share ours with root compiled object.
 		m_bOwnPerInstanceCB = false;
 		m_perDrawCB = pRootCompiled->m_perDrawCB;
@@ -373,6 +378,7 @@ void CCompiledRenderObject::CompilePerInstanceCB(CRenderObject* pRenderObject, b
 	if (pCB)
 	{
 		pCB->UpdateBuffer(tempInstanceBuffer, nSize);
+		pCB->SetDebugName("Generic Per-Instance CB");
 		m_pInstancingConstBuffer = std::move(pCB);
 	}
 }
@@ -517,15 +523,16 @@ bool CCompiledRenderObject::Compile(const EObjectCompilationOptions& compilation
 		return true;
 	}
 
-	if (compilationOptions & eObjCompilationOption_PerInstanceConstantBuffer)
+	const EDataType reType = m_pRenderElement->mfGetType();
+
+	if (compilationOptions & eObjCompilationOption_PerInstanceConstantBuffer && reType != eDATA_Particle)
 	{
 		// Update AABB by tranforming from local space
 		const auto& camera = pRenderView->GetCamera(pRenderView->GetCurrentEye());
 		m_aabb = pRenderObject->TransformAABB(localAABB, camera.GetPosition(), gcpRendD3D->GetObjectAccessorThreadConfig());
 	}
 
-	EDataType reType = m_pRenderElement->mfGetType();
-	bool bMeshCompatibleRenderElement = reType == eDATA_Mesh || reType == eDATA_Terrain || reType == eDATA_GeomCache || reType == eDATA_ClientPoly;
+	const bool bMeshCompatibleRenderElement = reType == eDATA_Mesh || reType == eDATA_Terrain || reType == eDATA_GeomCache || reType == eDATA_ClientPoly;
 	if (!bMeshCompatibleRenderElement)
 	{
 		// Custom render elements cannot be dynamically instanced.
@@ -622,8 +629,13 @@ bool CCompiledRenderObject::Compile(const EObjectCompilationOptions& compilation
 	// Stencil ref value
 	uint8 stencilRef = 0; // @TODO: get from CRNTmpData::SRNUserData::m_pClipVolume::GetStencilRef
 	m_StencilRef = CRenderer::CV_r_VisAreaClipLightsPerPixel ? 0 : (stencilRef | BIT_STENCIL_INSIDE_CLIPVOLUME);
-	m_StencilRef |= (!(pRenderObject->m_ObjFlags & FOB_DYNAMIC_OBJECT) ? BIT_STENCIL_RESERVED : 0);
-
+	m_StencilRef |= !(pRenderObject->m_ObjFlags & FOB_DYNAMIC_OBJECT) ? BIT_STENCIL_RESERVED : 0;
+	const bool bAllowTerrainLayerBlending = CRendererCVars::CV_e_TerrainBlendingDebug == 2 || 
+		                                   (CRendererCVars::CV_e_TerrainBlendingDebug == 0 && (pRenderObject->m_ObjFlags & FOB_ALLOW_TERRAIN_LAYER_BLEND));
+	const bool bTerrain = pRenderObject->m_data.m_pTerrainSectorTextureInfo != nullptr;
+	m_StencilRef |= (bAllowTerrainLayerBlending || bTerrain) ? BIT_STENCIL_ALLOW_TERRAINLAYERBLEND : 0;
+	m_StencilRef |= (pRenderObject->m_ObjFlags & FOB_ALLOW_DECAL_BLEND) ? BIT_STENCIL_ALLOW_DECALBLEND : 0;
+	
 	m_bRenderNearest = (pRenderObject->m_ObjFlags & FOB_NEAREST) != 0;
 
 	if (m_shaderItem.m_pShader)

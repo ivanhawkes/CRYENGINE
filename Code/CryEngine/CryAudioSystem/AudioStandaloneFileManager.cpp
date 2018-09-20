@@ -4,11 +4,13 @@
 #include "AudioStandaloneFileManager.h"
 #include "ATLAudioObject.h"
 #include "AudioCVars.h"
-#include "Common.h"
 #include <IAudioImpl.h>
 #include <CryString/HashedString.h>
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	#include "Managers.h"
+	#include "AudioListenerManager.h"
+	#include "DebugColor.h"
 	#include <CryRenderer/IRenderAuxGeom.h>
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
@@ -62,7 +64,7 @@ void CFileManager::ReleaseStandaloneFile(CATLStandaloneFile* const pStandaloneFi
 {
 	if (pStandaloneFile != nullptr)
 	{
-		m_constructedStandaloneFiles.remove(pStandaloneFile);
+		m_constructedStandaloneFiles.erase(std::remove(m_constructedStandaloneFiles.begin(), m_constructedStandaloneFiles.end(), pStandaloneFile), m_constructedStandaloneFiles.end());
 		g_pIImpl->DestructStandaloneFile(pStandaloneFile->m_pImplData);
 		delete pStandaloneFile;
 	}
@@ -70,9 +72,9 @@ void CFileManager::ReleaseStandaloneFile(CATLStandaloneFile* const pStandaloneFi
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
-void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerPosition, float posX, float posY) const
+void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float posX, float posY) const
 {
-	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_managerColorHeader.data(), false, "Standalone Files [%" PRISIZE_T "]", m_constructedStandaloneFiles.size());
+	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_globalColorHeader.data(), false, "Standalone Files [%" PRISIZE_T "]", m_constructedStandaloneFiles.size());
 	posY += Debug::g_managerHeaderLineHeight;
 
 	CryFixedStringT<MaxControlNameLength> lowerCaseSearchString(g_cvars.m_pDebugFilter->GetString());
@@ -83,7 +85,7 @@ void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerPo
 	for (auto const pStandaloneFile : m_constructedStandaloneFiles)
 	{
 		Vec3 const& position = pStandaloneFile->m_pAudioObject->GetTransformation().GetPosition();
-		float const distance = position.GetDistance(listenerPosition);
+		float const distance = position.GetDistance(g_listenerManager.GetActiveListenerTransformation().GetPosition());
 
 		if (g_cvars.m_debugDistance <= 0.0f || (g_cvars.m_debugDistance > 0.0f && distance < g_cvars.m_debugDistance))
 		{
@@ -100,17 +102,17 @@ void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerPo
 
 			if (draw)
 			{
-				float const* pColor = Debug::g_managerColorItemInactive.data();
+				float const* pColor = Debug::g_globalColorInactive.data();
 
 				switch (pStandaloneFile->m_state)
 				{
-				case EAudioStandaloneFileState::Playing:
+				case EStandaloneFileState::Playing:
 					pColor = Debug::g_managerColorItemActive.data();
 					break;
-				case EAudioStandaloneFileState::Loading:
+				case EStandaloneFileState::Loading:
 					pColor = Debug::g_managerColorItemLoading.data();
 					break;
-				case EAudioStandaloneFileState::Stopping:
+				case EStandaloneFileState::Stopping:
 					pColor = Debug::g_managerColorItemStopping.data();
 					break;
 				default:

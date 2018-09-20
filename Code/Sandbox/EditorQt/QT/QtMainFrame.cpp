@@ -1,81 +1,40 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#include <StdAfx.h>
+#include "StdAfx.h"
+#include "QtMainFrame.h"
+
+#include "Commands/KeybindEditor.h"
+#include "QT/MainToolBars/QToolBarCreator.h"
+#include "QT/QMainFrameMenuBar.h"
+#include "QT/QtMainFrameWidgets.h"
+#include "QT/QToolTabManager.h"
+#include "QT/QtUtil.h"
+#include "QT/TraySearchBox.h"
+#include "AboutDialog.h"
+#include "CryEdit.h"
+#include "CryEditDoc.h"
+#include "LevelIndependentFileMan.h"
+#include "LinkTool.h"
+
+// MFC
+#include <QMfcApp/qmfchost.h>
+
+// EditorCommon
+#include <Controls/SaveChangesDialog.h>
+#include <EditorFramework/PersonalizationManager.h>
+#include <Menu/MenuWidgetBuilders.h>
+#include <Preferences/GeneralPreferences.h>
+#include <QTrackingTooltip.h>
+#include <RenderViewport.h>
 
 #include <CrySystem/IProjectManager.h>
 
-//////////////////////////////////////////////////////////////////////////
-// QT headers
-#include <QTimer>
-#include <QMenu>
 #include <QMenuBar>
-#include <QLayout>
-#include <QDockWidget>
-#include <QLineEdit>
-#include <QFile>
-#include <QDir>
-#include <QToolBar>
-#include <QLabel>
-#include <QToolButton>
-#include <QToolBox>
-#include <QPushButton>
-#include <QImageReader>
 #include <QMouseEvent>
-#include <QAbstractEventDispatcher>
-#include <QCursor>
+#include <QToolBar>
 #include <QToolWindowManager/QToolWindowRollupBarArea.h>
 
 #include <algorithm>
-//////////////////////////////////////////////////////////////////////////
-
-#include <CryIcon.h>
-#include <QtUtil.h>
-#include "QtUtil.h"
-
-#include "QtMainFrame.h"
-#include "QtMainFrameWidgets.h"
-#include "QMainFrameMenuBar.h"
-#include "Commands/QCommandAction.h"
-#include "QtViewPane.h"
-#include "RenderViewport.h"
-
-//////////////////////////////////////////////////////////////////////////
-#include "CryEdit.h"
-#include "CryEditDoc.h"
-#include "LevelEditor/LevelEditor.h"
-//////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////
-#include "Util/BoostPythonHelpers.h"
-#include "ViewManager.h"
-#include "IBackgroundTaskManager.h"
-#include "ProcessInfo.h"
-#include "QToolTabManager.h"
-#include "LevelIndependentFileMan.h"
-#include "Commands/KeybindEditor.h"
-#include "KeyboardShortcut.h"
-#include "EditorFramework/Events.h"
-#include <Preferences/GeneralPreferences.h>
-#include "Controls/SandboxWindowing.h"
-#include "QToolWindowManager/QToolWindowManager.h"
-#include "QToolWindowManager/QCustomWindowFrame.h"
-#include "DockingSystem/DockableContainer.h"
-#include "QTrackingTooltip.h"
-#include "QT/MainToolBars/QMainToolBarManager.h"
-#include "QT/MainToolBars/QToolBarCreator.h"
-#include "QT/Widgets/QWaitProgress.h"
-#include "QT/TraySearchBox.h"
-#include "Controls/EditorDialog.h"
-#include "Controls/SaveChangesDialog.h"
-#include "QControls.h"
-#include "AboutDialog.h"
-#include "QMfcApp/qmfchost.h"
-#include "KeyboardShortcut.h"
-#include "Menu/MenuWidgetBuilders.h"
-#include "LinkTool.h"
-
-#include <CrySchematyc/Env/IEnvRegistry.h>
-#include <CrySchematyc/Env/Elements/EnvComponent.h>
 
 REGISTER_HIDDEN_VIEWPANE_FACTORY(QPreferencesDialog, "Preferences", "Editor", true)
 
@@ -104,11 +63,11 @@ REGISTER_PREFERENCES_PAGE_PTR(SPerformancePreferences, &gPerformancePreferences)
 
 //////////////////////////////////////////////////////////////////////////
 
-CEditorMainFrame * CEditorMainFrame::m_pInstance = 0;
+CEditorMainFrame* CEditorMainFrame::m_pInstance = nullptr;
 
 namespace
 {
-CTabPaneManager* s_pToolTabManager = 0;
+CTabPaneManager* s_pToolTabManager = nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -152,7 +111,6 @@ class Ui_MainWindow
 		CMenu(QWidget* pParent = nullptr)
 			: QMenu(pParent)
 		{
-
 		}
 
 		QCommandAction* AddCommand(const char* szCommand)
@@ -514,7 +472,6 @@ public:
 		menuDisplay->AddCommand("viewport.toggle_wireframe_mode");
 		menuDisplay->addAction(menuGraphics->menuAction());
 		menuDisplay->addSeparator();
-		menuDisplay->AddCommand("level.toggle_display_helpers");
 		menuDisplay->addAction(menuDisplayInfo->menuAction());
 		menuDisplayInfo->AddCommand("level.toggle_display_info");
 		menuDisplayInfo->addSeparator();
@@ -527,6 +484,7 @@ public:
 		menuDisplay->AddCommand("camera.toggle_terrain_collisions");
 		menuDisplay->AddCommand("camera.toggle_object_collisions");
 		menuDisplay->AddCommand("general.fullscreen");
+
 		menuLocation->addAction(menuRemember_Location->menuAction());
 		menuLocation->addAction(menuGoto_Location->menuAction());
 		for (auto i = 1; i <= 12; ++i)
@@ -687,6 +645,7 @@ public:
 CEditorMainFrame::CEditorMainFrame(QWidget* parent)
 	: QMainWindow(parent)
 	, m_levelEditor(new CLevelEditor)
+	, m_pAutoBackupTimer(nullptr)
 	, m_bClosing(false)
 	, m_bUserEventPriorityMode(false)
 {
@@ -706,7 +665,13 @@ CEditorMainFrame::CEditorMainFrame(QWidget* parent)
 	// Enable idle loop
 	QTimer::singleShot(0, this, &CEditorMainFrame::OnIdleCallback);
 	QTimer::singleShot(500, this, &CEditorMainFrame::OnBackgroundUpdateTimer);
-	QTimer::singleShot(gEditorFilePreferences.autoSaveTime * 60 * 1000, this, &CEditorMainFrame::OnAutoSaveTimer);
+
+	m_pAutoBackupTimer = new QTimer();
+	m_pAutoBackupTimer->setInterval(gEditorFilePreferences.autoSaveTime() * 60 * 1000);
+	m_pAutoBackupTimer->start();
+
+	connect(m_pAutoBackupTimer, &QTimer::timeout, this, &CEditorMainFrame::OnAutoSaveTimer);
+	gEditorFilePreferences.autoSaveTimeChanged.Connect(this, &CEditorMainFrame::OnAutoBackupTimeChanged);
 
 	// Enable idle loop
 	m_loopHandler.AddNativeHandler(reinterpret_cast<uintptr_t>(this), WrapMemberFunction(this, &CEditorMainFrame::OnNativeEvent));
@@ -784,12 +749,14 @@ void CEditorMainFrame::UpdateWindowTitle(const QString& levelPath /*= "" */)
 	setWindowTitle(title);
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEditorMainFrame::~CEditorMainFrame()
 {
 	GetIEditorImpl()->GetLevelEditorSharedState()->signalEditToolChanged.DisconnectObject(this);
 
 	m_loopHandler.RemoveNativeHandler(reinterpret_cast<uintptr_t>(this));
+
+	if (m_pAutoBackupTimer)
+		m_pAutoBackupTimer->deleteLater();
 
 	if (m_pInstance)
 	{
@@ -797,8 +764,6 @@ CEditorMainFrame::~CEditorMainFrame()
 		m_pInstance = 0;
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 void CEditorMainFrame::SetDefaultLayout()
 {
@@ -819,7 +784,6 @@ void CEditorMainFrame::SetDefaultLayout()
 	w->showMaximized();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditorMainFrame::PostLoad()
 {
 	LOADING_TIME_PROFILE_SECTION;
@@ -838,14 +802,11 @@ void CEditorMainFrame::PostLoad()
 	GetIEditorImpl()->Notify(eNotify_OnMainFrameInitialized);
 }
 
-//////////////////////////////////////////////////////////////////////////
-
 CEditorMainFrame* CEditorMainFrame::GetInstance()
 {
 	return m_pInstance;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditorMainFrame::CreateToolsMenu()
 {
 	std::vector<IViewPaneClass*> viewPaneClasses;
@@ -872,17 +833,15 @@ void CEditorMainFrame::CreateToolsMenu()
 		temp = "";
 	}
 
-	int i;
-
 	std::map<string, int> numClassesInCategory;
 
 	std::vector<IClassDesc*> classes;
 	GetIEditorImpl()->GetClassFactory()->GetClassesBySystemID(ESYSTEM_CLASS_VIEWPANE, classes);
-	for (i = 0; i < classes.size(); i++)
+	for (int i = 0; i < classes.size(); i++)
 	{
 		numClassesInCategory[classes[i]->Category()]++;
 	}
-	for (i = 0; i < classes.size(); i++)
+	for (int i = 0; i < classes.size(); i++)
 	{
 		IClassDesc* pClass = classes[i];
 		IViewPaneClass* pViewClass = (IViewPaneClass*)pClass;
@@ -892,7 +851,9 @@ void CEditorMainFrame::CreateToolsMenu()
 			continue;
 		}
 		if (stl::find(viewPaneClasses, pViewClass))
+		{
 			continue;
+		}
 
 		int numClasses = numClassesInCategory[pViewClass->Category()];
 		string name = pViewClass->ClassName();
@@ -1303,7 +1264,6 @@ void CEditorMainFrame::InitMenus()
 		});
 
 		pHelpMenu->addAction(pAction);
-
 	}
 }
 
@@ -1311,8 +1271,6 @@ void CEditorMainFrame::InitMenuBar()
 {
 	setMenuWidget(new QMainFrameMenuBar(menuBar(), this));
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 void CEditorMainFrame::InitActions()
 {
@@ -1585,7 +1543,7 @@ bool CEditorMainFrame::BeforeClose()
 	pDoc->SetModifiedFlag(FALSE);
 
 	// Close all edit panels.
-	GetIEditorImpl()->ClearSelection();
+	GetIEditorImpl()->GetObjectManager()->ClearSelection();
 	GetIEditorImpl()->GetLevelEditorSharedState()->SetEditTool(nullptr);
 
 	CTabPaneManager::GetInstance()->CloseAllPanes();
@@ -1594,7 +1552,6 @@ bool CEditorMainFrame::BeforeClose()
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditorMainFrame::SaveConfig()
 {
 	LOADING_TIME_PROFILE_SECTION;
@@ -1648,21 +1605,17 @@ bool CEditorMainFrame::event(QEvent* event)
 	return QMainWindow::event(event);
 }
 
-//////////////////////////////////////////////////////////////////////////
-void CEditorMainFrame::ResetAutoSaveTimers()
+void CEditorMainFrame::OnAutoBackupTimeChanged()
 {
-
+	m_pAutoBackupTimer->setInterval(gEditorFilePreferences.autoSaveTime() * 60 * 1000);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditorMainFrame::OnAutoSaveTimer()
 {
-	if (gEditorFilePreferences.autoSaveEnabled)
-	{
-		// Call autosave function of CryEditApp.
-		GetIEditorImpl()->GetDocument()->SaveAutoBackup();
-	}
-	QTimer::singleShot(gEditorFilePreferences.autoSaveTime * 60 * 1000, this, &CEditorMainFrame::OnAutoSaveTimer);
+	if (!gEditorFilePreferences.autoSaveEnabled)
+		return;
+
+	GetIEditorImpl()->GetDocument()->SaveAutoBackup();
 }
 
 bool CEditorMainFrame::OnNativeEvent(void* message, long* result)
@@ -1688,7 +1641,6 @@ bool CEditorMainFrame::OnNativeEvent(void* message, long* result)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditorMainFrame::OnIdleCallback()
 {
 	if (gEnv->stoppedOnAssert)
@@ -1735,7 +1687,6 @@ void CEditorMainFrame::OnIdleCallback()
 	QTimer::singleShot(res ? 0 : 16, this, &CEditorMainFrame::OnIdleCallback);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditorMainFrame::OnBackgroundUpdateTimer()
 {
 	int period = 0;
@@ -1754,13 +1705,11 @@ void CEditorMainFrame::OnBackgroundUpdateTimer()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 QToolWindowManager* CEditorMainFrame::GetToolManager()
 {
 	return m_toolManager;
 }
 
-//////////////////////////////////////////////////////////////////////////
 QMainToolBarManager* CEditorMainFrame::GetToolBarManager()
 {
 	return m_pMainToolBarManager;

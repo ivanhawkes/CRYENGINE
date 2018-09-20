@@ -36,7 +36,7 @@ bool PropertyRowField::onActivate(const PropertyActivationEvent& e)
 				return true;
 	}
 
-	if (e.reason == e.REASON_DOUBLECLICK && buttonsRect.contains(e.clickPoint))
+	if (buttonsRect.contains(e.clickPoint))
 		return false;
 
 	if (e.reason == e.REASON_RELEASE || e.reason == e.REASON_KEYBOARD)
@@ -122,4 +122,3 @@ int PropertyRowField::hitButton(const PropertyTree* tree, const Point& point) co
 	}
 	return -1;
 }
-

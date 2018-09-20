@@ -97,12 +97,12 @@ void CStandardGraphicsPipeline::Init()
 	RegisterSceneStage<CShadowMapStage   , eStage_ShadowMap   >(m_pShadowMapStage);
 	RegisterSceneStage<CSceneGBufferStage, eStage_SceneGBuffer>(m_pSceneGBufferStage);
 	RegisterSceneStage<CSceneForwardStage, eStage_SceneForward>(m_pSceneForwardStage);
-#if !defined(CRY_PLATFORM_MOBILE)
+#if RENDERER_ENABLE_FULL_PIPELINE
 	RegisterSceneStage<CSceneCustomStage , eStage_SceneCustom >(m_pSceneCustomStage);
 #endif
 
 	// Register all other stages that don't need the global PSO cache
-#if !defined(CRY_PLATFORM_MOBILE)
+#if RENDERER_ENABLE_FULL_PIPELINE
 	RegisterStage<CTiledLightVolumesStage     >(m_pTiledLightVolumesStage     , eStage_TiledLightVolumes);
 	RegisterStage<CHeightMapAOStage           >(m_pHeightMapAOStage           , eStage_HeightMapAO);
 	RegisterStage<CScreenSpaceObscuranceStage >(m_pScreenSpaceObscuranceStage , eStage_ScreenSpaceObscurance);
@@ -136,8 +136,13 @@ void CStandardGraphicsPipeline::Init()
 	RegisterStage<COmniCameraStage            >(m_pOmniCameraStage            , eStage_OmniCamera);
 	RegisterStage<CDebugRenderTargetsStage    >(m_pDebugRenderTargetsStage    , eStage_DebugRenderTargets);
 #else
-	RegisterStage<CTiledShadingStage>(m_pTiledShadingStage, eStage_TiledShading);
-	RegisterStage<CMobileCompositionStage>(m_pMobileCompositionStage, eStage_MobileComposition);
+	RegisterStage<CTiledLightVolumesStage     >(m_pTiledLightVolumesStage     , eStage_TiledLightVolumes);
+	RegisterStage<CFogStage                   >(m_pFogStage                   , eStage_Fog);
+	RegisterStage<CClipVolumesStage           >(m_pClipVolumesStage           , eStage_ClipVolumes);
+	RegisterStage<CTiledShadingStage          >(m_pTiledShadingStage          , eStage_TiledShading);
+	RegisterStage<CMobileCompositionStage     >(m_pMobileCompositionStage     , eStage_MobileComposition);
+	RegisterStage<COmniCameraStage            >(m_pOmniCameraStage            , eStage_OmniCamera);
+	RegisterStage<CDebugRenderTargetsStage    >(m_pDebugRenderTargetsStage    , eStage_DebugRenderTargets);
 #endif
 
 	// Now init stages
@@ -227,7 +232,7 @@ bool CStandardGraphicsPipeline::CreatePipelineStates(DevicePipelineStatesArray* 
 		bFullyCompiled &= m_pSceneForwardStage->CreatePipelineStates(pStateArray, stateDesc, pStateCache);
 	}
 
-#if !defined(CRY_PLATFORM_MOBILE)
+#if RENDERER_ENABLE_FULL_PIPELINE
 	// Custom
 	{
 		stateDesc.technique = TTYPE_DEBUG;
@@ -596,35 +601,41 @@ void CStandardGraphicsPipeline::ExecuteHDRPostProcessing()
 		PROFILE_LABEL_SCOPE("HALFRES_DOWNSAMPLE_HDRTARGET");
 
 		if (CRenderer::CV_r_HDRBloomQuality > 1)
-			GetOrCreateUtilityPass<CStableDownsamplePass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0], true);
+			GetOrCreateUtilityPass<CStableDownsamplePass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0][0], true);
 		else
-			GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0]);
+			GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0][0]);
 	}
 
 	// Quarter resolution downsampling
+	if (CRenderer::CV_r_HDRBloom > 0 || true /* measure luminance */)
 	{
 		PROFILE_LABEL_SCOPE("QUARTER_RES_DOWNSAMPLE_HDRTARGET");
 
 		if (CRenderer::CV_r_HDRBloomQuality > 0)
-			GetOrCreateUtilityPass<CStableDownsamplePass>()->Execute(CRendererResources::s_ptexHDRTargetScaled[0], CRendererResources::s_ptexHDRTargetScaled[1], CRenderer::CV_r_HDRBloomQuality >= 1);
+			GetOrCreateUtilityPass<CStableDownsamplePass>()->Execute(CRendererResources::s_ptexHDRTargetScaled[0][0], CRendererResources::s_ptexHDRTargetScaled[1][0], CRenderer::CV_r_HDRBloomQuality >= 1);
 		else
-			GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTargetScaled[0], CRendererResources::s_ptexHDRTargetScaled[1]);
+			GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTargetScaled[0][0], CRendererResources::s_ptexHDRTargetScaled[1][0]);
 	}
 
 	if (GetCurrentRenderView()->GetCurrentEye() != CCamera::eEye_Right)
 	{
+		// reads CRendererResources::s_ptexHDRTargetScaled[1][0]
 		m_pAutoExposureStage->Execute();
 	}
 
+	// reads CRendererResources::s_ptexHDRTargetScaled[1][0] and then kills it
 	m_pBloomStage->Execute();
 
 	// Lens optics
 	if (CRenderer::CV_r_flares && !CRenderer::CV_r_durango_async_dips)
 	{
 		PROFILE_LABEL_SCOPE("LENS_OPTICS");
+
+		// writes CRendererResources::s_ptexSceneTargetR11G11B10F[0]
 		m_pLensOpticsStage->Execute();
 	}
 
+	// reads CRendererResources::s_ptexHDRTargetScaled[0][0]
 	m_pSunShaftsStage->Execute();
 	m_pColorGradingStage->Execute();
 	m_pToneMappingStage->Execute();
@@ -673,7 +684,6 @@ void CStandardGraphicsPipeline::ExecuteMinimumForwardShading()
 
 	if (pRenderView->GetCurrentEye() != CCamera::eEye_Right)
 	{
-		m_pComputeParticlesStage->Execute();
 		m_pComputeParticlesStage->PreDraw();
 		m_pComputeSkinningStage->Execute();
 	}
@@ -749,13 +759,18 @@ void CStandardGraphicsPipeline::ExecuteMobilePipeline()
 			m_pClipVolumesStage->GenerateClipVolumeInfo();
 			m_pTiledLightVolumesStage->Execute();
 			m_pTiledShadingStage->Execute();
+			m_pMobileCompositionStage->ExecuteDeferredLighting();
 		}
 	}
 
-	// Opaque forward passes
+	// Opaque and transparent forward passes
 	m_pSceneForwardStage->ExecuteMobile();
 
-	m_pMobileCompositionStage->Execute();
+	// Insert fence which is used on consoles to prevent overwriting video memory
+	pRenderer->InsertParticleVideoDataFence(pRenderer->GetRenderFrameID());
+
+	m_pMobileCompositionStage->ExecutePostProcessing();
+
 
 	pRenderer->m_pPostProcessMgr->End(pRenderView);
 }
@@ -783,7 +798,6 @@ void CStandardGraphicsPipeline::Execute()
 	if (pRenderView->GetCurrentEye() != CCamera::eEye_Right)
 	{
 		// Compute algorithms
-		m_pComputeParticlesStage->Execute();
 		m_pComputeSkinningStage->Execute();
 
 		// Revert resource states to graphics pipeline
@@ -952,17 +966,17 @@ void CStandardGraphicsPipeline::Execute()
 	{
 		// HDR and LDR post-processing
 		{
-			// CRendererResources::s_ptexHDRTarget -> CRendererResources::s_ptexSceneDiffuse (Tonemapping)
+			// CRendererResources::s_ptexHDRTarget -> CRendererResources::s_ptexDisplayTarget (Tonemapping)
 			ExecuteHDRPostProcessing();
 
-			// CRendererResources::s_ptexSceneDiffuse
+			// CRendererResources::s_ptexDisplayTarget
 			m_pSceneForwardStage->ExecuteAfterPostProcessHDR();
 
-			// CRendererResources::s_ptexSceneDiffuse -> CRenderOutput->m_pColorTarget (PostAA)
+			// CRendererResources::s_ptexDisplayTarget -> CRenderOutput->m_pColorTarget (PostAA)
 			if (!m_pPostEffectStage->Execute())
 			{
 				// Post effects disabled, copy diffuse to color target
-				CStretchRectPass::GetPass().Execute(CRendererResources::s_ptexSceneDiffuse, pRenderView->GetRenderOutput()->GetColorTarget());
+				CStretchRectPass::GetPass().Execute(CRendererResources::s_ptexDisplayTargetDst, pRenderView->GetRenderOutput()->GetColorTarget());
 			}
 
 			// CRenderOutput->m_pColorTarget
@@ -971,6 +985,7 @@ void CStandardGraphicsPipeline::Execute()
 
 		if (gEnv->IsEditor() && !gEnv->IsEditorGameMode())
 		{
+			m_pSceneCustomStage->ExecuteHelpers();
 			m_pSceneCustomStage->ExecuteSelectionHighlight();
 		}
 
@@ -987,6 +1002,7 @@ void CStandardGraphicsPipeline::Execute()
 	}
 	else
 	{
+		// Raw HDR copy
 		GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTarget, pRenderView->GetRenderOutput()->GetColorTarget());
 	}
 

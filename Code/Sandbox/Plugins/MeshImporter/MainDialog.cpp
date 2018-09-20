@@ -51,7 +51,7 @@
 #include <Material/Material.h>
 #include <CryRenderer/IRenderAuxGeom.h>
 #include <IEditor.h>
-#include <Controls\QuestionDialog.h>
+#include <Controls/QuestionDialog.h>
 #include <QtViewPane.h>
 #include <Serialization/QPropertyTree/QPropertyTree.h>
 #include <ProxyModels/AttributeFilterProxyModel.h>
@@ -1736,7 +1736,7 @@ namespace Private_MainDialog
 std::unique_ptr<CModelProperties::SSerializer> CreateSerializer(QAbstractItemModel* pModel, const QModelIndex& modelIndex)
 {
 	QVariant data = modelIndex.data(eItemDataRole_YasliSStruct);
-	if (data.canConvert<void*>())
+	if (data.isValid() && data.canConvert<void*>())
 	{
 		std::unique_ptr<Serialization::SStruct> sstruct((Serialization::SStruct*)data.value<void*>());
 
@@ -3323,4 +3323,3 @@ void CMainDialog::UpdateSkin()
 	m_pSkinRcObject->SetMetaData(metaData);
 	m_pSkinRcObject->CreateAsync();
 }
-

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <CryMemory/CryPool/PoolAlloc.h>
+#include <CryThreading/IJobManager.h>
 #include <concqueue/concqueue.hpp>
 #include "TextMessages.h"                             // CTextMessages
 #include "RenderAuxGeom.h"
@@ -96,6 +97,7 @@ const float TANGENT30_2 = 0.57735026918962576450914878050196f * 2;   // 2*tan(30
 #define DBT_SKY_CULL_DEPTH                    0.99999994f
 
 #define DEF_SHAD_DBT_DEFAULT_VAL              1
+#define SHADOWS_DBT_DEFAULT_VAL               1
 
 #define TEXSTREAMING_DEFAULT_VAL              2
 
@@ -121,7 +123,6 @@ const float TANGENT30_2 = 0.57735026918962576450914878050196f * 2;   // 2*tan(30
 #define FLARES_DEFAULT_VAL                    1
 #define WATERVOLCAUSTICS_DEFAULT_VAL          1
 #define FLARES_HQSHAFTS_DEFAULT_VAL           1
-#define DEF_SHAD_DBT_STENCIL_DEFAULT_VAL      1
 #define DEF_SHAD_SSS_DEFAULT_VAL              1
 
 #define MULTITHREADED_DEFAULT_VAL             1
@@ -1021,7 +1022,7 @@ public:
 	virtual void                   EF_ReloadShaderFiles(int nCategory) override;
 	virtual void                   EF_ReloadTextures() override;
 	virtual int                    EF_LoadLightmap(const char* nameTex) override;
-	virtual DynArray<uint16_t>     EF_RenderEnvironmentCubeHDR(std::size_t size, const Vec3& Pos) override;
+	virtual DynArray<uint16_t>     EF_RenderEnvironmentCubeHDR(int size, const Vec3& Pos) override;
 	virtual bool                   WriteTIFToDisk(const void* pData, int width, int height, int bytesPerChannel, int numChannels, bool bFloat, const char* szPreset, const char* szFileName) override;
 	virtual ITexture*              EF_GetTextureByID(int Id) override;
 	virtual ITexture*              EF_GetTextureByName(const char* name, uint32 flags = 0) override;
@@ -1172,7 +1173,7 @@ public:
 	bool                                              ReleaseChunk(int p, PodArray<alloc_info_struct>& alloc_info);
 
 	virtual const char*                               GetTextureFormatName(ETEX_Format eTF) override;
-	virtual int                                       GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF) override;
+	virtual uint32                                    GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF) override;
 	virtual void                                      SetDefaultMaterials(IMaterial* pDefMat, IMaterial* pTerrainDefMat) override                          { m_pDefaultMaterial = pDefMat; m_pTerrainDefaultMaterial = pTerrainDefMat; }
 	virtual byte*                                     GetTextureSubImageData32(byte* pData, int nDataSize, int nX, int nY, int nW, int nH, CTexture* pTex) { return 0; }
 
@@ -1197,6 +1198,8 @@ public:
 
 	virtual bool                                      LoadShaderLevelCache() override            { return false; }
 	virtual void                                      UnloadShaderLevelCache() override          {}
+
+	virtual void                                      ClearShaderPipelineStateCache() override;
 
 	virtual void                                      RegisterSyncWithMainListener(ISyncMainWithRenderListener* pListener) override;
 	virtual void                                      RemoveSyncWithMainListener(const ISyncMainWithRenderListener* pListener) override;
@@ -1232,7 +1235,7 @@ public:
 	void              EF_PrintRTStats(const char* szName);
 
 	static inline eAntialiasingType FX_GetAntialiasingType () { return (eAntialiasingType)((uint32)1 << min(CV_r_AntialiasingMode, eAT_AAMODES_COUNT - 1)); }
-	static inline bool              IsHDRModeEnabled       () { return (CV_r_HDRRendering && !CV_r_measureoverdraw) ? true : false; }
+	static inline bool              IsHDRDisplayEnabled    () { return (CV_r_HDRSwapChain && !CV_r_measureoverdraw) ? true : false; }
 	static inline bool              IsPostProcessingEnabled() { return (CV_r_PostProcess && !CV_r_measureoverdraw) ? true : false; }
 
 	void              UpdateRenderingModesInfo();
@@ -1260,7 +1263,7 @@ public:
 	float                GetMipDistFactor(uint32 twidth, uint32 theight) { float ratio = std::max(twidth, theight) / float(CRendererResources::s_renderMinDim); return ratio * ratio; }
 //	float                GetMipDistFactor(uint32 twidth, uint32 theight) { return ((TANGENT30_2 * TANGENT30_2) / (m_rheight * m_rheight)) * std::max(twidth, theight) * std::max(twidth, theight); }
 
-	static size_t           GetTexturesStreamPoolSize();
+	static size_t        GetTexturesStreamPoolSize();
 
 protected:
 	void EF_AddParticle(CREParticle* pParticle, SShaderItem& shaderItem, CRenderObject* pRO, const SRenderingPassInfo& passInfo);
@@ -1402,7 +1405,6 @@ public:
 	int                  m_nGPU;
 	int                  m_VSync;
 	int                  m_Predicated;
-	int                  m_nHDRType;
 
 	int                  m_nGraphicsPipeline;
 
@@ -1430,6 +1432,7 @@ public:
 	uint32    m_bInLevel                       : 1;
 	uint32    m_bUseWaterTessHW                : 1;
 	uint32    m_bUseSilhouettePOM              : 1;
+	uint32    m_bAllowTerrainLayerBlending     : 1;
 	uint32    m_bWaterCaustics                 : 1;
 	uint32    m_bIsWindowActive                : 1;
 	uint32    m_bInShutdown                    : 1;
@@ -1447,7 +1450,6 @@ public:
 	uint32    m_bDeferredSnowEnabled           : 1;
 
 	uint8     m_nDisableTemporalEffects;
-	bool      m_bUseGPUFriendlyBatching[2];
 	uint32    m_nGPULimited;           // How many frames we are GPU limited
 	int8      m_nCurMinAniso;
 	int8      m_nCurMaxAniso;

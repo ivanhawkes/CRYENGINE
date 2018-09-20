@@ -133,6 +133,11 @@ public:
 	//! Check if object can be voxelized.
 	bool GetGIMode() const  { return mv_giMode; }
 
+	//! Set if procedural object has to be exported as normal non-procedural object
+	void SetOfflineProcedural(bool enabled) { mv_offlineProcedural = enabled; }
+	//! Check if procedural object has to be exported as normal non-procedural object
+	bool IsOfflineProcedural() const { return mv_offlineProcedural; }
+
 	//////////////////////////////////////////////////////////////////////////
 	void SetDynamicDistanceShadows(bool on) { mv_DynamicDistanceShadows = on; }
 	bool HasDynamicDistanceShadows() const  { return mv_DynamicDistanceShadows; }
@@ -152,6 +157,7 @@ public:
 	bool  IsUseSprites() const                    { return mv_UseSprites; }
 	bool  IsAlignToTerrain() const                { return mv_alignToTerrainCoefficient != 0.f; }
 	bool  IsUseTerrainColor() const               { return mv_useTerrainColor; }
+	bool  IgnoresTerrainBlending() const          { return mv_ignoreTerrainLayerBlend; }
 	bool  IsAffectedByBrushes() const             { return mv_growOn == eGrowOn_Brushes || mv_growOn == eGrowOn_Both; }
 	bool  IsAffectedByTerrain() const             { return mv_growOn == eGrowOn_Terrain || mv_growOn == eGrowOn_Both; }
 
@@ -250,6 +256,7 @@ protected:
 	CSmartVariable<bool>    mv_castShadows; // Legacy, remains for backward compatibility
 	CSmartVariableEnum<int> mv_castShadowMinSpec;
 	CSmartVariable<bool>    mv_giMode;
+	CSmartVariable<bool>    mv_offlineProcedural;
 	CSmartVariable<bool>    mv_instancing;
 	CSmartVariable<bool>    mv_DynamicDistanceShadows;
 	CSmartVariable<float>   mv_bending;
@@ -276,6 +283,7 @@ protected:
 	CSmartVariable<float>   mv_variance;
 	CSmartVariable<float>   mv_airResistance;
 	CSmartVariableEnum<int> mv_growOn;
+	CSmartVariable<bool>    mv_ignoreTerrainLayerBlend;
 
 	CSmartVariable<bool>    mv_layerFrozen;
 	CSmartVariable<bool>    mv_layerWet;

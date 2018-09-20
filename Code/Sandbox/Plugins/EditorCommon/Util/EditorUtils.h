@@ -7,9 +7,6 @@
 #include <CrySystem/XML/IXml.h>
 #include <CrySystem/ISystem.h>
 
-//! Typedef for quaternion.
-//typedef CryQuat Quat;
-
 struct IDisplayViewport;
 
 #ifndef MIN
@@ -166,9 +163,6 @@ inline XmlNodeRef LoadXmlFromBuffer(const char* buffer, size_t size)
 }
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Tokenize string.
-//////////////////////////////////////////////////////////////////////////
 inline string TokenizeString(const string& str, const char* pszTokens, int& iStart)
 {
 	assert(iStart >= 0);
@@ -183,7 +177,6 @@ inline string TokenizeString(const string& str, const char* pszTokens, int& iSta
 	if (pszPlace < pszEnd)
 	{
 		int nIncluding = (int)strspn(pszPlace, pszTokens);
-		;
 
 		if ((pszPlace + nIncluding) < pszEnd)
 		{
@@ -350,4 +343,3 @@ class CArchive;
 
 EDITOR_COMMON_API CArchive& operator<<(CArchive& ar, const string& str); // for CString conversion
 EDITOR_COMMON_API CArchive& operator>>(CArchive& ar, string& str);       // for CString conversion
-

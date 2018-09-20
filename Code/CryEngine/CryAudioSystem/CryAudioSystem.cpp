@@ -1,9 +1,10 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
+#include "Common.h"
 #include "AudioCVars.h"
 #include "AudioSystem.h"
-#include "Common.h"
+#include <CrySystem/ISystem.h>
 #include <CryCore/Platform/platform_impl.inl>
 #include <CrySystem/IEngineModule.h>
 #include <CryExtension/ICryFactory.h>
@@ -28,33 +29,17 @@ CCVars g_cvars;
 bool CreateAudioSystem(SSystemGlobalEnvironment& env)
 {
 	bool bSuccess = false;
-	CSystem* const pSystem = new CSystem;
 
-	if (pSystem != nullptr)
+	if (env.pAudioSystem != nullptr)
 	{
-		if (env.pAudioSystem != nullptr)
-		{
-			env.pAudioSystem->Release();
-			env.pAudioSystem = nullptr;
-		}
-
-		env.pAudioSystem = static_cast<IAudioSystem*>(pSystem);
-		bSuccess = pSystem->Initialize();
+		env.pAudioSystem->Release();
+		env.pAudioSystem = nullptr;
 	}
 
+	env.pAudioSystem = static_cast<IAudioSystem*>(&g_system);
+	bSuccess = g_system.Initialize();
+
 	return bSuccess;
-}
-
-///////////////////////////////////////////////////////////////////////////
-void PrepareAudioSystem(CSystem* const pAudioSystem)
-{
-	CryFixedStringT<MaxFilePathLength> const temp(pAudioSystem->GetConfigPath());
-
-	// Must be blocking requests.
-	SRequestUserData const data(ERequestFlags::ExecuteBlocking);
-	pAudioSystem->ParseControlsData(temp.c_str(), EDataScope::Global, data);
-	pAudioSystem->ParsePreloadsData(temp.c_str(), EDataScope::Global, data);
-	pAudioSystem->PreloadSingleRequest(GlobalPreloadRequestId, false, data);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -113,7 +98,12 @@ class CEngineModule_CryAudioSystem : public ISystemModule
 
 			if (pModule != nullptr)
 			{
-				PrepareAudioSystem(static_cast<CSystem*>(env.pAudioSystem));
+				auto const pAudioSystem = static_cast<CSystem*>(env.pAudioSystem);
+				CryFixedStringT<MaxFilePathLength> const temp(pAudioSystem->GetConfigPath());
+				pAudioSystem->ParseControlsData(temp.c_str(), EDataScope::Global);
+				pAudioSystem->ParsePreloadsData(temp.c_str(), EDataScope::Global);
+				pAudioSystem->PreloadSingleRequest(GlobalPreloadRequestId, false);
+				pAudioSystem->AutoLoadSetting(EDataScope::Global);
 			}
 			else
 			{
@@ -140,27 +130,28 @@ class CEngineModule_CryAudioSystem : public ISystemModule
 
 		if (!previousModuleName.empty())
 		{
-			// Set the null impl
 			SRequestUserData const data(ERequestFlags::ExecuteBlocking);
 			pAudioSystem->SetImpl(nullptr, data);
 
-			// Unload the previous module
 			gEnv->pSystem->UnloadEngineModule(previousModuleName.c_str());
 		}
 
-		// Get the first CryAudio::ISystemImplementationModule factory available in the module and create an instance of it
 		auto pModule = gEnv->pSystem->LoadModuleAndCreateFactoryInstance<IImplModule>(s_currentModuleName.c_str(), *s_pInitParameters);
 
-		// First try to load and initialize the new engine module.
-		// This will release the currently running implementation but only if the library loaded successfully.
+		SRequestUserData const data(ERequestFlags::ExecuteBlocking);
+
+		// Trying to load and initialize the new engine module will release the currently
+		// running implementation but only if the library loaded successfully.
 		if (pModule != nullptr)
 		{
-			SRequestUserData const data(ERequestFlags::ExecuteBlocking);
+			CryFixedStringT<MaxFilePathLength> const temp(pAudioSystem->GetConfigPath());
+			pAudioSystem->ParseControlsData(temp.c_str(), EDataScope::Global);
+			pAudioSystem->ParsePreloadsData(temp.c_str(), EDataScope::Global);
 
-			// Then load global controls data and preloads.
-			PrepareAudioSystem(pAudioSystem);
+			// Needs to be blocking to avoid executing triggers while data is loading.
+			pAudioSystem->PreloadSingleRequest(GlobalPreloadRequestId, false, data);
+			pAudioSystem->AutoLoadSetting(EDataScope::Global);
 
-			// Then load level specific controls data and preloads.
 			string const levelName = PathUtil::GetFileName(gEnv->pGameFramework->GetLevelName());
 
 			if (!levelName.empty() && levelName.compareNoCase("Untitled") != 0)
@@ -170,16 +161,16 @@ class CEngineModule_CryAudioSystem : public ISystemModule
 				levelPath += "/";
 				levelPath += levelName;
 
-				// Needs to be blocking so data is available for next preloading request!
-				pAudioSystem->ParseControlsData(levelPath.c_str(), EDataScope::LevelSpecific, data);
-				pAudioSystem->ParsePreloadsData(levelPath.c_str(), EDataScope::LevelSpecific, data);
+				pAudioSystem->ParseControlsData(levelPath.c_str(), EDataScope::LevelSpecific);
+				pAudioSystem->ParsePreloadsData(levelPath.c_str(), EDataScope::LevelSpecific);
 
 				PreloadRequestId const preloadRequestId = CryAudio::StringToId(levelName.c_str());
+
+				// Needs to be blocking to avoid executing triggers while data is loading.
 				pAudioSystem->PreloadSingleRequest(preloadRequestId, true, data);
 			}
 
-			// And finally re-trigger all active audio controls to restart previously playing sounds.
-			pAudioSystem->RetriggerAudioControls(data);
+			pAudioSystem->RetriggerAudioControls();
 		}
 		else
 		{
@@ -187,7 +178,6 @@ class CEngineModule_CryAudioSystem : public ISystemModule
 			// Either the module did not load in which case unloading of s_currentModuleName is redundant
 			// or the module did not initialize in which case setting the null implementation is redundant.
 			// As we currently do not know here how exactly the module failed we play safe and always set the null implementation and unload the modules.
-			SRequestUserData const data(ERequestFlags::ExecuteBlocking);
 			pAudioSystem->SetImpl(nullptr, data);
 
 			// The module failed to initialize, unload both as we are running the null implementation now.
@@ -214,7 +204,11 @@ CRYREGISTER_SINGLETON_CLASS(CEngineModule_CryAudioSystem)
 //////////////////////////////////////////////////////////////////////////
 CEngineModule_CryAudioSystem::CEngineModule_CryAudioSystem()
 {
-	// Register audio cvars
+	if (gEnv->pSystem != nullptr)
+	{
+		gEnv->pSystem->GetISystemEventDispatcher()->RegisterListener(&g_system, "CryAudio::CSystem");
+	}
+
 	m_pAudioImplNameCVar = REGISTER_STRING_CB("s_AudioImplName", "CryAudioImplSDLMixer", 0,
 	                                          "Holds the name of the audio implementation library to be used.\n"
 	                                          "Usage: s_AudioImplName <name of the library without extension>\n"
@@ -225,11 +219,10 @@ CEngineModule_CryAudioSystem::CEngineModule_CryAudioSystem()
 //////////////////////////////////////////////////////////////////////////
 CEngineModule_CryAudioSystem::~CEngineModule_CryAudioSystem()
 {
-	SAFE_RELEASE(gEnv->pAudioSystem);
-
 	if (gEnv->pSystem != nullptr)
 	{
 		gEnv->pSystem->UnloadEngineModule(s_currentModuleName.c_str());
+		gEnv->pSystem->GetISystemEventDispatcher()->RemoveListener(&g_system);
 	}
 }
 } // namespace CryAudio

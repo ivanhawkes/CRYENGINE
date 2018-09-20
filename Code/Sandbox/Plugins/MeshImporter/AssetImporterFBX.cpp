@@ -235,6 +235,13 @@ static void InitializeMaterial(CMaterial* pEditorMaterial, const FbxTool::SMater
 	inputRes.m_LMaterial.m_Specular = ColorGammaToLinear(ColorF(61, 61, 61));
 	inputRes.m_LMaterial.m_Smoothness = 255.0f;
 
+	constexpr char* defaultTexture[FbxTool::eMaterialChannelType_COUNT]
+	{
+		"%ENGINE%/EngineAssets/Textures/white.dds",
+		"%ENGINE%/EngineAssets/Textures/white_ddn.dds",
+		""
+	};
+
 	for (int i = 0; i < FbxTool::eMaterialChannelType_COUNT; ++i)
 	{
 		const char* szSemantic = GetTextureSemanticFromChannelType(FbxTool::EMaterialChannelType(i));
@@ -258,6 +265,10 @@ static void InitializeMaterial(CMaterial* pEditorMaterial, const FbxTool::SMater
 				inputRes.m_Textures[texId].m_Name = PathUtil::Make(outDir, relTif);
 			}
 		}
+		else
+		{
+			inputRes.m_Textures[texId].m_Name = defaultTexture[i];
+		}
 	}
 }
 
@@ -279,8 +290,7 @@ static void WriteCHRPARAMS(CAsset* pSkeletonAsset, CAssetImportContext& ctx)
 		{
 			CEditableAsset editableSkeletonAsset = ctx.CreateEditableAsset(*pSkeletonAsset);
 			editableSkeletonAsset.AddFile(chrParamsAssetPath);
-			editableSkeletonAsset.WriteToFile();
-			bWroteChrParams = true;
+			bWroteChrParams = editableSkeletonAsset.WriteToFile();
 		}
 	}
 	if (!bWroteChrParams)
@@ -793,4 +803,3 @@ void CAssetImporterFBX::ReimportAsset(CAsset* pAsset)
 		MoveAsset(ctx, PathUtil::Make(outputDir, assetPath));
 	}
 }
-

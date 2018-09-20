@@ -16,8 +16,6 @@ struct SDisplayContext;
 class SANDBOX_API CSelectionGroup : public ISelectionGroup
 {
 public:
-	CSelectionGroup();
-
 	//! Set name of selection.
 	void          SetName(const string& name) { m_name = name; }
 	//! Get name of selection.
@@ -39,6 +37,8 @@ public:
 	int          GetCount() const;
 	//! Get object at given index.
 	CBaseObject* GetObject(int index) const;
+	//! Get all selected objects.
+	void GetObjects(std::vector<CBaseObject*>& objects) const;
 	//! Get object from a GUID
 	CBaseObject* GetObjectByGuid(CryGUID guid) const;
 	//! Get object from a GUID in a prefab

@@ -17,11 +17,6 @@ struct SParticleInfo;
 struct SPartMoveStage;
 struct SSunFlare;
 
-//===================================================================
-
-#define MAX_ENVTEXTURES    16
-#define MAX_ENVTEXSCANDIST 0.1f
-
 //===============================================================================
 
 struct SMacroFX
@@ -263,7 +258,7 @@ public:
 	SShaderGenComb* mfGetShaderGenInfo(const char* nmFX);
 
 	bool            mfReloadShaderIncludes(const char* szPath, int nFlags);
-	bool            mfReloadAllShaders(int nFlags, uint32 nFlagsHW);
+	bool            mfReloadAllShaders(int nFlags, uint32 nFlagsHW, int currentFrameID);
 	bool            mfReloadFile(const char* szPath, const char* szName, int nFlags);
 
 	void            ParseShaderProfiles();

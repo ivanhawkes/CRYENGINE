@@ -80,7 +80,6 @@ C3DEngine* Cry3DEngineBase::m_p3DEngine = 0;
 CVars* Cry3DEngineBase::m_pCVars = 0;
 ICryPak* Cry3DEngineBase::m_pCryPak = 0;
 IParticleManager* Cry3DEngineBase::m_pPartManager = 0;
-std::shared_ptr<pfx2::IParticleSystem> Cry3DEngineBase::m_pParticleSystem;
 IOpticsManager* Cry3DEngineBase::m_pOpticsManager = 0;
 CDecalManager* Cry3DEngineBase::m_pDecalManager = 0;
 CSkyLightManager* Cry3DEngineBase::m_pSkyLightManager = 0;
@@ -434,15 +433,7 @@ C3DEngine::~C3DEngine()
 	m_bInUnload = true;
 	m_bInLoad = false;
 
-	delete CTerrainNode::GetProcObjPoolMan();
-	CTerrainNode::SetProcObjChunkPool(NULL);
-
-	delete CTerrainNode::GetProcObjChunkPool();
-	CTerrainNode::SetProcObjPoolMan(NULL);
-
 	assert(IsHeapValid());
-
-	ShutDown();
 
 	delete m_pTimeOfDay;
 	delete m_pDecalManager;
@@ -501,7 +492,6 @@ void C3DEngine::RemoveEntInFoliage(int i, IPhysicalEntity* pent)
 bool C3DEngine::Init()
 {
 	m_pPartManager = CreateParticleManager(!gEnv->IsDedicated());
-	m_pParticleSystem = pfx2::GetIParticleSystem();
 	m_pSystem->SetIParticleManager(m_pPartManager);
 
 	m_pOpticsManager = new COpticsManager;
@@ -584,8 +574,6 @@ void C3DEngine::OnFrameStart()
 
 	if (m_pPartManager)
 		m_pPartManager->OnFrameStart();
-	if (m_pParticleSystem)
-		m_pParticleSystem->OnFrameStart();
 
 	m_nRenderWorldUSecs = 0;
 	m_pDeferredPhysicsEventManager->Update();
@@ -774,7 +762,9 @@ void C3DEngine::ProcessCVarsChange()
 	  GetCVars()->e_Portals +
 	  GetCVars()->e_DebugDraw +
 	  GetFloatCVar(e_ViewDistCompMaxSize) +
-	  GetCVars()->e_DecalsDeferredStatic;
+	  GetCVars()->e_DecalsDeferredStatic +
+	  GetCVars()->e_TerrainBlendingDebug + 
+		GetCVars()->e_TerrainDetailMaterialsWeightedBlending;
 
 	if (m_fRefreshSceneDataCVarsSumm != -1 && m_fRefreshSceneDataCVarsSumm != fNewCVarsSumm)
 	{
@@ -877,7 +867,6 @@ void C3DEngine::ShutDown()
 
 	DestroyParticleManager(m_pPartManager);
 	m_pPartManager = nullptr;
-	m_pParticleSystem.reset();
 	m_pSystem->SetIParticleManager(0);
 
 	if (m_pOpticsManager)
@@ -2093,6 +2082,7 @@ bool C3DEngine::SetStatInstGroup(int nGroupId, const IStatInstGroup& siGroup)
 	rGroup.nCastShadowMinSpec = siGroup.nCastShadowMinSpec;
 	rGroup.bDynamicDistanceShadows = siGroup.bDynamicDistanceShadows;
 	rGroup.bGIMode = siGroup.bGIMode;
+	rGroup.offlineProcedural = siGroup.offlineProcedural;
 	rGroup.bInstancing = siGroup.bInstancing;
 	rGroup.fSpriteDistRatio = siGroup.fSpriteDistRatio;
 	rGroup.fLodDistRatio = siGroup.fLodDistRatio;
@@ -2115,6 +2105,7 @@ bool C3DEngine::SetStatInstGroup(int nGroupId, const IStatInstGroup& siGroup)
 	rGroup.fSlopeMin = siGroup.fSlopeMin;
 	rGroup.fStiffness = siGroup.fStiffness;
 	rGroup.fDamping = siGroup.fDamping;
+	rGroup.bIgnoreTerrainLayerBlend = siGroup.bIgnoreTerrainLayerBlend;
 	rGroup.fVariance = siGroup.fVariance;
 	rGroup.fAirResistance = siGroup.fAirResistance;
 
@@ -2164,6 +2155,7 @@ bool C3DEngine::GetStatInstGroup(int nGroupId, IStatInstGroup& siGroup)
 	siGroup.nCastShadowMinSpec = rGroup.nCastShadowMinSpec;
 	siGroup.bDynamicDistanceShadows = rGroup.bDynamicDistanceShadows;
 	siGroup.bGIMode = rGroup.bGIMode;
+	siGroup.offlineProcedural = rGroup.offlineProcedural;
 	siGroup.bInstancing = rGroup.bInstancing;
 	siGroup.fSpriteDistRatio = rGroup.fSpriteDistRatio;
 	siGroup.fLodDistRatio = rGroup.fLodDistRatio;
@@ -2185,6 +2177,7 @@ bool C3DEngine::GetStatInstGroup(int nGroupId, IStatInstGroup& siGroup)
 
 	siGroup.fStiffness = rGroup.fStiffness;
 	siGroup.fDamping = rGroup.fDamping;
+	siGroup.bIgnoreTerrainLayerBlend = rGroup.bIgnoreTerrainLayerBlend;
 	siGroup.fVariance = rGroup.fVariance;
 	siGroup.fAirResistance = rGroup.fAirResistance;
 
@@ -2260,7 +2253,7 @@ void C3DEngine::GetMemoryUsage(class ICrySizer* pSizer) const
 
 	{
 		SIZER_COMPONENT_NAME(pSizer, "ParticleSystem");
-		pSizer->AddObject(m_pParticleSystem);
+		pSizer->AddObject(pfx2::GetIParticleSystem());
 	}
 
 	{
@@ -2303,11 +2296,7 @@ void C3DEngine::GetMemoryUsage(class ICrySizer* pSizer) const
 		pSizer->AddObject(m_pClipVolumeManager);
 	}
 
-	{
-		SIZER_COMPONENT_NAME(pSizer, "ProcVegetPool");
-		pSizer->AddObject(CTerrainNode::GetProcObjPoolMan());
-		pSizer->AddObject(CTerrainNode::GetProcObjChunkPool());
-	}
+	CVegetation::GetStaticMemoryUsage(pSizer);
 
 	{
 		SIZER_COMPONENT_NAME(pSizer, "LayersBaseTextureData");
@@ -2876,8 +2865,6 @@ void C3DEngine::ResetParticlesAndDecals()
 {
 	if (m_pPartManager)
 		m_pPartManager->Reset();
-	if (m_pParticleSystem)
-		m_pParticleSystem->Reset();
 
 	if (m_pDecalManager)
 		m_pDecalManager->Reset();
@@ -3005,13 +2992,17 @@ void C3DEngine::TickDelayedRenderNodeDeletion()
 {
 	m_renderNodesToDeleteID = (m_renderNodesToDeleteID + 1) % CRY_ARRAY_COUNT(m_renderNodesToDelete);
 
-	for (auto pRenderNode : m_renderNodesToDelete[m_renderNodesToDeleteID])
+	while (m_renderNodesToDelete[m_renderNodesToDeleteID].size())
 	{
-		pRenderNode->SetRndFlags(ERF_PENDING_DELETE, false);
-		pRenderNode->ReleaseNode(true);
-	}
+		auto snapshot = std::move(m_renderNodesToDelete[m_renderNodesToDeleteID]);
+		m_renderNodesToDelete[m_renderNodesToDeleteID] = std::vector<IRenderNode*>{};
 
-	m_renderNodesToDelete[m_renderNodesToDeleteID].clear();
+		for (auto pRenderNode : snapshot)
+		{
+			pRenderNode->SetRndFlags(ERF_PENDING_DELETE, false);
+			pRenderNode->ReleaseNode(true);
+		}
+	}
 }
 
 void C3DEngine::SetWind(const Vec3& vWind)
@@ -4051,8 +4042,6 @@ void C3DEngine::SerializeState(TSerialize ser)
 		m_pDecalManager->Serialize(ser);
 
 	m_pPartManager->Serialize(ser);
-	if (m_pParticleSystem)
-		m_pParticleSystem->Serialize(ser);
 	m_pTimeOfDay->Serialize(ser);
 }
 
@@ -4781,6 +4770,13 @@ void C3DEngine::SetRecomputeCachedShadows(IRenderNode* pNode, uint updateStrateg
 			pNode->m_pOcNode->MarkAsUncompiled(nodeListType);
 		}
 	}
+}
+
+void C3DEngine::ReleasePermanentObjectsRenderResources()
+{
+	gEnv->pRenderer->FlushRTCommands(true, true, true);
+	MarkRNTmpDataPoolForReset();
+	gEnv->pRenderer->ClearShaderPipelineStateCache();
 }
 
 void C3DEngine::InvalidateShadowCacheData()

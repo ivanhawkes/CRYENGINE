@@ -3,7 +3,6 @@
 #pragma once
 
 #include <CryAudio/IAudioSystem.h>
-#include <CryString/CryName.h>
 
 namespace CryAudio
 {
@@ -11,16 +10,16 @@ class CATLListener;
 class CATLAudioObject;
 class CAudioRayInfo;
 
-enum class EAudioRequestType : EnumFlagsType
+enum class ERequestType : EnumFlagsType
 {
 	None,
-	AudioManagerRequest,
-	AudioCallbackManagerRequest,
-	AudioObjectRequest,
-	AudioListenerRequest,
+	ManagerRequest,
+	CallbackManagerRequest,
+	ObjectRequest,
+	ListenerRequest,
 };
 
-enum class EAudioStandaloneFileState : EnumFlagsType
+enum class EStandaloneFileState : EnumFlagsType
 {
 	None,
 	Playing,
@@ -28,7 +27,7 @@ enum class EAudioStandaloneFileState : EnumFlagsType
 	Loading,
 };
 
-enum class EAudioManagerRequestType : EnumFlagsType
+enum class EManagerRequestType : EnumFlagsType
 {
 	None,
 	SetAudioImpl,
@@ -41,6 +40,9 @@ enum class EAudioManagerRequestType : EnumFlagsType
 	ClearPreloadsData,
 	PreloadSingleRequest,
 	UnloadSingleRequest,
+	AutoLoadSetting,
+	LoadSetting,
+	UnloadSetting,
 	UnloadAFCMDataByScope,
 	DrawDebugInfo,
 	AddRequestListener,
@@ -51,9 +53,13 @@ enum class EAudioManagerRequestType : EnumFlagsType
 	ReloadControlsData,
 	GetAudioFileData,
 	GetImplInfo,
+	ExecuteTriggerEx,
+	ExecuteDefaultTrigger,
+	ExecutePreviewTrigger,
+	StopPreviewTrigger,
 };
 
-enum class EAudioCallbackManagerRequestType : EnumFlagsType
+enum class ECallbackManagerRequestType : EnumFlagsType
 {
 	None,
 	ReportStartedEvent, //!< Only relevant for delayed playback.
@@ -65,7 +71,7 @@ enum class EAudioCallbackManagerRequestType : EnumFlagsType
 	ReportPhysicalizedEvent,
 };
 
-enum class EAudioObjectRequestType : EnumFlagsType
+enum class EObjectRequestType : EnumFlagsType
 {
 	None,
 	LoadTrigger,
@@ -73,10 +79,11 @@ enum class EAudioObjectRequestType : EnumFlagsType
 	PlayFile,
 	StopFile,
 	ExecuteTrigger,
-	ExecuteTriggerEx,
 	StopTrigger,
 	StopAllTriggers,
 	SetTransformation,
+	SetOcclusionType,
+	SetOcclusionRayOffset,
 	SetParameter,
 	SetSwitchState,
 	SetCurrentEnvironments,
@@ -85,9 +92,11 @@ enum class EAudioObjectRequestType : EnumFlagsType
 	ReleaseObject,
 	ProcessPhysicsRay,
 	SetName,
+	ToggleAbsoluteVelocityTracking,
+	ToggleRelativeVelocityTracking,
 };
 
-enum class EAudioListenerRequestType : EnumFlagsType
+enum class EListenerRequestType : EnumFlagsType
 {
 	None,
 	SetTransformation,
@@ -107,105 +116,91 @@ enum class EOcclusionCollisionType : EnumFlagsType
 CRY_CREATE_ENUM_FLAG_OPERATORS(EOcclusionCollisionType);
 
 //////////////////////////////////////////////////////////////////////////
-struct SAudioEventListener
+struct SRequestData : public _i_multithread_reference_target_t
 {
-	SAudioEventListener()
-		: pObjectToListenTo(nullptr)
-		, OnEvent(nullptr)
-		, eventMask(ESystemEvents::None)
+	explicit SRequestData(ERequestType const requestType_)
+		: requestType(requestType_)
 	{}
 
-	void const*   pObjectToListenTo;
-	void          (* OnEvent)(SRequestInfo const* const);
-	ESystemEvents eventMask;
+	virtual ~SRequestData() override = default;
+
+	SRequestData(SRequestData const&) = delete;
+	SRequestData(SRequestData&&) = delete;
+	SRequestData& operator=(SRequestData const&) = delete;
+	SRequestData& operator=(SRequestData&&) = delete;
+
+	ERequestType const requestType;
 };
 
 //////////////////////////////////////////////////////////////////////////
-struct SAudioRequestData : public _i_multithread_reference_target_t
+struct SManagerRequestDataBase : public SRequestData
 {
-	explicit SAudioRequestData(EAudioRequestType const type_)
-		: type(type_)
+	explicit SManagerRequestDataBase(EManagerRequestType const managerRequestType_)
+		: SRequestData(ERequestType::ManagerRequest)
+		, managerRequestType(managerRequestType_)
 	{}
 
-	virtual ~SAudioRequestData() override = default;
+	virtual ~SManagerRequestDataBase() override = default;
 
-	SAudioRequestData(SAudioRequestData const&) = delete;
-	SAudioRequestData(SAudioRequestData&&) = delete;
-	SAudioRequestData& operator=(SAudioRequestData const&) = delete;
-	SAudioRequestData& operator=(SAudioRequestData&&) = delete;
-
-	EAudioRequestType const type;
+	EManagerRequestType const managerRequestType;
 };
 
 //////////////////////////////////////////////////////////////////////////
-struct SAudioManagerRequestDataBase : public SAudioRequestData
+template<EManagerRequestType T>
+struct SManagerRequestData final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestDataBase(EAudioManagerRequestType const type_)
-		: SAudioRequestData(EAudioRequestType::AudioManagerRequest)
-		, type(type_)
+	SManagerRequestData()
+		: SManagerRequestDataBase(T)
 	{}
 
-	virtual ~SAudioManagerRequestDataBase() override = default;
-
-	EAudioManagerRequestType const type;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<EAudioManagerRequestType T>
-struct SAudioManagerRequestData final : public SAudioManagerRequestDataBase
-{
-	SAudioManagerRequestData()
-		: SAudioManagerRequestDataBase(T)
+	explicit SManagerRequestData(SManagerRequestData<T> const* const pAMRData)
+		: SManagerRequestDataBase(T)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<T> const* const pAMRData)
-		: SAudioManagerRequestDataBase(T)
-	{}
-
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::SetAudioImpl> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::SetAudioImpl> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(Impl::IImpl* const pIImpl_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::SetAudioImpl)
+	explicit SManagerRequestData(Impl::IImpl* const pIImpl_)
+		: SManagerRequestDataBase(EManagerRequestType::SetAudioImpl)
 		, pIImpl(pIImpl_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::SetAudioImpl> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::SetAudioImpl)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::SetAudioImpl> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::SetAudioImpl)
 		, pIImpl(pAMRData->pIImpl)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	Impl::IImpl* const pIImpl;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::AddRequestListener> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::AddRequestListener> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(
+	explicit SManagerRequestData(
 		void const* const pObjectToListenTo_,
 		void (*func_)(SRequestInfo const* const),
 		ESystemEvents const eventMask_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::AddRequestListener)
+		: SManagerRequestDataBase(EManagerRequestType::AddRequestListener)
 		, pObjectToListenTo(pObjectToListenTo_)
 		, func(func_)
 		, eventMask(eventMask_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::AddRequestListener> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::AddRequestListener)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::AddRequestListener> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::AddRequestListener)
 		, pObjectToListenTo(pAMRData->pObjectToListenTo)
 		, func(pAMRData->func)
 		, eventMask(pAMRData->eventMask)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	void const* const   pObjectToListenTo;
 	void                (* func)(SRequestInfo const* const);
@@ -214,21 +209,21 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::AddRequestListener> fi
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::RemoveRequestListener> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::RemoveRequestListener> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(void const* const pObjectToListenTo_, void (*func_)(SRequestInfo const* const))
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::RemoveRequestListener)
+	explicit SManagerRequestData(void const* const pObjectToListenTo_, void (*func_)(SRequestInfo const* const))
+		: SManagerRequestDataBase(EManagerRequestType::RemoveRequestListener)
 		, pObjectToListenTo(pObjectToListenTo_)
 		, func(func_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::RemoveRequestListener> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::RemoveRequestListener)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::RemoveRequestListener> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::RemoveRequestListener)
 		, pObjectToListenTo(pAMRData->pObjectToListenTo)
 		, func(pAMRData->func)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	void const* const pObjectToListenTo;
 	void              (* func)(SRequestInfo const* const);
@@ -236,21 +231,21 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::RemoveRequestListener>
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::ParseControlsData> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ParseControlsData> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(char const* const szFolderPath_, EDataScope const dataScope_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ParseControlsData)
+	explicit SManagerRequestData(char const* const szFolderPath_, EDataScope const dataScope_)
+		: SManagerRequestDataBase(EManagerRequestType::ParseControlsData)
 		, folderPath(szFolderPath_)
 		, dataScope(dataScope_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::ParseControlsData> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ParseControlsData)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ParseControlsData> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ParseControlsData)
 		, folderPath(pAMRData->folderPath)
 		, dataScope(pAMRData->dataScope)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	CryFixedStringT<MaxFilePathLength> const folderPath;
 	EDataScope const                         dataScope;
@@ -258,21 +253,21 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::ParseControlsData> fin
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::ParsePreloadsData> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ParsePreloadsData> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(char const* const szFolderPath_, EDataScope const dataScope_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ParsePreloadsData)
+	explicit SManagerRequestData(char const* const szFolderPath_, EDataScope const dataScope_)
+		: SManagerRequestDataBase(EManagerRequestType::ParsePreloadsData)
 		, folderPath(szFolderPath_)
 		, dataScope(dataScope_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::ParsePreloadsData> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ParsePreloadsData)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ParsePreloadsData> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ParsePreloadsData)
 		, folderPath(pAMRData->folderPath)
 		, dataScope(pAMRData->dataScope)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	CryFixedStringT<MaxFilePathLength> const folderPath;
 	EDataScope const                         dataScope;
@@ -280,59 +275,59 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::ParsePreloadsData> fin
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::ClearControlsData> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ClearControlsData> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(EDataScope const dataScope_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ClearControlsData)
+	explicit SManagerRequestData(EDataScope const dataScope_)
+		: SManagerRequestDataBase(EManagerRequestType::ClearControlsData)
 		, dataScope(dataScope_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::ClearControlsData> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ClearControlsData)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ClearControlsData> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ClearControlsData)
 		, dataScope(pAMRData->dataScope)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	EDataScope const dataScope;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::ClearPreloadsData> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ClearPreloadsData> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(EDataScope const dataScope_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ClearPreloadsData)
+	explicit SManagerRequestData(EDataScope const dataScope_)
+		: SManagerRequestDataBase(EManagerRequestType::ClearPreloadsData)
 		, dataScope(dataScope_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::ClearPreloadsData> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ClearPreloadsData)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ClearPreloadsData> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ClearPreloadsData)
 		, dataScope(pAMRData->dataScope)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	EDataScope const dataScope;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::PreloadSingleRequest> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::PreloadSingleRequest> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(PreloadRequestId const audioPreloadRequestId_, bool const bAutoLoadOnly_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::PreloadSingleRequest)
+	explicit SManagerRequestData(PreloadRequestId const audioPreloadRequestId_, bool const bAutoLoadOnly_)
+		: SManagerRequestDataBase(EManagerRequestType::PreloadSingleRequest)
 		, audioPreloadRequestId(audioPreloadRequestId_)
 		, bAutoLoadOnly(bAutoLoadOnly_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::PreloadSingleRequest> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::PreloadSingleRequest)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::PreloadSingleRequest> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::PreloadSingleRequest)
 		, audioPreloadRequestId(pAMRData->audioPreloadRequestId)
 		, bAutoLoadOnly(pAMRData->bAutoLoadOnly)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	PreloadRequestId const audioPreloadRequestId;
 	bool const             bAutoLoadOnly;
@@ -340,78 +335,135 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::PreloadSingleRequest> 
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::UnloadSingleRequest> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::UnloadSingleRequest> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(PreloadRequestId const audioPreloadRequestId_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::UnloadSingleRequest)
+	explicit SManagerRequestData(PreloadRequestId const audioPreloadRequestId_)
+		: SManagerRequestDataBase(EManagerRequestType::UnloadSingleRequest)
 		, audioPreloadRequestId(audioPreloadRequestId_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::UnloadSingleRequest> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::UnloadSingleRequest)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::UnloadSingleRequest> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::UnloadSingleRequest)
 		, audioPreloadRequestId(pAMRData->audioPreloadRequestId)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	PreloadRequestId const audioPreloadRequestId;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::UnloadAFCMDataByScope> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::AutoLoadSetting> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(EDataScope const dataScope_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::UnloadAFCMDataByScope)
+	explicit SManagerRequestData(EDataScope const scope_)
+		: SManagerRequestDataBase(EManagerRequestType::AutoLoadSetting)
+		, scope(scope_)
+	{}
+
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::AutoLoadSetting> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::AutoLoadSetting)
+		, scope(pAMRData->scope)
+	{}
+
+	virtual ~SManagerRequestData() override = default;
+
+	EDataScope const scope;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SManagerRequestData<EManagerRequestType::LoadSetting> final : public SManagerRequestDataBase
+{
+	explicit SManagerRequestData(ControlId const id_)
+		: SManagerRequestDataBase(EManagerRequestType::LoadSetting)
+		, id(id_)
+	{}
+
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::LoadSetting> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::LoadSetting)
+		, id(pAMRData->id)
+	{}
+
+	virtual ~SManagerRequestData() override = default;
+
+	ControlId const id;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SManagerRequestData<EManagerRequestType::UnloadSetting> final : public SManagerRequestDataBase
+{
+	explicit SManagerRequestData(ControlId const id_)
+		: SManagerRequestDataBase(EManagerRequestType::UnloadSetting)
+		, id(id_)
+	{}
+
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::UnloadSetting> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::UnloadSetting)
+		, id(pAMRData->id)
+	{}
+
+	virtual ~SManagerRequestData() override = default;
+
+	ControlId const id;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SManagerRequestData<EManagerRequestType::UnloadAFCMDataByScope> final : public SManagerRequestDataBase
+{
+	explicit SManagerRequestData(EDataScope const dataScope_)
+		: SManagerRequestDataBase(EManagerRequestType::UnloadAFCMDataByScope)
 		, dataScope(dataScope_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::UnloadAFCMDataByScope> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::UnloadAFCMDataByScope)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::UnloadAFCMDataByScope> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::UnloadAFCMDataByScope)
 		, dataScope(pAMRData->dataScope)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	EDataScope const dataScope;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::RefreshAudioSystem> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::RefreshAudioSystem> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(char const* const szLevelName)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::RefreshAudioSystem)
+	explicit SManagerRequestData(char const* const szLevelName)
+		: SManagerRequestDataBase(EManagerRequestType::RefreshAudioSystem)
 		, levelName(szLevelName)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::RefreshAudioSystem> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::RefreshAudioSystem)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::RefreshAudioSystem> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::RefreshAudioSystem)
 		, levelName(pAMRData->levelName)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	CryFixedStringT<MaxFileNameLength> const levelName;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::ReloadControlsData> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ReloadControlsData> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(char const* const szFolderPath, char const* const szLevelName)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ReloadControlsData)
+	explicit SManagerRequestData(char const* const szFolderPath, char const* const szLevelName)
+		: SManagerRequestDataBase(EManagerRequestType::ReloadControlsData)
 		, folderPath(szFolderPath)
 		, levelName(szLevelName)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::ReloadControlsData> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::ReloadControlsData)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ReloadControlsData> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ReloadControlsData)
 		, folderPath(pAMRData->folderPath)
 		, levelName(pAMRData->levelName)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	CryFixedStringT<MaxFilePathLength> const folderPath;
 	CryFixedStringT<MaxFilePathLength> const levelName;
@@ -419,21 +471,21 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::ReloadControlsData> fi
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::GetAudioFileData> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::GetAudioFileData> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(char const* const szName, SFileData& fileData_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::GetAudioFileData)
+	explicit SManagerRequestData(char const* const szName, SFileData& fileData_)
+		: SManagerRequestDataBase(EManagerRequestType::GetAudioFileData)
 		, name(szName)
 		, fileData(fileData_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::GetAudioFileData> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::GetAudioFileData)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::GetAudioFileData> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::GetAudioFileData)
 		, name(pAMRData->name)
 		, fileData(pAMRData->fileData)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	CryFixedStringT<MaxFileNameLength> const name;
 	SFileData&                               fileData;
@@ -441,328 +493,29 @@ struct SAudioManagerRequestData<EAudioManagerRequestType::GetAudioFileData> fina
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioManagerRequestData<EAudioManagerRequestType::GetImplInfo> final : public SAudioManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::GetImplInfo> final : public SManagerRequestDataBase
 {
-	explicit SAudioManagerRequestData(SImplInfo& implInfo_)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::GetImplInfo)
+	explicit SManagerRequestData(SImplInfo& implInfo_)
+		: SManagerRequestDataBase(EManagerRequestType::GetImplInfo)
 		, implInfo(implInfo_)
 	{}
 
-	explicit SAudioManagerRequestData(SAudioManagerRequestData<EAudioManagerRequestType::GetImplInfo> const* const pAMRData)
-		: SAudioManagerRequestDataBase(EAudioManagerRequestType::GetImplInfo)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::GetImplInfo> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::GetImplInfo)
 		, implInfo(pAMRData->implInfo)
 	{}
 
-	virtual ~SAudioManagerRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	SImplInfo& implInfo;
 };
 
 //////////////////////////////////////////////////////////////////////////
-struct SAudioCallbackManagerRequestDataBase : public SAudioRequestData
-{
-	explicit SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType const type_)
-		: SAudioRequestData(EAudioRequestType::AudioCallbackManagerRequest)
-		, type(type_)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestDataBase() override = default;
-
-	EAudioCallbackManagerRequestType const type;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<EAudioCallbackManagerRequestType T>
-struct SAudioCallbackManagerRequestData final : public SAudioCallbackManagerRequestDataBase
-{
-	SAudioCallbackManagerRequestData()
-		: SAudioCallbackManagerRequestDataBase(T)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<T> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(T)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-};
-
-//////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportStartedEvent> final : public SAudioCallbackManagerRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ExecuteTriggerEx> final : public SManagerRequestDataBase
 {
-	explicit SAudioCallbackManagerRequestData(CATLEvent& audioEvent_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportStartedEvent)
-		, audioEvent(audioEvent_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportStartedEvent> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportStartedEvent)
-		, audioEvent(pACMRData->audioEvent)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	CATLEvent& audioEvent;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportFinishedEvent> final : public SAudioCallbackManagerRequestDataBase
-{
-	explicit SAudioCallbackManagerRequestData(CATLEvent& audioEvent_, bool const bSuccess_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportFinishedEvent)
-		, audioEvent(audioEvent_)
-		, bSuccess(bSuccess_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportFinishedEvent> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportFinishedEvent)
-		, audioEvent(pACMRData->audioEvent)
-		, bSuccess(pACMRData->bSuccess)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	CATLEvent& audioEvent;
-	bool const bSuccess;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportVirtualizedEvent> final : public SAudioCallbackManagerRequestDataBase
-{
-	explicit SAudioCallbackManagerRequestData(CATLEvent& audioEvent_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportVirtualizedEvent)
-		, audioEvent(audioEvent_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportVirtualizedEvent> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportVirtualizedEvent)
-		, audioEvent(pACMRData->audioEvent)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	CATLEvent& audioEvent;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportPhysicalizedEvent> final : public SAudioCallbackManagerRequestDataBase
-{
-	explicit SAudioCallbackManagerRequestData(CATLEvent& audioEvent_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportPhysicalizedEvent)
-		, audioEvent(audioEvent_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportPhysicalizedEvent> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportPhysicalizedEvent)
-		, audioEvent(pACMRData->audioEvent)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	CATLEvent& audioEvent;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportFinishedTriggerInstance> final : public SAudioCallbackManagerRequestDataBase
-{
-	explicit SAudioCallbackManagerRequestData(ControlId const audioTriggerId_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportFinishedTriggerInstance)
-		, audioTriggerId(audioTriggerId_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportFinishedTriggerInstance> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportFinishedTriggerInstance)
-		, audioTriggerId(pACMRData->audioTriggerId)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	ControlId const audioTriggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportStartedFile> final : public SAudioCallbackManagerRequestDataBase
-{
-	explicit SAudioCallbackManagerRequestData(CATLStandaloneFile& audioStandaloneFile_, bool const bSuccess_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportStartedFile)
-		, audioStandaloneFile(audioStandaloneFile_)
-		, bSuccess(bSuccess_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportStartedFile> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportStartedFile)
-		, audioStandaloneFile(pACMRData->audioStandaloneFile)
-		, bSuccess(pACMRData->bSuccess)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	CATLStandaloneFile& audioStandaloneFile;
-	bool const          bSuccess;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportStoppedFile> final : public SAudioCallbackManagerRequestDataBase
-{
-	explicit SAudioCallbackManagerRequestData(CATLStandaloneFile& audioStandaloneFile_)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportStoppedFile)
-		, audioStandaloneFile(audioStandaloneFile_)
-	{}
-
-	explicit SAudioCallbackManagerRequestData(SAudioCallbackManagerRequestData<EAudioCallbackManagerRequestType::ReportStoppedFile> const* const pACMRData)
-		: SAudioCallbackManagerRequestDataBase(EAudioCallbackManagerRequestType::ReportStoppedFile)
-		, audioStandaloneFile(pACMRData->audioStandaloneFile)
-	{}
-
-	virtual ~SAudioCallbackManagerRequestData() override = default;
-
-	CATLStandaloneFile& audioStandaloneFile;
-};
-
-//////////////////////////////////////////////////////////////////////////
-struct SAudioObjectRequestDataBase : public SAudioRequestData
-{
-	explicit SAudioObjectRequestDataBase(EAudioObjectRequestType const type_)
-		: SAudioRequestData(EAudioRequestType::AudioObjectRequest)
-		, type(type_)
-	{}
-
-	virtual ~SAudioObjectRequestDataBase() override = default;
-
-	EAudioObjectRequestType const type;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<EAudioObjectRequestType T>
-struct SAudioObjectRequestData final : public SAudioObjectRequestDataBase
-{
-	SAudioObjectRequestData()
-		: SAudioObjectRequestDataBase(T)
-	{}
-
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<T> const* const pAORData)
-		: SAudioObjectRequestDataBase(T)
-	{}
-
-	virtual ~SAudioObjectRequestData() override = default;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::LoadTrigger> final : public SAudioObjectRequestDataBase
-{
-	explicit SAudioObjectRequestData(ControlId const audioTriggerId_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::LoadTrigger)
-		, audioTriggerId(audioTriggerId_)
-	{}
-
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::LoadTrigger> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::LoadTrigger)
-		, audioTriggerId(pAORData->audioTriggerId)
-	{}
-
-	virtual ~SAudioObjectRequestData() override = default;
-
-	ControlId const audioTriggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::UnloadTrigger> final : public SAudioObjectRequestDataBase
-{
-	explicit SAudioObjectRequestData(ControlId const audioTriggerId_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::UnloadTrigger)
-		, audioTriggerId(audioTriggerId_)
-	{}
-
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::UnloadTrigger> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::UnloadTrigger)
-		, audioTriggerId(pAORData->audioTriggerId)
-	{}
-
-	virtual ~SAudioObjectRequestData() override = default;
-
-	ControlId const audioTriggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::PlayFile> final : public SAudioObjectRequestDataBase
-{
-	explicit SAudioObjectRequestData(
-		CryFixedStringT<MaxFilePathLength> const& file_,
-		ControlId const usedAudioTriggerId_,
-		bool const bLocalized_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::PlayFile)
-		, file(file_)
-		, usedAudioTriggerId(usedAudioTriggerId_)
-		, bLocalized(bLocalized_)
-	{}
-
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::PlayFile> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::PlayFile)
-		, file(pAORData->file)
-		, usedAudioTriggerId(pAORData->usedAudioTriggerId)
-		, bLocalized(pAORData->bLocalized)
-	{}
-
-	virtual ~SAudioObjectRequestData() override = default;
-
-	CryFixedStringT<MaxFilePathLength> const file;
-	ControlId const                          usedAudioTriggerId;
-	bool const                               bLocalized;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::StopFile> final : public SAudioObjectRequestDataBase
-{
-	explicit SAudioObjectRequestData(CryFixedStringT<MaxFilePathLength> const& file_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::StopFile)
-		, file(file_)
-	{}
-
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::StopFile> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::StopFile)
-		, file(pAORData->file)
-	{}
-
-	virtual ~SAudioObjectRequestData() override = default;
-
-	CryFixedStringT<MaxFilePathLength> const file;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::ExecuteTrigger> final : public SAudioObjectRequestDataBase
-{
-	explicit SAudioObjectRequestData(ControlId const audioTriggerId_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::ExecuteTrigger)
-		, audioTriggerId(audioTriggerId_)
-	{}
-
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::ExecuteTrigger> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::ExecuteTrigger)
-		, audioTriggerId(pAORData->audioTriggerId)
-	{}
-
-	virtual ~SAudioObjectRequestData() override = default;
-
-	ControlId const audioTriggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::ExecuteTriggerEx> final : public SAudioObjectRequestDataBase
-{
-	explicit SAudioObjectRequestData(SExecuteTriggerData const& data)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::ExecuteTriggerEx)
+	explicit SManagerRequestData(SExecuteTriggerData const& data)
+		: SManagerRequestDataBase(EManagerRequestType::ExecuteTriggerEx)
 		, name(data.szName)
 		, occlusionType(data.occlusionType)
 		, transformation(data.transformation)
@@ -771,17 +524,17 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::ExecuteTriggerEx> final 
 		, triggerId(data.triggerId)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::ExecuteTriggerEx> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::ExecuteTriggerEx)
-		, name(pAORData->name)
-		, occlusionType(pAORData->occlusionType)
-		, transformation(pAORData->transformation)
-		, entityId(pAORData->entityId)
-		, setCurrentEnvironments(pAORData->setCurrentEnvironments)
-		, triggerId(pAORData->triggerId)
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ExecuteTriggerEx> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ExecuteTriggerEx)
+		, name(pAMRData->name)
+		, occlusionType(pAMRData->occlusionType)
+		, transformation(pAMRData->transformation)
+		, entityId(pAMRData->entityId)
+		, setCurrentEnvironments(pAMRData->setCurrentEnvironments)
+		, triggerId(pAMRData->triggerId)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SManagerRequestData() override = default;
 
 	CryFixedStringT<MaxObjectNameLength> const name;
 	EOcclusionType const                       occlusionType;
@@ -793,59 +546,436 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::ExecuteTriggerEx> final 
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::StopTrigger> final : public SAudioObjectRequestDataBase
+struct SManagerRequestData<EManagerRequestType::ExecuteDefaultTrigger> final : public SManagerRequestDataBase
 {
-	explicit SAudioObjectRequestData(ControlId const audioTriggerId_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::StopTrigger)
+	explicit SManagerRequestData(EDefaultTriggerType const triggerType_)
+		: SManagerRequestDataBase(EManagerRequestType::ExecuteDefaultTrigger)
+		, triggerType(triggerType_)
+	{}
+
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ExecuteDefaultTrigger> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ExecuteDefaultTrigger)
+		, triggerType(pAMRData->triggerType)
+	{}
+
+	virtual ~SManagerRequestData() override = default;
+
+	EDefaultTriggerType const triggerType;
+};
+
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SManagerRequestData<EManagerRequestType::ExecutePreviewTrigger> final : public SManagerRequestDataBase
+{
+	explicit SManagerRequestData(Impl::ITriggerInfo const& triggerInfo_)
+		: SManagerRequestDataBase(EManagerRequestType::ExecutePreviewTrigger)
+		, triggerInfo(triggerInfo_)
+	{}
+
+	explicit SManagerRequestData(SManagerRequestData<EManagerRequestType::ExecutePreviewTrigger> const* const pAMRData)
+		: SManagerRequestDataBase(EManagerRequestType::ExecutePreviewTrigger)
+		, triggerInfo(pAMRData->triggerInfo)
+	{}
+
+	virtual ~SManagerRequestData() override = default;
+
+	Impl::ITriggerInfo const& triggerInfo;
+};
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
+
+//////////////////////////////////////////////////////////////////////////
+struct SCallbackManagerRequestDataBase : public SRequestData
+{
+	explicit SCallbackManagerRequestDataBase(ECallbackManagerRequestType const callbackManagerRequestType_)
+		: SRequestData(ERequestType::CallbackManagerRequest)
+		, callbackManagerRequestType(callbackManagerRequestType_)
+	{}
+
+	virtual ~SCallbackManagerRequestDataBase() override = default;
+
+	ECallbackManagerRequestType const callbackManagerRequestType;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<ECallbackManagerRequestType T>
+struct SCallbackManagerRequestData final : public SCallbackManagerRequestDataBase
+{
+	SCallbackManagerRequestData()
+		: SCallbackManagerRequestDataBase(T)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<T> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(T)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStartedEvent> final : public SCallbackManagerRequestDataBase
+{
+	explicit SCallbackManagerRequestData(CATLEvent& audioEvent_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportStartedEvent)
+		, audioEvent(audioEvent_)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStartedEvent> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportStartedEvent)
+		, audioEvent(pACMRData->audioEvent)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+
+	CATLEvent& audioEvent;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportFinishedEvent> final : public SCallbackManagerRequestDataBase
+{
+	explicit SCallbackManagerRequestData(CATLEvent& audioEvent_, bool const bSuccess_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportFinishedEvent)
+		, audioEvent(audioEvent_)
+		, bSuccess(bSuccess_)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportFinishedEvent> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportFinishedEvent)
+		, audioEvent(pACMRData->audioEvent)
+		, bSuccess(pACMRData->bSuccess)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+
+	CATLEvent& audioEvent;
+	bool const bSuccess;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportVirtualizedEvent> final : public SCallbackManagerRequestDataBase
+{
+	explicit SCallbackManagerRequestData(CATLEvent& audioEvent_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportVirtualizedEvent)
+		, audioEvent(audioEvent_)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportVirtualizedEvent> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportVirtualizedEvent)
+		, audioEvent(pACMRData->audioEvent)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+
+	CATLEvent& audioEvent;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportPhysicalizedEvent> final : public SCallbackManagerRequestDataBase
+{
+	explicit SCallbackManagerRequestData(CATLEvent& audioEvent_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportPhysicalizedEvent)
+		, audioEvent(audioEvent_)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportPhysicalizedEvent> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportPhysicalizedEvent)
+		, audioEvent(pACMRData->audioEvent)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+
+	CATLEvent& audioEvent;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportFinishedTriggerInstance> final : public SCallbackManagerRequestDataBase
+{
+	explicit SCallbackManagerRequestData(ControlId const audioTriggerId_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportFinishedTriggerInstance)
 		, audioTriggerId(audioTriggerId_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::StopTrigger> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::StopTrigger)
-		, audioTriggerId(pAORData->audioTriggerId)
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportFinishedTriggerInstance> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportFinishedTriggerInstance)
+		, audioTriggerId(pACMRData->audioTriggerId)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SCallbackManagerRequestData() override = default;
 
 	ControlId const audioTriggerId;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::SetTransformation> final : public SAudioObjectRequestDataBase
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStartedFile> final : public SCallbackManagerRequestDataBase
 {
-	explicit SAudioObjectRequestData(CObjectTransformation const& transformation_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetTransformation)
+	explicit SCallbackManagerRequestData(CATLStandaloneFile& audioStandaloneFile_, bool const bSuccess_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportStartedFile)
+		, audioStandaloneFile(audioStandaloneFile_)
+		, bSuccess(bSuccess_)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStartedFile> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportStartedFile)
+		, audioStandaloneFile(pACMRData->audioStandaloneFile)
+		, bSuccess(pACMRData->bSuccess)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+
+	CATLStandaloneFile& audioStandaloneFile;
+	bool const          bSuccess;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStoppedFile> final : public SCallbackManagerRequestDataBase
+{
+	explicit SCallbackManagerRequestData(CATLStandaloneFile& audioStandaloneFile_)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportStoppedFile)
+		, audioStandaloneFile(audioStandaloneFile_)
+	{}
+
+	explicit SCallbackManagerRequestData(SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStoppedFile> const* const pACMRData)
+		: SCallbackManagerRequestDataBase(ECallbackManagerRequestType::ReportStoppedFile)
+		, audioStandaloneFile(pACMRData->audioStandaloneFile)
+	{}
+
+	virtual ~SCallbackManagerRequestData() override = default;
+
+	CATLStandaloneFile& audioStandaloneFile;
+};
+
+//////////////////////////////////////////////////////////////////////////
+struct SObjectRequestDataBase : public SRequestData
+{
+	explicit SObjectRequestDataBase(EObjectRequestType const objectRequestType_)
+		: SRequestData(ERequestType::ObjectRequest)
+		, objectRequestType(objectRequestType_)
+	{}
+
+	virtual ~SObjectRequestDataBase() override = default;
+
+	EObjectRequestType const objectRequestType;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<EObjectRequestType T>
+struct SObjectRequestData final : public SObjectRequestDataBase
+{
+	SObjectRequestData()
+		: SObjectRequestDataBase(T)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<T> const* const pAORData)
+		: SObjectRequestDataBase(T)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::LoadTrigger> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(ControlId const audioTriggerId_)
+		: SObjectRequestDataBase(EObjectRequestType::LoadTrigger)
+		, audioTriggerId(audioTriggerId_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::LoadTrigger> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::LoadTrigger)
+		, audioTriggerId(pAORData->audioTriggerId)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	ControlId const audioTriggerId;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::UnloadTrigger> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(ControlId const audioTriggerId_)
+		: SObjectRequestDataBase(EObjectRequestType::UnloadTrigger)
+		, audioTriggerId(audioTriggerId_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::UnloadTrigger> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::UnloadTrigger)
+		, audioTriggerId(pAORData->audioTriggerId)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	ControlId const audioTriggerId;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::PlayFile> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(
+		CryFixedStringT<MaxFilePathLength> const& file_,
+		ControlId const usedAudioTriggerId_,
+		bool const bLocalized_)
+		: SObjectRequestDataBase(EObjectRequestType::PlayFile)
+		, file(file_)
+		, usedAudioTriggerId(usedAudioTriggerId_)
+		, bLocalized(bLocalized_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::PlayFile> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::PlayFile)
+		, file(pAORData->file)
+		, usedAudioTriggerId(pAORData->usedAudioTriggerId)
+		, bLocalized(pAORData->bLocalized)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	CryFixedStringT<MaxFilePathLength> const file;
+	ControlId const                          usedAudioTriggerId;
+	bool const                               bLocalized;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::StopFile> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(CryFixedStringT<MaxFilePathLength> const& file_)
+		: SObjectRequestDataBase(EObjectRequestType::StopFile)
+		, file(file_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::StopFile> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::StopFile)
+		, file(pAORData->file)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	CryFixedStringT<MaxFilePathLength> const file;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::ExecuteTrigger> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(ControlId const audioTriggerId_)
+		: SObjectRequestDataBase(EObjectRequestType::ExecuteTrigger)
+		, audioTriggerId(audioTriggerId_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::ExecuteTrigger> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::ExecuteTrigger)
+		, audioTriggerId(pAORData->audioTriggerId)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	ControlId const audioTriggerId;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::StopTrigger> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(ControlId const audioTriggerId_)
+		: SObjectRequestDataBase(EObjectRequestType::StopTrigger)
+		, audioTriggerId(audioTriggerId_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::StopTrigger> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::StopTrigger)
+		, audioTriggerId(pAORData->audioTriggerId)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	ControlId const audioTriggerId;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::SetTransformation> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(CObjectTransformation const& transformation_)
+		: SObjectRequestDataBase(EObjectRequestType::SetTransformation)
 		, transformation(transformation_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::SetTransformation> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetTransformation)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetTransformation> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetTransformation)
 		, transformation(pAORData->transformation)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	CObjectTransformation const transformation;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::SetParameter> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::SetOcclusionType> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(ControlId const parameterId_, float const value_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetParameter)
+	explicit SObjectRequestData(EOcclusionType const occlusionType_)
+		: SObjectRequestDataBase(EObjectRequestType::SetOcclusionType)
+		, occlusionType(occlusionType_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetOcclusionType> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetOcclusionType)
+		, occlusionType(pAORData->occlusionType)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	EOcclusionType const occlusionType;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::SetOcclusionRayOffset> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(float const occlusionRayOffset_)
+		: SObjectRequestDataBase(EObjectRequestType::SetOcclusionRayOffset)
+		, occlusionRayOffset(occlusionRayOffset_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetOcclusionRayOffset> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetOcclusionRayOffset)
+		, occlusionRayOffset(pAORData->occlusionRayOffset)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	float const occlusionRayOffset;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::SetParameter> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(ControlId const parameterId_, float const value_)
+		: SObjectRequestDataBase(EObjectRequestType::SetParameter)
 		, parameterId(parameterId_)
 		, value(value_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::SetParameter> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetParameter)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetParameter> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetParameter)
 		, parameterId(pAORData->parameterId)
 		, value(pAORData->value)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	ControlId const parameterId;
 	float const     value;
@@ -853,21 +983,21 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::SetParameter> final : pu
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::SetSwitchState> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::SetSwitchState> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(ControlId const audioSwitchId_, SwitchStateId const audioSwitchStateId_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetSwitchState)
+	explicit SObjectRequestData(ControlId const audioSwitchId_, SwitchStateId const audioSwitchStateId_)
+		: SObjectRequestDataBase(EObjectRequestType::SetSwitchState)
 		, audioSwitchId(audioSwitchId_)
 		, audioSwitchStateId(audioSwitchStateId_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::SetSwitchState> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetSwitchState)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetSwitchState> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetSwitchState)
 		, audioSwitchId(pAORData->audioSwitchId)
 		, audioSwitchStateId(pAORData->audioSwitchStateId)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	ControlId const     audioSwitchId;
 	SwitchStateId const audioSwitchStateId;
@@ -875,40 +1005,40 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::SetSwitchState> final : 
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::SetCurrentEnvironments> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::SetCurrentEnvironments> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(EntityId const entityToIgnore_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetCurrentEnvironments)
+	explicit SObjectRequestData(EntityId const entityToIgnore_)
+		: SObjectRequestDataBase(EObjectRequestType::SetCurrentEnvironments)
 		, entityToIgnore(entityToIgnore_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::SetCurrentEnvironments> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetCurrentEnvironments)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetCurrentEnvironments> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetCurrentEnvironments)
 		, entityToIgnore(pAORData->entityToIgnore)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	EntityId const entityToIgnore;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::SetEnvironment> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::SetEnvironment> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(EnvironmentId const audioEnvironmentId_, float const amount_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetEnvironment)
+	explicit SObjectRequestData(EnvironmentId const audioEnvironmentId_, float const amount_)
+		: SObjectRequestDataBase(EObjectRequestType::SetEnvironment)
 		, audioEnvironmentId(audioEnvironmentId_)
 		, amount(amount_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::SetEnvironment> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetEnvironment)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetEnvironment> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetEnvironment)
 		, audioEnvironmentId(pAORData->audioEnvironmentId)
 		, amount(pAORData->amount)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	EnvironmentId const audioEnvironmentId;
 	float const         amount;
@@ -916,10 +1046,10 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::SetEnvironment> final : 
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::RegisterObject> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::RegisterObject> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(SCreateObjectData const& data)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::RegisterObject)
+	explicit SObjectRequestData(SCreateObjectData const& data)
+		: SObjectRequestDataBase(EObjectRequestType::RegisterObject)
 		, name(data.szName)
 		, occlusionType(data.occlusionType)
 		, transformation(data.transformation)
@@ -927,8 +1057,8 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::RegisterObject> final : 
 		, setCurrentEnvironments(data.setCurrentEnvironments)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::RegisterObject> const* const pAMRData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::RegisterObject)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::RegisterObject> const* const pAMRData)
+		: SObjectRequestDataBase(EObjectRequestType::RegisterObject)
 		, name(pAMRData->name)
 		, occlusionType(pAMRData->occlusionType)
 		, transformation(pAMRData->transformation)
@@ -936,7 +1066,7 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::RegisterObject> final : 
 		, setCurrentEnvironments(pAMRData->setCurrentEnvironments)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	CryFixedStringT<MaxObjectNameLength> const name;
 	EOcclusionType const                       occlusionType;
@@ -947,89 +1077,127 @@ struct SAudioObjectRequestData<EAudioObjectRequestType::RegisterObject> final : 
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::ProcessPhysicsRay> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::ProcessPhysicsRay> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(CAudioRayInfo* const pAudioRayInfo_)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::ProcessPhysicsRay)
+	explicit SObjectRequestData(CAudioRayInfo* const pAudioRayInfo_)
+		: SObjectRequestDataBase(EObjectRequestType::ProcessPhysicsRay)
 		, pAudioRayInfo(pAudioRayInfo_)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::ProcessPhysicsRay> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::ProcessPhysicsRay)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::ProcessPhysicsRay> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::ProcessPhysicsRay)
 		, pAudioRayInfo(pAORData->pAudioRayInfo)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	CAudioRayInfo* const pAudioRayInfo;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioObjectRequestData<EAudioObjectRequestType::SetName> final : public SAudioObjectRequestDataBase
+struct SObjectRequestData<EObjectRequestType::SetName> final : public SObjectRequestDataBase
 {
-	explicit SAudioObjectRequestData(char const* const szName)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetName)
+	explicit SObjectRequestData(char const* const szName)
+		: SObjectRequestDataBase(EObjectRequestType::SetName)
 		, name(szName)
 	{}
 
-	explicit SAudioObjectRequestData(SAudioObjectRequestData<EAudioObjectRequestType::SetName> const* const pAORData)
-		: SAudioObjectRequestDataBase(EAudioObjectRequestType::SetName)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::SetName> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::SetName)
 		, name(pAORData->name)
 	{}
 
-	virtual ~SAudioObjectRequestData() override = default;
+	virtual ~SObjectRequestData() override = default;
 
 	CryFixedStringT<MaxObjectNameLength> const name;
 };
 
 //////////////////////////////////////////////////////////////////////////
-struct SAudioListenerRequestDataBase : public SAudioRequestData
+template<>
+struct SObjectRequestData<EObjectRequestType::ToggleAbsoluteVelocityTracking> final : public SObjectRequestDataBase
 {
-	explicit SAudioListenerRequestDataBase(EAudioListenerRequestType const type_)
-		: SAudioRequestData(EAudioRequestType::AudioListenerRequest)
-		, type(type_)
+	explicit SObjectRequestData(bool const isEnabled_)
+		: SObjectRequestDataBase(EObjectRequestType::ToggleAbsoluteVelocityTracking)
+		, isEnabled(isEnabled_)
 	{}
 
-	virtual ~SAudioListenerRequestDataBase() override = default;
-
-	EAudioListenerRequestType const type;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<EAudioListenerRequestType T>
-struct SAudioListenerRequestData final : public SAudioListenerRequestDataBase
-{
-	SAudioListenerRequestData()
-		: SAudioListenerRequestDataBase(T)
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::ToggleAbsoluteVelocityTracking> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::ToggleAbsoluteVelocityTracking)
+		, isEnabled(pAORData->isEnabled)
 	{}
 
-	explicit SAudioListenerRequestData(SAudioListenerRequestData<T> const* const pALRData)
-		: SAudioListenerRequestDataBase(T)
-	{}
+	virtual ~SObjectRequestData() override = default;
 
-	virtual ~SAudioListenerRequestData() override = default;
+	bool const isEnabled;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioListenerRequestData<EAudioListenerRequestType::SetTransformation> final : public SAudioListenerRequestDataBase
+struct SObjectRequestData<EObjectRequestType::ToggleRelativeVelocityTracking> final : public SObjectRequestDataBase
 {
-	explicit SAudioListenerRequestData(
+	explicit SObjectRequestData(bool const isEnabled_)
+		: SObjectRequestDataBase(EObjectRequestType::ToggleRelativeVelocityTracking)
+		, isEnabled(isEnabled_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::ToggleRelativeVelocityTracking> const* const pAORData)
+		: SObjectRequestDataBase(EObjectRequestType::ToggleRelativeVelocityTracking)
+		, isEnabled(pAORData->isEnabled)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	bool const isEnabled;
+};
+
+//////////////////////////////////////////////////////////////////////////
+struct SListenerRequestDataBase : public SRequestData
+{
+	explicit SListenerRequestDataBase(EListenerRequestType const listenerRequestType_)
+		: SRequestData(ERequestType::ListenerRequest)
+		, listenerRequestType(listenerRequestType_)
+	{}
+
+	virtual ~SListenerRequestDataBase() override = default;
+
+	EListenerRequestType const listenerRequestType;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<EListenerRequestType T>
+struct SListenerRequestData final : public SListenerRequestDataBase
+{
+	SListenerRequestData()
+		: SListenerRequestDataBase(T)
+	{}
+
+	explicit SListenerRequestData(SListenerRequestData<T> const* const pALRData)
+		: SListenerRequestDataBase(T)
+	{}
+
+	virtual ~SListenerRequestData() override = default;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SListenerRequestData<EListenerRequestType::SetTransformation> final : public SListenerRequestDataBase
+{
+	explicit SListenerRequestData(
 		CObjectTransformation const& transformation_,
 		CATLListener* const pListener_)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::SetTransformation)
+		: SListenerRequestDataBase(EListenerRequestType::SetTransformation)
 		, transformation(transformation_)
 		, pListener(pListener_)
 	{}
 
-	explicit SAudioListenerRequestData(SAudioListenerRequestData<EAudioListenerRequestType::SetTransformation> const* const pALRData)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::SetTransformation)
+	explicit SListenerRequestData(SListenerRequestData<EListenerRequestType::SetTransformation> const* const pALRData)
+		: SListenerRequestDataBase(EListenerRequestType::SetTransformation)
 		, transformation(pALRData->transformation)
 		, pListener(pALRData->pListener)
 	{}
 
-	virtual ~SAudioListenerRequestData() override = default;
+	virtual ~SListenerRequestData() override = default;
 
 	CObjectTransformation const transformation;
 	CATLListener* const         pListener;
@@ -1037,68 +1205,70 @@ struct SAudioListenerRequestData<EAudioListenerRequestType::SetTransformation> f
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioListenerRequestData<EAudioListenerRequestType::RegisterListener> final : public SAudioListenerRequestDataBase
+struct SListenerRequestData<EListenerRequestType::RegisterListener> final : public SListenerRequestDataBase
 {
-	explicit SAudioListenerRequestData(CATLListener** const ppListener_, char const* const szName)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::RegisterListener)
+	explicit SListenerRequestData(CATLListener** const ppListener_, CObjectTransformation const& transformation_, char const* const szName)
+		: SListenerRequestDataBase(EListenerRequestType::RegisterListener)
 		, ppListener(ppListener_)
+		, transformation(transformation_)
 		, name(szName)
 	{}
 
-	explicit SAudioListenerRequestData(SAudioListenerRequestData<EAudioListenerRequestType::RegisterListener> const* const pALRData)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::RegisterListener)
+	explicit SListenerRequestData(SListenerRequestData<EListenerRequestType::RegisterListener> const* const pALRData)
+		: SListenerRequestDataBase(EListenerRequestType::RegisterListener)
 		, ppListener(pALRData->ppListener)
 		, name(pALRData->name)
 	{}
 
-	virtual ~SAudioListenerRequestData() override = default;
+	virtual ~SListenerRequestData() override = default;
 
 	CATLListener** const                       ppListener;
+	CObjectTransformation const                transformation;
 	CryFixedStringT<MaxObjectNameLength> const name;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioListenerRequestData<EAudioListenerRequestType::ReleaseListener> final : public SAudioListenerRequestDataBase
+struct SListenerRequestData<EListenerRequestType::ReleaseListener> final : public SListenerRequestDataBase
 {
-	explicit SAudioListenerRequestData(CATLListener* const pListener_)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::ReleaseListener)
+	explicit SListenerRequestData(CATLListener* const pListener_)
+		: SListenerRequestDataBase(EListenerRequestType::ReleaseListener)
 		, pListener(pListener_)
 	{}
 
-	explicit SAudioListenerRequestData(SAudioListenerRequestData<EAudioListenerRequestType::ReleaseListener> const* const pALRData)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::ReleaseListener)
+	explicit SListenerRequestData(SListenerRequestData<EListenerRequestType::ReleaseListener> const* const pALRData)
+		: SListenerRequestDataBase(EListenerRequestType::ReleaseListener)
 		, pListener(pALRData->pListener)
 	{}
 
-	virtual ~SAudioListenerRequestData() override = default;
+	virtual ~SListenerRequestData() override = default;
 
 	CATLListener* const pListener;
 };
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SAudioListenerRequestData<EAudioListenerRequestType::SetName> final : public SAudioListenerRequestDataBase
+struct SListenerRequestData<EListenerRequestType::SetName> final : public SListenerRequestDataBase
 {
-	explicit SAudioListenerRequestData(char const* const szName, CATLListener* const pListener_)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::SetName)
+	explicit SListenerRequestData(char const* const szName, CATLListener* const pListener_)
+		: SListenerRequestDataBase(EListenerRequestType::SetName)
 		, pListener(pListener_)
 		, name(szName)
 	{}
 
-	explicit SAudioListenerRequestData(SAudioListenerRequestData<EAudioListenerRequestType::SetName> const* const pALRData)
-		: SAudioListenerRequestDataBase(EAudioListenerRequestType::SetName)
+	explicit SListenerRequestData(SListenerRequestData<EListenerRequestType::SetName> const* const pALRData)
+		: SListenerRequestDataBase(EListenerRequestType::SetName)
 		, pListener(pALRData->pListener)
 		, name(pALRData->name)
 	{}
 
-	virtual ~SAudioListenerRequestData() override = default;
+	virtual ~SListenerRequestData() override = default;
 
 	CATLListener* const                        pListener;
 	CryFixedStringT<MaxObjectNameLength> const name;
 };
 
-SAudioRequestData* AllocateRequestData(SAudioRequestData const* const pRequestData);
+SRequestData* AllocateRequestData(SRequestData const* const pRequestData);
 
 class CAudioRequest
 {
@@ -1106,7 +1276,7 @@ public:
 
 	CAudioRequest() = default;
 
-	explicit CAudioRequest(SAudioRequestData const* const pRequestData)
+	explicit CAudioRequest(SRequestData const* const pRequestData)
 		: flags(ERequestFlags::None)
 		, pObject(nullptr)
 		, pOwner(nullptr)
@@ -1122,7 +1292,7 @@ public:
 		void* const pOwner_,
 		void* const pUserData_,
 		void* const pUserDataOwner_,
-		SAudioRequestData const* const pRequestData_)
+		SRequestData const* const pRequestData_)
 		: flags(flags_)
 		, pObject(pObject_)
 		, pOwner(pOwner_)
@@ -1132,7 +1302,7 @@ public:
 		, pData(AllocateRequestData(pRequestData_))
 	{}
 
-	SAudioRequestData* GetData() const { return pData.get(); }
+	SRequestData* GetData() const { return pData.get(); }
 
 	ERequestFlags    flags = ERequestFlags::None;
 	CATLAudioObject* pObject = nullptr;
@@ -1144,7 +1314,7 @@ public:
 private:
 
 	// Must be private as it needs "AllocateRequestData"!
-	_smart_ptr<SAudioRequestData> pData = nullptr;
+	_smart_ptr<SRequestData> pData = nullptr;
 };
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
@@ -1163,11 +1333,13 @@ enum class EDrawFilter : EnumFlagsType
 	ObjectDistance         = BIT(12), // g
 	OcclusionRayLabels     = BIT(13), // h
 	OcclusionRays          = BIT(14), // i
-	ListenerOcclusionPlane = BIT(15), // j
-	ObjectStandaloneFiles  = BIT(16), // k
+	OcclusionRayOffset     = BIT(15), // j
+	ListenerOcclusionPlane = BIT(16), // k
+	ObjectStandaloneFiles  = BIT(17), // l
+	ObjectImplInfo         = BIT(18), // m
 
-	HideMemoryInfo         = BIT(18), // m
-	FilterAllObjectInfo    = BIT(19), // n
+	HideMemoryInfo         = BIT(22), // q
+	FilterAllObjectInfo    = BIT(23), // r
 
 	StandaloneFiles        = BIT(26), // u
 	ActiveEvents           = BIT(27), // v
@@ -1186,8 +1358,10 @@ static constexpr EDrawFilter objectMask =
 	EDrawFilter::ObjectDistance |
 	EDrawFilter::OcclusionRayLabels |
 	EDrawFilter::OcclusionRays |
+	EDrawFilter::OcclusionRayOffset |
 	EDrawFilter::ListenerOcclusionPlane |
-	EDrawFilter::ObjectStandaloneFiles;
+	EDrawFilter::ObjectStandaloneFiles |
+	EDrawFilter::ObjectImplInfo;
 }
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 

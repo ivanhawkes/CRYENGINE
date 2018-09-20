@@ -20,27 +20,31 @@ namespace Cry
 	{
 		namespace Steam
 		{
-			class CService final : public Cry::IEnginePlugin, public IService
+			class CService final
+				: public Cry::IEnginePlugin
+				, public IService
 			{
 			public:
 				CRYINTERFACE_BEGIN()
 					CRYINTERFACE_ADD(Cry::IEnginePlugin)
 				CRYINTERFACE_END()
-				CRYGENERATE_SINGLETONCLASS_GUID(CService, "Plugin_SteamService", SteamServiceID)
+				CRYGENERATE_SINGLETONCLASS_GUID(CService, "Plugin_CryGamePlatformSteam", SteamServiceID)
 
 				CService();
-				~CService();
+				virtual ~CService() = default;
 
 				// Cry::IEnginePlugin
 				virtual bool Initialize(SSystemGlobalEnvironment& env, const SSystemInitParams& initParams) override;
 				virtual void MainUpdate(float frameTime) override;
-				virtual const char* GetName() const override { return "SteamService"; }
+				virtual const char* GetName() const override { return "CryGamePlatformSteam"; }
 				virtual const char* GetCategory() const override { return "GamePlatform"; }
 				// ~Cry::IEnginePlugin
 
 				// IService
 				virtual void AddListener(IListener& listener) override { m_listeners.push_back(&listener); }
 				virtual void RemoveListener(IListener& listener) override { stl::find_and_erase(m_listeners, &listener); }
+
+				virtual void Shutdown() override;
 
 				virtual ServiceIdentifier GetServiceIdentifier() const override;
 				virtual int GetBuildIdentifier() const override;
@@ -80,18 +84,22 @@ namespace Cry
 				virtual void CanAccessMultiplayerServices(std::function<void(bool authorized)> asynchronousCallback) override { asynchronousCallback(true); }
 
 				virtual bool RequestUserInformation(const AccountIdentifier& accountId, UserInformationMask info) override;
+				virtual bool IsLoggedIn() const override;
 				// ~IService
-
-				virtual void SetAwaitingCallback(int iAwaiting) { m_awaitingCallbacks += iAwaiting; }
 
 			protected:
 				STEAM_CALLBACK(CService, OnGameOverlayActivated, GameOverlayActivated_t, m_callbackGameOverlayActivated);
 				STEAM_CALLBACK(CService, OnAvatarImageLoaded, AvatarImageLoaded_t, m_onAvatarImageLoadedCallback);
 				STEAM_CALLBACK(CService, OnFriendStateChange, PersonaStateChange_t, m_onFriendStateChangeCallback);
+				STEAM_CALLBACK(CService, OnGetSteamAuthTicketResponse, GetAuthSessionTicketResponse_t, m_callbackGetSteamAuthTicketResponse);
+				STEAM_CALLBACK(CService, OnPersonaStateChange, PersonaStateChange_t, m_callbackOnPersonaChange);
 
 				CAccount* TryGetAccount(CSteamID id) const;
 				CAccount* TryGetAccount(const AccountIdentifier& accountId) const;
 				std::unique_ptr<CAccount> RemoveAccount(CSteamID id);
+
+				void NotifyAccountAdded(CAccount* pAccount) const;
+				void NotifyAccountRemoved(CAccount* pAccount) const;
 
 			private:
 				std::unique_ptr<CStatistics> m_pStatistics;
@@ -108,7 +116,6 @@ namespace Cry
 				mutable std::vector<std::unique_ptr<CAccount>> m_accounts;
 				mutable DynArray<IAccount*> m_friends;
 
-				int m_awaitingCallbacks;
 				std::vector<IListener*> m_listeners;
 
 				uint32 m_authTicketHandle;

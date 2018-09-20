@@ -135,9 +135,6 @@ bool CD3D9Renderer::FX_DrawToRenderTarget(
 			nHeight = uint32(sTexLimitRes(CRendererResources::s_renderHeight, uint32(CRendererResources::s_resourceHeight)) * fSizeScale);
 
 		ETEX_Format eTF = pRT->m_eTF;
-		// $HDR
-		if (eTF == eTF_R8G8B8A8 && IsHDRModeEnabled() && m_nHDRType <= 1)
-			eTF = eTF_R16G16B16A16F;
 		if (!pEnvTex->m_pTex || pEnvTex->m_pTex->GetFormat() != eTF)
 		{
 			char name[128];
@@ -202,6 +199,13 @@ bool CD3D9Renderer::FX_DrawToRenderTarget(
 			Tex = pEnvTex->m_pTex->m_pTexture;
 		}
 	}
+	
+	if (!Tex)
+	{
+		CRY_ASSERT_MESSAGE(Tex, "DrawToRenderTarget called without passing a target texture!");
+		return false;
+	}
+
 	if (m_pRT->IsRenderThread() && Tex && Tex->IsLocked())
 		return true;
 
@@ -212,9 +216,6 @@ bool CD3D9Renderer::FX_DrawToRenderTarget(
 		bMGPUAllowNextUpdate = true;
 
 	ETEX_Format eTF = pRT->m_eTF;
-	// $HDR
-	if (eTF == eTF_R8G8B8A8 && IsHDRModeEnabled() && m_nHDRType <= 1)
-		eTF = eTF_R16G16B16A16F;
 	if (pEnvTex && (!pEnvTex->m_pTex || pEnvTex->m_pTex->GetFormat() != eTF))
 	{
 		SAFE_DELETE(pEnvTex->m_pTex);

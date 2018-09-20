@@ -152,7 +152,7 @@ void CRainStage::Update()
 	if (!shouldApplyOcclusion && CTexture::IsTextureExist(CRendererResources::s_ptexRainOcclusion))
 		CRendererResources::s_ptexRainOcclusion->ReleaseDeviceTexture(false);
 	else if (shouldApplyOcclusion && !CTexture::IsTextureExist(CRendererResources::s_ptexRainOcclusion))
-		CRendererResources::s_ptexRainOcclusion->CreateRenderTarget(eTF_R8G8B8A8, Clr_Neutral);
+		CRendererResources::s_ptexRainOcclusion->CreateRenderTarget(eTF_R8, Clr_Neutral);
 
 	if (RenderView()->GetCurrentEye() != CCamera::eEye_Right)
 	{
@@ -307,7 +307,7 @@ void CRainStage::Execute()
 {
 	CD3D9Renderer* const RESTRICT_POINTER rd = gcpRendD3D;
 
-	if ((CRenderer::CV_r_rain < 1) || !CRenderer::CV_r_PostProcess || !CRendererResources::s_ptexBackBuffer || !CRendererResources::s_ptexSceneTarget)
+	if ((CRenderer::CV_r_rain < 1) || !CRenderer::CV_r_PostProcess)
 		return;
 
 	const auto& rainVolParams = m_RainVolParams;

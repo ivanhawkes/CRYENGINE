@@ -32,7 +32,7 @@ public:
 
 	CAsset*          CreateFolder(string const& name, CAsset* const pParent = nullptr);
 	CControl*        CreateControl(string const& name, EAssetType const type, CAsset* const pParent = nullptr);
-	CControl*        CreateDefaultControl(string const& name, EAssetType const type, CAsset* const pParent, bool const isInternal, string const& description);
+	CControl*        CreateDefaultControl(string const& name, EAssetType const type, CAsset* const pParent, EAssetFlags const flags, string const& description);
 
 	CControl*        FindControl(string const& name, EAssetType const type, CAsset* const pParent = nullptr) const;
 	CControl*        FindControlById(ControlId const id) const;
@@ -68,9 +68,8 @@ public:
 	void             OnConnectionRemoved(CControl* const pControl, Impl::IItem* const pIItem);
 	void             OnAssetRenamed(CAsset* const pAsset);
 
-	void             UpdateFolderPaths();
+	void             UpdateConfigFolderPath();
 	string const&    GetConfigFolderPath() const;
-	string const&    GetAssetFolderPath() const;
 
 	FileNames const& GetModifiedLibraries() const { return m_modifiedLibraryNames; }
 
@@ -110,7 +109,5 @@ private:
 	bool                m_isLoading = false;
 
 	string              m_configFolderPath;
-	string              m_assetFolderPath;
 };
 } // namespace ACE
-

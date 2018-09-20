@@ -4,12 +4,10 @@
 #include "ItemDescriptionDlg.h"
 #include "SmartObjectsEditorDialog.h"
 #include "SmartObjectClassDialog.h"
-#include "AI\AIManager.h"
+#include "AI/AIManager.h"
 
 #include "IResourceSelectorHost.h"
 #include "Controls/QuestionDialog.h"
-
-// CSmartObjectClassDialog dialog
 
 IMPLEMENT_DYNAMIC(CSmartObjectClassDialog, CDialog)
 CSmartObjectClassDialog::CSmartObjectClassDialog(CWnd* pParent /*=NULL*/, bool multi /*=false*/)
@@ -433,4 +431,3 @@ dll_string ShowDialog(const SResourceSelectorContext& context, const char* szPre
 
 REGISTER_RESOURCE_SELECTOR("SmartObjectClasses", ShowDialog, "")
 }
-

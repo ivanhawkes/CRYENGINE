@@ -662,6 +662,8 @@ void CLensFlareEditor::OnAssignFlareToLightEntities()
 	for (int i = 0, iEntityCount(entityList.size()); i < iEntityCount; ++i)
 		entityList[i]->ApplyOptics(pLensFlareItem->GetFullName(), pLensFlareItem->GetOptics());
 
+	LensFlareUtil::ApplyOpticsToSelectedEntityWithComponent(pLensFlareItem->GetFullName(), pLensFlareItem->GetOptics());
+
 	m_pLensFlareLightEntityTree->OnLensFlareChangeItem(pLensFlareItem);
 }
 
@@ -697,9 +699,9 @@ void CLensFlareEditor::OnSelectAssignedObjects()
 	if (assignedObjects.empty())
 		return;
 
-	GetIEditorImpl()->ClearSelection();
+	GetIEditorImpl()->GetObjectManager()->ClearSelection();
 	for (int i = 0, iAssignedObjectsSize(assignedObjects.size()); i < iAssignedObjectsSize; ++i)
-		GetIEditorImpl()->SelectObject(assignedObjects[i]);
+		GetIEditorImpl()->GetObjectManager()->AddObjectToSelection(assignedObjects[i]);
 }
 
 void CLensFlareEditor::OnGetFlareFromSelection()
@@ -1035,7 +1037,6 @@ void CLensFlareEditor::GetAllLensFlareItems(std::vector<HTREEITEM>& outItemList)
 		GetLensFlareItemsUnderSpecificItem(hItem, outItemList);
 		hItem = GetTreeCtrl().GetNextItem(hItem, TVGN_NEXT);
 	}
-	;
 }
 
 void CLensFlareEditor::GetLensFlareItemsUnderSpecificItem(HTREEITEM hItem, std::vector<HTREEITEM>& outItemList) const
@@ -1283,4 +1284,3 @@ void CLensFlareEditor::OnUpdateProperties(IVariable* var)
 {
 	GetIEditorImpl()->GetLensFlareManager()->Modified();
 }
-

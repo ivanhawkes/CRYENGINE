@@ -34,16 +34,19 @@ class EDITOR_COMMON_API CAssetBrowser : public CDockableEditor
 	Q_OBJECT
 
 public:
+	static CCrySignal<void(CAbstractMenu&, const std::shared_ptr<IUIContext>&)> s_signalMenuCreated;
+	static CCrySignal<void(CAbstractMenu&, const std::vector<CAsset*>&, const std::vector<string>& folders, const std::shared_ptr<IUIContext>&) > s_signalContextMenuRequested;
+
 	CAssetBrowser(bool bHideEngineFolder = false, QWidget* pParent = nullptr);
 	virtual ~CAssetBrowser();
 
-	QVector<CAsset*> GetSelectedAssets() const;
-	CAsset*          GetLastSelectedAsset() const;
+	std::vector<CAsset*> GetSelectedAssets() const;
+	CAsset*              GetLastSelectedAsset() const;
 
-	void             SelectAsset(const char* szPath) const;
-	void             SelectAsset(const CAsset& asset) const;
+	void                 SelectAsset(const char* szPath) const;
+	void                 SelectAsset(const CAsset& asset) const;
 
-	QStringList      GetSelectedFolders() const;
+	QStringList          GetSelectedFolders() const;
 
 	//CEditor implementation
 	virtual const char* GetEditorName() const override { return "Asset Browser"; }
@@ -69,24 +72,14 @@ public:
 
 	CAsset* QueryNewAsset(const CAssetType& type, const void* pTypeSpecificParameter);
 
+	void NotifyContextMenuCreation(CAbstractMenu& menu, const std::vector<CAsset*>& assets, const std::vector<string>& folders);
+
 signals:
 	//! This signal is emitted whenever the selection of folders or assets changes.
 	void SelectionChanged();
 
 protected:
-	// Drag and drop.
-	virtual void dragEnterEvent(QDragEnterEvent* pEvent) override;
-	virtual void dropEvent(QDropEvent* pEvent) override;
-	virtual void dragMoveEvent(QDragMoveEvent* pEvent) override;
-	virtual void dragLeaveEvent(QDragLeaveEvent* pEvent) override;
-
-	virtual void mouseReleaseEvent(QMouseEvent* pEvent) override;
-
-	//! Returns whether there is a folder under the mouse cursor. If there is, \p folder is assigned its path.
-	bool GetDropFolder(string& folder) const;
-
-	//! Sets \p folder to where assets should be imported. Returns whether the import location is unambiguous.
-	bool                        GetImportFolder(string& folder) const;
+	virtual void                mouseReleaseEvent(QMouseEvent* pEvent) override;
 
 	QAttributeFilterProxyModel* GetAttributeFilterProxyModel();
 	QItemSelectionModel*        GetItemSelectionModel();
@@ -124,18 +117,27 @@ private:
 	bool               eventFilter(QObject* object, QEvent* event) override;
 
 	//extract actual content from the selection for further processing
-	void ProcessSelection(QVector<CAsset*>& assets, QStringList& folders) const;
+	void ProcessSelection(std::vector<CAsset*>& assets, std::vector<string>& folders) const;
 
 	void OnContextMenu();
 	void AppendFilterDependenciesActions(CAbstractMenu* pAbstractMenu, const CAsset* pAsset);
+	void OnFolderViewContextMenu();
+
+	void CreateContextMenu(bool isFolderView = false);
+
+	std::vector<string> GetSelectedFoldersInFolderView();
+
+	void BuildContextMenuForEmptiness(CAbstractMenu& abstractMenu);
+	void BuildContextMenuForFolders(const std::vector<string>& folders, CAbstractMenu &abstractMenu);
+	void BuildContextMenuForAssets(const std::vector<CAsset*>& assets, const std::vector<string>& folders, CAbstractMenu &abstractMenu);
 
 	void OnFolderSelectionChanged(const QStringList& selectedFolders);
 	void OnActivated(const QModelIndex& index);
 	void OnCurrentChanged(const QModelIndex& current, const QModelIndex& previous);
 	void OnImport();
-	void OnReimport(const QVector<CAsset*>& assets);
-	void OnDelete(const QVector<CAsset*>& assets);
-	void OnMove(const QVector<CAsset*>& assets, const QString& destinationFolder);
+	void OnReimport(const std::vector<CAsset*>& assets);
+	void OnDelete(const std::vector<CAsset*>& assets);
+
 	void OnRenameAsset(CAsset& asset);
 	void OnRenameFolder(const QString& folder);
 	void OnCreateFolder(const QString& parentFolder);
@@ -145,7 +147,7 @@ private:
 	void OnBreadcrumbClick(const QString& text, const QVariant& data);
 	void OnBreadcrumbsTextChanged(const QString& text);
 
-	void GenerateThumbnailsAsync(const QString& folder, const std::function<void()>& finalize = std::function<void()>());
+	void GenerateThumbnailsAsync(const string& folder, const std::function<void()>& finalize = std::function<void()>());
 
 	void UpdateModels();
 	void UpdateNavigation(bool clearHistory);

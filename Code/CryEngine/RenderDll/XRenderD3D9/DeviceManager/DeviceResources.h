@@ -95,6 +95,11 @@ public:
 
 	SResourceLayout     GetLayout() const;
 
+	inline void SetDebugName(const char* name) const
+	{
+		::SetDebugName(m_pNativeResource, name);
+	}
+
 	inline D3DResource* GetNativeResource() const
 	{
 		return m_pNativeResource;
@@ -353,8 +358,9 @@ class CDeviceTexture : public CDeviceResource
 	// for native hand-made textures
 	size_t m_nBaseAllocatedSize;
 
-	bool   m_bNoDelete;
-	bool   m_bCube;
+	bool   m_bNoDelete : 1;
+	bool   m_bCube     : 1;
+	bool   m_Pinned    : 1;
 
 #ifdef DEVRES_USE_STAGING_POOL
 	D3DResource*      m_pStagingResource[2];
@@ -382,6 +388,16 @@ class CDeviceTexture : public CDeviceResource
 public:
 	static CDeviceTexture*   Create(const STextureLayout& pLayout, const STexturePayload* pPayload);
 	static CDeviceTexture*   Associate(const STextureLayout& pLayout, D3DResource* pTex);
+
+#ifdef DEVRES_USE_STAGING_POOL
+	inline void SetDebugName(const char* name) const
+	{
+		CDeviceResource::SetDebugName(name);
+
+		::SetDebugName(m_pStagingResource[0], "%s Write-StagingB", name);
+		::SetDebugName(m_pStagingResource[1], "%s Read-StagingB", name);
+	}
+#endif
 
 	STextureLayout           GetLayout() const;
 	static STextureLayout    GetLayout(D3DBaseView* pView); // Layout object adjusted to include only the sub-resources in the view.
@@ -553,6 +569,7 @@ private:
 		: m_nBaseAllocatedSize(0)
 		, m_bNoDelete(false)
 		, m_bCube(false)
+		, m_Pinned(false)
 		, m_pRenderTargetData(nullptr)
 #if (CRY_RENDERER_DIRECT3D >= 110) && (CRY_RENDERER_DIRECT3D < 120) && defined(USE_NV_API)
 		, m_handleMGPU(NULL)

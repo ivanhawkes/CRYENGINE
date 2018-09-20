@@ -1212,14 +1212,16 @@ void COctreeNode::UpdateTerrainNodes(CTerrainNode* pParentNode)
 
 void C3DEngine::GetObjectsByTypeGlobal(PodArray<IRenderNode*>& lstObjects, EERType objType, const AABB* pBBox, bool* pInstStreamReady, uint64 dwFlags)
 {
-	Get3DEngine()->m_pObjectsTree->GetObjectsByType(lstObjects, objType, pBBox, pInstStreamReady, dwFlags);
+	if(Get3DEngine()->m_pObjectsTree)
+	  Get3DEngine()->m_pObjectsTree->GetObjectsByType(lstObjects, objType, pBBox, pInstStreamReady, dwFlags);
 }
 
 void C3DEngine::MoveObjectsIntoListGlobal(PodArray<SRNInfo>* plstResultEntities, const AABB* pAreaBox,
                                           bool bRemoveObjects, bool bSkipDecals, bool bSkip_ERF_NO_DECALNODE_DECALS, bool bSkipDynamicObjects,
                                           EERType eRNType)
 {
-	Get3DEngine()->m_pObjectsTree->MoveObjectsIntoList(plstResultEntities, pAreaBox, bRemoveObjects, bSkipDecals, bSkip_ERF_NO_DECALNODE_DECALS, bSkipDynamicObjects, eRNType);
+	if (Get3DEngine()->m_pObjectsTree)
+	  Get3DEngine()->m_pObjectsTree->MoveObjectsIntoList(plstResultEntities, pAreaBox, bRemoveObjects, bSkipDecals, bSkip_ERF_NO_DECALNODE_DECALS, bSkipDynamicObjects, eRNType);
 }
 
 void COctreeNode::ActivateObjectsLayer(uint16 nLayerId, bool bActivate, bool bPhys, IGeneralMemoryHeap* pHeap, const AABB& layerBox)
@@ -3000,7 +3002,7 @@ void COctreeNode::InsertObject(IRenderNode* pObj, const AABB& objBox, const floa
 	COctreeNode* pCurrentNode = this;
 
 	EERType eType = pObj->GetRenderNodeType();
-	const uint32 renderFlags = (pObj->GetRndFlags() & (ERF_GOOD_OCCLUDER | ERF_CASTSHADOWMAPS | ERF_HAS_CASTSHADOWMAPS));
+	const uint64 renderFlags = (pObj->GetRndFlags() & (ERF_GOOD_OCCLUDER | ERF_CASTSHADOWMAPS | ERF_HAS_CASTSHADOWMAPS));
 
 	const bool bTypeLight = (eType == eERType_Light);
 	const float fViewDistRatioVegetation = GetCVars()->e_ViewDistRatioVegetation;

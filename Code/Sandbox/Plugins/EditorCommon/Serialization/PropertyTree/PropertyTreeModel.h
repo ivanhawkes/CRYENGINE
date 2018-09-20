@@ -162,7 +162,6 @@ private:
 	void signalPushUndo(PropertyTreeOperator* op, bool* result);
 
 	void pushUndo(const PropertyTreeOperator& op);
-	void clearObjectReferences();
 	
 	PropertyRow* getNextFocusableSibling(PropertyRow* row, bool pulled);
 	PropertyRow* getPrevFocusableSibling(PropertyRow* row, bool pulled);
@@ -204,4 +203,3 @@ private:
 bool YASLI_SERIALIZE_OVERRIDE(yasli::Archive& ar, TreeSelection &selection, const char* name, const char* label);
 
 // vim:ts=4 sw=4:
-

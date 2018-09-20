@@ -2,23 +2,25 @@
 
 #include "StdAfx.h"
 #include "ObjectMode.h"
+
+#include "Controls/DynamicPopupMenu.h"
+#include "Gizmos/IGizmoManager.h"
+#include "LevelEditor/Tools/DeepSelection.h"
+#include "LevelEditor/Tools/SubObjectSelectionReferenceFrameCalculator.h"
+#include "Objects/ISelectionGroup.h"
+#include "Preferences/SnappingPreferences.h"
+#include "Preferences/ViewportPreferences.h"
+#include "IUndoManager.h"
 #include "Viewport.h"
-#include <Preferences/ViewportPreferences.h>
-#include "ViewManager.h"
-#include "Terrain/Heightmap.h"
-#include "GameEngine.h"
+
 #include "Objects/EntityObject.h"
 #include "Objects/CameraObject.h"
-#include "Controls/DynamicPopupMenu.h"
 #include "Objects/BrushObject.h"
-#include "DeepSelection.h"
-#include "SubObjectSelectionReferenceFrameCalculator.h"
-#include "Gizmos/IGizmoManager.h"
 #include "Objects/ParticleEffectObject.h"
 #include "Objects/PrefabObject.h"
-#include "Grid.h"
-#include "IUndoManager.h"
-#include "Objects/ISelectionGroup.h"
+#include "GameEngine.h"
+#include "Terrain/Heightmap.h"
+#include "ViewManager.h"
 
 /////////////////////////////
 // CObjectManipulatorOwner
@@ -190,7 +192,6 @@ CObjectMode::CObjectMode()
 	m_bGizmoDrag = false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 CObjectMode::~CObjectMode()
 {
 	GetIEditor()->UnRegisterAllObjectModeSubTools();
@@ -279,14 +280,12 @@ void CObjectMode::DisplaySelectionPreview(SDisplayContext& dc)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CObjectMode::Display(SDisplayContext& dc)
 {
 	// Selection Candidates Preview
 	DisplaySelectionPreview(dc);
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::MouseCallback(CViewport* view, EMouseEvent event, CPoint& point, int flags)
 {
 	// Sub tools get to handle the event first, if it goes unhandled, object mode will then try to handle it
@@ -302,41 +301,40 @@ bool CObjectMode::MouseCallback(CViewport* view, EMouseEvent event, CPoint& poin
 	{
 	case eMouseLDown:
 		return OnLButtonDown(view, flags, point);
-		break;
+
 	case eMouseLUp:
 		return OnLButtonUp(view, flags, point);
-		break;
+
 	case eMouseLDblClick:
 		return OnLButtonDblClk(view, flags, point);
-		break;
+
 	case eMouseRDown:
 		return OnRButtonDown(view, flags, point);
-		break;
+
 	case eMouseRUp:
 		return OnRButtonUp(view, flags, point);
-		break;
+
 	case eMouseMove:
 	case eMouseEnter:
 		return OnMouseMove(view, flags, point);
-		break;
+
 	case eMouseMDown:
 		return OnMButtonDown(view, flags, point);
-		break;
+
 	case eMouseFocusLeave:
 	case eMouseLeave:
 		SetObjectCursor(view, 0, IObjectManager::ESelectOp::eNone);
 		return true;
-		break;
+
 	}
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnKeyDown(CViewport* view, uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 {
 	if (nChar == Qt::Key_Escape)
 	{
-		GetIEditor()->ClearSelection();
+		GetIEditor()->GetObjectManager()->ClearSelection();
 		CLevelEditorSharedState* pLevelEditor = GetIEditor()->GetLevelEditorSharedState();
 
 		if (pLevelEditor->GetEditMode() == CLevelEditorSharedState::EditMode::SelectArea)
@@ -345,23 +343,17 @@ bool CObjectMode::OnKeyDown(CViewport* view, uint32 nChar, uint32 nRepCnt, uint3
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnKeyUp(CViewport* view, uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 {
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 {
 	if (m_bMoveByFaceNormManipShown)
 	{
 		HideMoveByFaceNormGizmo();
 	}
-
-	// CPointF ptMarker;
-	CPoint ptCoord;
-	int iCurSel = -1;
 
 	if (GetIEditor()->IsInGameMode())
 	{
@@ -412,13 +404,9 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 
 	bool bLockSelection = GetIEditor()->IsSelectionLocked();
 
-	int numUnselected = 0;
 	int numSelected = 0;
 
-	//	m_activeAxis = 0;
-
-	HitContext hitInfo;
-	hitInfo.view = view;
+	HitContext hitInfo(view);
 
 	if (dsMode == CDeepSelection::DSM_POP)
 	{
@@ -443,7 +431,6 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 
 		m_pDeepSelection->SetMode(CDeepSelection::DSM_NONE);
 		hitInfo.pDeepSelection = 0;
-
 	}
 
 	if (view->HitTest(point, hitInfo))
@@ -470,7 +457,9 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 
 	if (coordSys == CLevelEditorSharedState::CoordSystem::UserDefined)
 	{
-		Matrix34 userTM = gSnappingPreferences.GetMatrix();
+		Matrix34 userTM = Matrix34::CreateIdentity();
+		GetIEditor()->GetISelectionGroup()->GetManipulatorMatrix(userTM);
+		userTM.SetTranslation(Vec3(0, 0, 0));
 		userTM.SetTranslation(gridPosition);
 		view->SetConstructionMatrix(userTM);
 	}
@@ -514,7 +503,7 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 		if (bCtrlClick && bShiftClick)
 		{
 			// Ctrl-Click on terrain will move selected objects to specified location.
-			MoveSelectionToPos(view, pos, bAltClick, point);
+			HandleMoveSelectionToPosition(point, bAltClick);
 			bLockSelection = true;
 		}
 	}
@@ -556,13 +545,6 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 
 		IObjectManager* pObjectManager = GetIEditor()->GetObjectManager();
 
-		if (!bNoRemoveSelection)
-		{
-			// Current selection should be cleared
-			numSelected = GetIEditor()->GetISelectionGroup()->GetCount();
-			pObjectManager->ClearSelection();
-		}
-
 		if (hitObj)
 		{
 			numSelected = 1;
@@ -579,10 +561,20 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 				}
 				else
 				{
-					pObjectManager->SelectObject(hitObj);
+					pObjectManager->AddObjectToSelection(hitObj);
 				}
 			}
 		}
+		else
+		{
+			if (!bNoRemoveSelection)
+			{
+				// Current selection should be cleared
+				numSelected = GetIEditor()->GetISelectionGroup()->GetCount();
+				pObjectManager->ClearSelection();
+			}
+		}
+
 		if (view->IsUndoRecording())
 		{
 			view->AcceptUndo("Select Object(s)");
@@ -617,7 +609,6 @@ bool CObjectMode::OnLButtonDown(CViewport* view, int nFlags, CPoint point)
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnLButtonUp(CViewport* view, int nFlags, CPoint point)
 {
 	if (GetIEditor()->IsInGameMode())
@@ -683,7 +674,7 @@ bool CObjectMode::OnLButtonUp(CViewport* view, int nFlags, CPoint point)
 
 		if (GetIEditor()->GetLevelEditorSharedState()->GetEditMode() == CLevelEditorSharedState::EditMode::SelectArea)
 		{
-			GetIEditor()->ClearSelection();
+			GetIEditor()->GetObjectManager()->ClearSelection();
 		}
 	}
 
@@ -706,7 +697,6 @@ bool CObjectMode::OnLButtonUp(CViewport* view, int nFlags, CPoint point)
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnLButtonDblClk(CViewport* view, int nFlags, CPoint point)
 {
 	// If shift clicked, Move the camera to this place.
@@ -730,7 +720,7 @@ bool CObjectMode::OnLButtonDblClk(CViewport* view, int nFlags, CPoint point)
 	else
 	{
 		// Check if double clicked on object.
-		HitContext hitInfo;
+		HitContext hitInfo(view);
 		view->HitTest(point, hitInfo);
 
 		CBaseObject* hitObj = hitInfo.object;
@@ -743,13 +733,12 @@ bool CObjectMode::OnLButtonDblClk(CViewport* view, int nFlags, CPoint point)
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnRButtonDown(CViewport* view, int nFlags, CPoint point)
 {
 	if (gViewportPreferences.enableContextMenu)
 	{
 		// Check if right clicked on object.
-		HitContext hitInfo;
+		HitContext hitInfo(view);
 		if (view->HitTest(point, hitInfo) && hitInfo.object)
 		{
 			m_openContext = true;
@@ -760,7 +749,6 @@ bool CObjectMode::OnRButtonDown(CViewport* view, int nFlags, CPoint point)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnRButtonUp(CViewport* view, int nFlags, CPoint point)
 {
 	if (m_openContext)
@@ -776,7 +764,7 @@ bool CObjectMode::OnRButtonUp(CViewport* view, int nFlags, CPoint point)
 			return false;
 
 		// Check if right clicked on object.
-		HitContext hitInfo;
+		HitContext hitInfo(view);
 		if (!view->HitTest(point, hitInfo))
 			return false;
 		if (!hitInfo.object)
@@ -805,7 +793,6 @@ bool CObjectMode::OnRButtonUp(CViewport* view, int nFlags, CPoint point)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnMButtonDown(CViewport* view, int nFlags, CPoint point)
 {
 	if (GetIEditor()->GetGameEngine()->GetSimulationMode())
@@ -825,12 +812,11 @@ bool CObjectMode::OnMButtonDown(CViewport* view, int nFlags, CPoint point)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CObjectMode::AwakeObjectAtPoint(CViewport* view, CPoint point)
 {
 	// In simulation mode awake objects under the cursor.
 	// Check if double clicked on object.
-	HitContext hitInfo;
+	HitContext hitInfo(view);
 	view->HitTest(point, hitInfo);
 	CBaseObject* hitObj = hitInfo.object;
 	if (hitObj)
@@ -845,7 +831,6 @@ void CObjectMode::AwakeObjectAtPoint(CViewport* view, CPoint point)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::CheckVirtualKey(int virtualKey)
 {
 	GetAsyncKeyState(virtualKey);
@@ -854,22 +839,29 @@ bool CObjectMode::CheckVirtualKey(int virtualKey)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
-void CObjectMode::MoveSelectionToPos(CViewport* view, Vec3& pos, bool align, const CPoint& point)
+void CObjectMode::HandleMoveSelectionToPosition(const CPoint& point, bool overrideSnapToNormal)
 {
-	view->BeginUndo();
+	GetIEditor()->GetIUndoManager()->Begin();
+
 	// Find center of selection.
 	const ISelectionGroup* pSelection = GetIEditor()->GetISelectionGroup();
-	Vec3 center = pSelection->GetCenter();
-	pSelection->Move(pos - center, ISelectionGroup::eMS_None, point, true);
 
-	if (align)
-		GetIEditor()->GetISelectionGroup()->Align();
+	int selectionFlags = ISelectionGroup::eMS_None;
+	if (gSnappingPreferences.IsSnapToTerrainEnabled() && GetIEditor()->GetLevelEditorSharedState()->GetAxisConstraint() != CLevelEditorSharedState::Axis::Z)
+		selectionFlags |= ISelectionGroup::eMS_FollowTerrain;
 
-	view->AcceptUndo("Move Selection");
+	if (gSnappingPreferences.IsSnapToGeometryEnabled())
+		selectionFlags |= ISelectionGroup::eMS_FollowGeometry;
+
+	// If the user is holding alt, then we must also snap to normal
+	if (overrideSnapToNormal)
+		selectionFlags |= ISelectionGroup::eMS_SnapToNormal;
+
+	pSelection->Move(m_mouseDownWorldPos - pSelection->GetCenter(), selectionFlags, point, true);
+
+	GetIEditor()->GetIUndoManager()->Accept("Move Selection");
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CObjectMode::OnMouseMove(CViewport* view, int nFlags, CPoint point)
 {
 	if (GetIEditor()->IsInGameMode())
@@ -991,7 +983,6 @@ bool CObjectMode::OnMouseMove(CViewport* view, int nFlags, CPoint point)
 			ang(0, ay, ax);
 			break;
 		}
-		;
 
 		ang = gSnappingPreferences.SnapAngle(ang);
 
@@ -1072,7 +1063,7 @@ bool CObjectMode::OnMouseMove(CViewport* view, int nFlags, CPoint point)
 		// Track mouse movements.
 		CGizmo* highlightedGizmo = GetIEditor()->GetGizmoManager()->GetHighlightedGizmo();
 
-		HitContext hitInfo;
+		HitContext hitInfo(view);
 		if (!highlightedGizmo && view->HitTest(point, hitInfo))
 		{
 			SetObjectCursor(view, hitInfo.object, selectOp);
@@ -1103,7 +1094,6 @@ bool CObjectMode::OnMouseMove(CViewport* view, int nFlags, CPoint point)
 	return bSomethingDone;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CObjectMode::SetObjectCursor(CViewport* view, CBaseObject* hitObj, IObjectManager::ESelectOp selectMode)
 {
 	EStdCursor cursor = STD_CURSOR_DEFAULT;
@@ -1135,7 +1125,7 @@ void CObjectMode::SetObjectCursor(CViewport* view, CBaseObject* hitObj, IObjectM
 	{
 		if (GetCommandMode() != SelectMode && !GetIEditor()->IsSelectionLocked())
 		{
-			if (pMouseOverObject->CanBeHightlighted() && GetIEditor()->IsHelpersDisplayed())
+			if (pMouseOverObject->CanBeHightlighted() && view->GetHelperSettings().enabled)
 				pMouseOverObject->SetHighlight(true);
 
 			m_cursorStr = pMouseOverObject->GetName();
@@ -1147,7 +1137,7 @@ void CObjectMode::SetObjectCursor(CViewport* view, CBaseObject* hitObj, IObjectM
 				m_cursorStr += comment;
 			}
 
-			if (gViewportDebugPreferences.showMeshStatsOnMouseOver)
+			if (view->GetHelperSettings().enabled && view->GetHelperSettings().showMeshStatsOnMouseOver)
 			{
 				const string triangleCountText = pMouseOverObject->GetMouseOverStatisticsText();
 
@@ -1229,18 +1219,16 @@ class CObjectMode_ClassDesc : public IClassDesc
 	virtual ESystemClassID SystemClassID() { return ESYSTEM_CLASS_EDITTOOL; }
 
 	//! This method returns the human readable name of the class.
-	virtual const char* ClassName() { return "EditTool.ObjectMode"; };
+	virtual const char* ClassName() { return "EditTool.ObjectMode"; }
 
 	//! This method returns Category of this class, Category is specifing where this plugin class fits best in
 	//! create panel.
-	virtual const char*    Category()        { return "Select"; };
+	virtual const char*    Category()        { return "Select"; }
 	virtual CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CObjectMode); }
-	//////////////////////////////////////////////////////////////////////////
 };
 
 REGISTER_CLASS_DESC(CObjectMode_ClassDesc);
 
-//////////////////////////////////////////////////////////////////////////
 void CObjectMode::CheckDeepSelection(HitContext& hitContext, CViewport* pWnd)
 {
 	if (hitContext.pDeepSelection)
@@ -1315,7 +1303,6 @@ Vec3& CObjectMode::GetScale(const CViewport* view, const CPoint& point, Vec3& Ou
 		scl(ay, ay, ay);
 		break;
 	}
-	;
 
 	if (gSnappingPreferences.IsSnapToTerrainEnabled())
 		scl(ay, ay, ay);
@@ -1356,8 +1343,6 @@ void CObjectMode::OnManipulatorBeginDrag(IDisplayViewport* view, ITransformManip
 	{
 		m_commandMode = RotateMode;
 	}
-
-	((CViewport*)view)->DegradateQuality(true);
 }
 
 void CObjectMode::OnManipulatorEndDrag(IDisplayViewport* view, ITransformManipulator* pManipulator)
@@ -1374,7 +1359,6 @@ void CObjectMode::OnManipulatorEndDrag(IDisplayViewport* view, ITransformManipul
 	m_commandMode = NothingMode;
 	m_bGizmoDrag = false;
 
-	((CViewport*)view)->DegradateQuality(false);
 	GetIEditor()->UpdateViews(eUpdateObjects);
 }
 
@@ -1507,4 +1491,3 @@ bool CObjectMode::IsDisplayGrid()
 	  (!m_bGizmoDrag && m_commandMode != NothingMode)
 	  || (m_commandMode == MoveMode);
 }
-

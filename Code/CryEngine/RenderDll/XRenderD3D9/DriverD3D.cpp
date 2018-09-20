@@ -102,7 +102,7 @@ void CD3D9Renderer::InitRenderer()
 	m_bInitialized = false;
 	gRenDev = this;
 
-	m_pBaseDisplayContext = std::make_shared<CSwapChainBackedRenderDisplayContext>(IRenderer::SDisplayContextDescription{}, m_uniqueDisplayContextId++);
+	m_pBaseDisplayContext = std::make_shared<CSwapChainBackedRenderDisplayContext>(IRenderer::SDisplayContextDescription{}, "Base-SwapShain", m_uniqueDisplayContextId++);
 	{
 		SDisplayContextKey baseContextKey;
 		baseContextKey.key.emplace<HWND>(m_pBaseDisplayContext->GetWindowHandle());
@@ -525,11 +525,11 @@ void CD3D9Renderer::CalculateResolutions(int displayWidthRequested, int displayH
 	}
 
 	// Calculate the rendering resolution based on inputs ///////////////////////////////////////////////////////////
-	*pOutputWidth = pDC->IsScalable() && CV_r_CustomResWidth ? std::min(CV_r_CustomResMaxSize, CV_r_CustomResWidth) : *pDisplayWidth;
-	*pOutputHeight = pDC->IsScalable() && CV_r_CustomResHeight ? std::min(CV_r_CustomResMaxSize, CV_r_CustomResHeight) : *pDisplayHeight;
+	*pOutputWidth  = GetCustomResWidth (pDC->IsScalable(), m_MaxTextureSize, *pDisplayWidth);
+	*pOutputHeight = GetCustomResHeight(pDC->IsScalable(), m_MaxTextureSize, *pDisplayHeight);
 
-	const int nMaxResolutionX = std::max(std::min(CV_r_CustomResMaxSize, m_MaxTextureSize ? m_MaxTextureSize : INT_MAX), *pOutputWidth);
-	const int nMaxResolutionY = std::max(std::min(CV_r_CustomResMaxSize, m_MaxTextureSize ? m_MaxTextureSize : INT_MAX), *pOutputHeight);
+	const int nMaxResolutionX = std::max(GetMaxCustomResSize(m_MaxTextureSize), *pOutputWidth);
+	const int nMaxResolutionY = std::max(GetMaxCustomResSize(m_MaxTextureSize), *pOutputHeight);
 
 	int nSSSamplesX = pDC->m_nSSSamplesX; do { *pRenderWidth  = *pOutputWidth  * nSSSamplesX; --nSSSamplesX; } while (*pRenderWidth  > nMaxResolutionX);
 	int nSSSamplesY = pDC->m_nSSSamplesY; do { *pRenderHeight = *pOutputHeight * nSSSamplesY; --nSSSamplesX; } while (*pRenderHeight > nMaxResolutionY);
@@ -563,7 +563,7 @@ void CD3D9Renderer::HandleDisplayPropertyChanges()
 		m_windowState = windowState;
 
 		bChangedRendering |= windowState != previousWindowState;
-		bResizeSwapchain |= windowState != previousWindowState;
+		bResizeSwapchain  |= windowState != previousWindowState;
 
 #if CRY_PLATFORM_CONSOLE || CRY_PLATFORM_MOBILE
 		bNativeRes = true;
@@ -615,7 +615,7 @@ void CD3D9Renderer::HandleDisplayPropertyChanges()
 			monitorInfo.cbSize = sizeof(monitorInfo);
 			GetMonitorInfo(hMonitor, &monitorInfo);
 
-			displayWidthRequested = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+			displayWidthRequested  = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
 			displayHeightRequested = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
 		}
 #endif
@@ -660,7 +660,7 @@ void CD3D9Renderer::HandleDisplayPropertyChanges()
 		if (m_cbpp != colorBits ||
 			m_VSync != vSync ||
 			wasFullscreen != IsFullscreen() ||
-			bufferCountBefore != (CRendererCVars::CV_r_MaxFrameLatency + 1))
+			bufferCountBefore < (CRendererCVars::CV_r_MaxFrameLatency + 1))
 		{
 			bRecreateSwapchain = true;
 		}
@@ -776,7 +776,7 @@ void CD3D9Renderer::BeginFrame(const SDisplayContextKey& displayContextKey)
 	{
 		PREFAST_SUPPRESS_WARNING(6326)
 		m_bUseWaterTessHW = bUseWaterTessHW;
-		m_cEF.mfReloadAllShaders(1, SHGD_HW_WATER_TESSELLATION);
+		m_cEF.mfReloadAllShaders(1, SHGD_HW_WATER_TESSELLATION, gRenDev->GetMainFrameID());
 	}
 
 	PREFAST_SUPPRESS_WARNING(6326)
@@ -784,7 +784,15 @@ void CD3D9Renderer::BeginFrame(const SDisplayContextKey& displayContextKey)
 	{
 		PREFAST_SUPPRESS_WARNING(6326)
 		m_bUseSilhouettePOM = CV_r_SilhouettePOM != 0;
-		m_cEF.mfReloadAllShaders(1, SHGD_HW_SILHOUETTE_POM);
+		m_cEF.mfReloadAllShaders(1, SHGD_HW_SILHOUETTE_POM, gRenDev->GetMainFrameID());
+	}
+
+	PREFAST_SUPPRESS_WARNING(6326)
+	if ((CV_e_TerrainBlendingDebug != 0) != m_bAllowTerrainLayerBlending)
+	{
+		PREFAST_SUPPRESS_WARNING(6326)
+		m_bAllowTerrainLayerBlending = CV_e_TerrainBlendingDebug != 0;
+		m_cEF.mfReloadAllShaders(CV_r_reloadshaders, 0, gRenDev->GetMainFrameID());
 	}
 
 	if (CV_r_reloadshaders)
@@ -794,7 +802,7 @@ void CD3D9Renderer::BeginFrame(const SDisplayContextKey& displayContextKey)
 		//iConsole->Exit("Test");
 
 		m_cEF.m_Bin.InvalidateCache();
-		m_cEF.mfReloadAllShaders(CV_r_reloadshaders, 0);
+		m_cEF.mfReloadAllShaders(CV_r_reloadshaders, 0, gRenDev->GetMainFrameID());
 
 #ifndef CONSOLE_CONST_CVAR_MODE
 		CV_r_reloadshaders = 0;
@@ -977,12 +985,6 @@ void CD3D9Renderer::RT_BeginFrame(const SDisplayContextKey& displayContextKey)
 			}
 			else
 				m_nGPULimited = 0;
-
-			m_bUseGPUFriendlyBatching[GetRenderThreadID()] = m_nGPULimited > 10; // On PC if we are GPU limited use z-pass distance sorting and disable instancing
-			if (CV_r_batchtype == 0)
-				m_bUseGPUFriendlyBatching[GetRenderThreadID()] = false;
-			else if (CV_r_batchtype == 1)
-				m_bUseGPUFriendlyBatching[GetRenderThreadID()] = true;
 		}
 	}
 
@@ -998,7 +1000,7 @@ void CD3D9Renderer::RT_BeginFrame(const SDisplayContextKey& displayContextKey)
 
 	CResFile::Tick();
 	m_DevBufMan.Update(gRenDev->GetRenderFrameID(), false);
-	GetDeviceObjectFactory().OnBeginFrame();
+	GetDeviceObjectFactory().OnBeginFrame(gRenDev->GetRenderFrameID());
 
 	// Render updated dynamic flash textures
 	CFlashTextureSourceSharedRT::TickRT();
@@ -1011,8 +1013,10 @@ void CD3D9Renderer::RT_BeginFrame(const SDisplayContextKey& displayContextKey)
 #ifndef CONSOLE_CONST_CVAR_MODE
 	ICVar* pCVDebugTexelDensity = gEnv->pConsole->GetCVar("e_texeldensity");
 	ICVar* pCVDebugDraw = gEnv->pConsole->GetCVar("e_debugdraw");
+	ICVar* pCVTerrainBlendingDebug = gEnv->pConsole->GetCVar("e_TerrainBlendingDebug");
 	CRendererCVars::CV_e_DebugTexelDensity = pCVDebugTexelDensity ? pCVDebugTexelDensity->GetIVal() : 0;
 	CRendererCVars::CV_e_DebugDraw = pCVDebugDraw ? pCVDebugDraw->GetIVal() : 0;
+	CRendererCVars::CV_e_TerrainBlendingDebug = pCVTerrainBlendingDebug ? pCVTerrainBlendingDebug->GetIVal() : 0;
 #endif
 
 	CheckDeviceLost();
@@ -1249,7 +1253,7 @@ void CD3D9Renderer::ResolveSupersampledRendering()
 
 	const CRenderView* pRenderView = GetGraphicsPipeline().GetCurrentRenderView();
 	const CRenderOutput* pOutput = GetGraphicsPipeline().GetCurrentRenderOutput();
-	CRenderDisplayContext* pDC = GetActiveDisplayContext(); pDC->PostPresent();
+	CRenderDisplayContext* pDC = GetActiveDisplayContext();
 
 	CDownsamplePass::EFilterType eFilter = CDownsamplePass::FilterType_Box;
 	if (CV_r_SupersamplingFilter == 1)
@@ -1282,7 +1286,7 @@ void CD3D9Renderer::ResolveSubsampledOutput()
 	PROFILE_LABEL_SCOPE("RESOLVE_SUBSAMPLED");
 
 	const CRenderOutput* pOutput = GetGraphicsPipeline().GetCurrentRenderOutput();
-	CRenderDisplayContext* pDC = GetActiveDisplayContext(); pDC->PostPresent();
+	CRenderDisplayContext* pDC = GetActiveDisplayContext();
 
 	CRY_ASSERT(pOutput->GetColorTarget() != pDC->GetStorableColorOutput());
 	CRY_ASSERT(pOutput->GetColorTarget() != pDC->GetCurrentBackBuffer());
@@ -1293,13 +1297,13 @@ void CD3D9Renderer::ResolveSubsampledOutput()
 
 void CD3D9Renderer::ResolveHighDynamicRangeDisplay()
 {
-	if (m_pActiveContext->IsNativeScalingEnabled() || !m_pActiveContext->IsHighDynamicRange())
+	if (m_pActiveContext->IsNativeScalingEnabled() || !m_pActiveContext->IsHighDynamicRangeDisplay())
 		return;
 
 	PROFILE_LABEL_SCOPE("RESOLVE_HIGHDYNAMICRANGE");
 
 	const CRenderOutput* pOutput = GetGraphicsPipeline().GetCurrentRenderOutput();
-	CRenderDisplayContext* pDC = GetActiveDisplayContext(); pDC->PostPresent();
+	CRenderDisplayContext* pDC = GetActiveDisplayContext();
 
 	CRY_ASSERT(pOutput->GetColorTarget() == pDC->GetStorableColorOutput());
 	CRY_ASSERT(pOutput->GetColorTarget() != pDC->GetCurrentBackBuffer());
@@ -1801,9 +1805,9 @@ void CD3D9Renderer::DebugDrawStats1(const SRenderStatistics& RStats)
 			if (!tp || tp->IsNoTexture())
 				continue;
 			n++;
-			nObjSize += tp->GetSize(true);
-			int nS = tp->GetDeviceDataSize();
-			int nSys = tp->GetDataSize();
+			nObjSize += tp->GetAllocatedSystemMemory(true);
+			uint32 nS = tp->GetDeviceDataSize();
+			uint32 nSys = tp->GetDataSize();
 			if (tp->IsStreamed())
 			{
 				if (tp->IsUnloaded())
@@ -1966,11 +1970,11 @@ void CD3D9Renderer::DebugVidResourcesBars(int nX, int nY)
 			if (!tp || tp->IsNoTexture())
 				continue;
 			i++;
-			nObjSize += tp->GetSize(true);
-			int nS = tp->GetDeviceDataSize();
+			nObjSize += tp->GetAllocatedSystemMemory(true);
+			uint32 nS = tp->GetDeviceDataSize();
 			if (tp->IsStreamed())
 			{
-				int nSizeSys = tp->GetDataSize();
+				uint32 nSizeSys = tp->GetDataSize();
 				if (tp->IsUnloaded())
 				{
 					assert(nS == 0);
@@ -3318,7 +3322,7 @@ void CD3D9Renderer::RT_EndFrame()
 #endif
 
 	gRenDev->m_DevMan.RT_Tick();
-	GetDeviceObjectFactory().OnEndFrame();
+	GetDeviceObjectFactory().OnEndFrame(gRenDev->GetRenderFrameID());
 
 	SRenderStatistics::Write().m_Summary.endTime = iTimer->GetAsyncTime().GetDifferenceInSeconds(TimeEndF);
 
@@ -3511,6 +3515,7 @@ void CD3D9Renderer::RT_EndFrame()
 		CV_r_usezpass = m_nUseZpass;
 	}
 #endif
+#if !defined(_RELEASE)
 	if (CRenderer::CV_r_logTexStreaming)
 	{
 		LogStrv(0, "******************************* EndFrame ********************************\n");
@@ -3523,6 +3528,7 @@ void CD3D9Renderer::RT_EndFrame()
 	   CTexture::m_fStreamDistFactor = max(1.0f, CTexture::m_fStreamDistFactor/1.2f);*/
 	CTexture::s_nTexturesDataBytesUploaded = 0;
 	CTexture::s_nTexturesDataBytesLoaded = 0;
+#endif
 
 	m_wireframe_mode_prev = m_wireframe_mode;
 
@@ -3931,12 +3937,12 @@ bool CD3D9Renderer::CaptureFrameBufferFast(unsigned char* pDstRGBA8, int destina
 				// reuse stereo left and right RTs to downscale
 				CStretchRegionPass().Execute(
 					pSourceTexture,
-					CRendererResources::s_ptexBackBuffer,
+					CRendererResources::s_ptexSceneDiffuseTmp,
 					&srcRct, &dstRct,
 					true, ColorF(1,1,1,1), 0);
 
 
-				pCopySourceTexture = CRendererResources::s_ptexBackBuffer;
+				pCopySourceTexture = CRendererResources::s_ptexSceneDiffuseTmp;
 			}
 			else
 			{
@@ -4344,8 +4350,6 @@ void CD3D9Renderer::Graph(byte* g, int x, int y, int width, int height, int nC, 
 	IRenderAuxImage::DrawImage(fx, fy + fhgt, fwdt, 2, num, 0, 0, 1, 1, col.r, col.g, col.b, col.a);
 	IRenderAuxImage::DrawImage(fx, fy, 2, fhgt, num, 0, 0, 1, 1, col.r, col.g, col.b, col.a);
 	IRenderAuxImage::DrawImage(fx + fwdt - 2, fy, 2, fhgt, num, 0, 0, 1, 1, col.r, col.g, col.b, col.a);
-
-	float fGround = CV_r_graphstyle ? fy + fhgt : -1;
 
 	for (i = 0; i < width; i++)
 	{
@@ -4810,7 +4814,7 @@ unsigned int CD3D9Renderer::UploadToVideoMemory(unsigned char* pSrcData, int w, 
 		if (bAsyncDevTexCreation && m_pRT->IsMultithreaded())
 		{
 			// make texture without device texture and request it async creation
-			int nImgSize = CTexture::TextureDataSize(w, h, d, nummipmap, 1, eSrcFormat);
+			uint32 nImgSize = CTexture::TextureDataSize(w, h, d, nummipmap, 1, eSrcFormat);
 			std::shared_ptr<std::vector<uint8>> pImgData;
 			if (pSrcData)
 			{
@@ -5484,7 +5488,10 @@ void CD3D9Renderer::EndRenderDocCapture()
 
 compute_skinning::IComputeSkinningStorage* CD3D9Renderer::GetComputeSkinningStorage()
 {
-	return &GetGraphicsPipeline().GetComputeSkinningStage()->GetStorage();
+	if (auto pComputeSkinningStage = GetGraphicsPipeline().GetComputeSkinningStage())
+		return &pComputeSkinningStage->GetStorage();
+
+	return nullptr;
 }
 
 #pragma warning(pop)

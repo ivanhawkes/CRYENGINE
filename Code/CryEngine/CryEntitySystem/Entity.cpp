@@ -100,7 +100,7 @@ void CEntity::SetFlags(uint32 flags)
 		if (m_pGridLocation)
 			m_pGridLocation->nEntityFlags = flags;
 	}
-};
+}
 
 //////////////////////////////////////////////////////////////////////////
 void CEntity::SetFlagsExtended(uint32 flagsExtended)
@@ -110,7 +110,7 @@ void CEntity::SetFlagsExtended(uint32 flagsExtended)
 		m_flagsExtended = flagsExtended;
 		m_render.UpdateRenderNodes();
 	}
-};
+}
 
 //////////////////////////////////////////////////////////////////////////
 bool CEntity::SendEvent(const SEntityEvent& event)
@@ -1830,7 +1830,10 @@ void CEntity::AddComponentInternal(std::shared_ptr<IEntityComponent> pComponent,
 	if (pComponent->GetComponentFlags().Check(EEntityComponentFlags::Transform) && pComponent->GetTransform() == nullptr)
 	{
 		pComponent->m_pTransform = std::make_shared<CryTransform::CTransform>();
+	}
 
+	if (pComponent->m_pTransform != nullptr)
+	{
 		UpdateSlotForComponent(pComponent.get(), false);
 	}
 
@@ -2940,7 +2943,7 @@ void CEntity::PhysicsNetSerialize(TSerialize& ser)
 IEntityLink* CEntity::GetEntityLinks()
 {
 	return m_pEntityLinks;
-};
+}
 
 //////////////////////////////////////////////////////////////////////////
 IEntityLink* CEntity::AddEntityLink(const char* szLinkName, EntityId entityId, EntityGUID entityGuid)

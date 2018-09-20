@@ -136,7 +136,6 @@ public:
 	{
 		m_description = "Preview for '";
 		m_description += m_animationPath;
-		;
 		m_description += "'";
 	}
 
@@ -909,4 +908,3 @@ const char* CompressionMachine::AnimationPathConsideringPreview(const char* inpu
 	return inputCaf;
 }
 }
-

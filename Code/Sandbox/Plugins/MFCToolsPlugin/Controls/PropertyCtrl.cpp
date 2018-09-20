@@ -1466,7 +1466,6 @@ int CPropertyCtrl::CalcOffset(CPropertyItem* item)
 		item = item->GetParent();
 		offset++;
 	}
-	;
 	if (offset < 1)
 		return 0;
 	return offset - 1;
@@ -2173,4 +2172,3 @@ void CPropertyCtrl::RemoveCustomPopupMenuPopup(const CString& text)
 {
 	RemoveCustomPopup(text, m_customPopupMenuPopups);
 }
-

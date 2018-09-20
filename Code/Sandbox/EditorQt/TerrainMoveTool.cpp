@@ -94,14 +94,14 @@ int CTerrainMoveTool::m_targetRot = 0.0f;
 
 CTerrainMoveTool::CTerrainMoveTool()
 	: m_archive(nullptr)
-	, m_isSyncHeight(false)
+	, m_isSyncHeight(true)
 	, m_onlyVegetation(false)
 	, m_onlyTerrain(false)
 	, m_moveObjects(false)
 	, m_manipulator(nullptr)
 {
 	CUndo undo("Unselect All");
-	GetIEditorImpl()->ClearSelection();
+	GetIEditorImpl()->GetObjectManager()->ClearSelection();
 
 	if (m_source.isCreated)
 		m_source.isShow = true;
@@ -269,7 +269,7 @@ void CTerrainMoveTool::Move(bool bOnlyVegetation, bool bOnlyTerrain)
 		notifier->OnMove(m_target.pos, m_source.pos, isCopy);
 	}
 
-	GetIEditorImpl()->ClearSelection();
+	GetIEditorImpl()->GetObjectManager()->ClearSelection();
 }
 
 void CTerrainMoveTool::SetArchive(CXmlArchive* ar)

@@ -2,9 +2,11 @@
 
 #include "StdAfx.h"
 #include "LoopSelectionTool.h"
-#include "DesignerEditor.h"
-#include "Util/ElementSet.h"
+
 #include "Core/LoopPolygons.h"
+#include "Core/Model.h"
+#include "Util/ElementSet.h"
+#include "DesignerEditor.h"
 #include "DesignerSession.h"
 
 namespace Designer
@@ -385,4 +387,3 @@ PolygonPtr LoopSelectionTool::FindAdjacentNextPolygon(MainContext& mc, PolygonPt
 
 REGISTER_DESIGNER_TOOL_AND_COMMAND(eDesigner_Loop, eToolGroup_Selection, "Loop", LoopSelectionTool,
                                    loopselection, "runs loop selection tool", "designer.loopselection")
-

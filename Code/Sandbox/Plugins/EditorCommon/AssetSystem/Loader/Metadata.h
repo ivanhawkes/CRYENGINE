@@ -2,10 +2,9 @@
 
 #pragma once
 
-#include "CryExtension/CryGUID.h"
+#include <CryExtension/CryGUID.h>
 
-class IXmlNode;
-struct IChunkFile;
+class XmlNodeRef;
 
 namespace AssetLoader
 {
@@ -33,4 +32,3 @@ bool ReadMetadata(const XmlNodeRef& asset, SAssetMetadata& metadata);
 void WriteMetaData(const XmlNodeRef& asset, const SAssetMetadata& metadata);
 
 }
-

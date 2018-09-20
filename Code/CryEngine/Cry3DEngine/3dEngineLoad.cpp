@@ -182,8 +182,6 @@ bool C3DEngine::InitLevelForEditor(const char* szFolderName, const char* szMissi
 	// recreate particles and decals
 	if (m_pPartManager)
 		m_pPartManager->Reset();
-	if (m_pParticleSystem)
-		static_cast<pfx2::CParticleSystem*>(m_pParticleSystem.get())->Reset();
 
 	// recreate decals
 	SAFE_DELETE(m_pDecalManager);
@@ -511,14 +509,11 @@ void C3DEngine::UnloadLevel()
 	}
 
 	//////////////////////////////////////////////////////////////////////////
-	if (m_pPartManager || m_pParticleSystem)
+	if (m_pPartManager)
 	{
 		CryComment("Purge particles");
 		// Force to clean all particles that are left, even if still referenced.
-		if (m_pPartManager)
-			m_pPartManager->ClearRenderResources(true);
-		if (m_pParticleSystem)
-			static_cast<pfx2::CParticleSystem*>(m_pParticleSystem.get())->ClearRenderResources();
+		m_pPartManager->ClearRenderResources(true);
 		CryComment("done");
 	}
 
@@ -625,6 +620,7 @@ void C3DEngine::UnloadLevel()
 	CRoadRenderNode::FreeStaticMemoryUsage();
 	CFogVolumeRenderNode::StaticReset();
 	CRopeRenderNode::StaticReset();
+	CVegetation::StaticReset();
 
 	if (GetRenderer())
 	{
@@ -1474,6 +1470,9 @@ void C3DEngine::LoadEnvironmentSettingsFromXML(XmlNodeRef pInputNode)
 	// Enable automatic base texture update based on terrain detail materials info. This cvar used only by the editor for now.
 	// TODO: support on-the-fly in-engine base texture generation (including roughness and normals) without exporting it from the editor.
 	GetCVars()->e_TerrainAutoGenerateBaseTexture = GetXMLAttribBool(pInputNode, "Terrain", "AutoGenerateBaseTexture", false);
+
+	// Enable support for offline-procedural vegetation. Allows export of automatically distributed objects as normal permanent objects
+	m_supportOfflineProceduralVegetation = GetXMLAttribBool(pInputNode, "Terrain", "SupportOfflineProceduralVegetation", false);
 
 	{
 		int nMinSpec = 3;//atoi(pText);

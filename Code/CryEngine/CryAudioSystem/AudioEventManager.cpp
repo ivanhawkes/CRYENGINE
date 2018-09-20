@@ -4,10 +4,12 @@
 #include "AudioEventManager.h"
 #include "AudioCVars.h"
 #include "ATLAudioObject.h"
-#include "Common.h"
 #include <IAudioImpl.h>
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	#include "Managers.h"
+	#include "AudioListenerManager.h"
+	#include "DebugColor.h"
 	#include <CryRenderer/IRenderAuxGeom.h>
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
@@ -20,7 +22,7 @@ CEventManager::~CEventManager()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CEventManager::Init(uint32 const poolSize)
+void CEventManager::Initialize(uint32 const poolSize)
 {
 	m_constructedEvents.reserve(static_cast<std::size_t>(poolSize));
 }
@@ -102,18 +104,18 @@ size_t CEventManager::GetNumConstructed() const
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
-void CEventManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerPosition, float const posX, float posY) const
+void CEventManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY) const
 {
 	CryFixedStringT<MaxControlNameLength> lowerCaseSearchString(g_cvars.m_pDebugFilter->GetString());
 	lowerCaseSearchString.MakeLower();
 
-	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_managerColorHeader.data(), false, "Audio Events [%" PRISIZE_T "]", m_constructedEvents.size());
+	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_globalColorHeader.data(), false, "Audio Events [%" PRISIZE_T "]", m_constructedEvents.size());
 	posY += Debug::g_managerHeaderLineHeight;
 
 	for (auto const pEvent : m_constructedEvents)
 	{
 		Vec3 const& position = pEvent->m_pAudioObject->GetTransformation().GetPosition();
-		float const distance = position.GetDistance(listenerPosition);
+		float const distance = position.GetDistance(g_listenerManager.GetActiveListenerTransformation().GetPosition());
 
 		if (g_cvars.m_debugDistance <= 0.0f || (g_cvars.m_debugDistance > 0.0f && distance < g_cvars.m_debugDistance))
 		{
@@ -124,7 +126,7 @@ void CEventManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerP
 
 			if (draw)
 			{
-				float const* pColor = Debug::g_managerColorItemInactive.data();
+				float const* pColor = Debug::g_globalColorInactive.data();
 
 				if (pEvent->IsPlaying())
 				{
@@ -134,9 +136,9 @@ void CEventManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, Vec3 const& listenerP
 				{
 					pColor = Debug::g_managerColorItemLoading.data();
 				}
-				else if (pEvent->m_state == EEventState::Virtual)
+				else if (pEvent->IsVirtual())
 				{
-					pColor = Debug::g_managerColorItemVirtual.data();
+					pColor = Debug::g_globalColorVirtual.data();
 				}
 
 				auxGeom.Draw2dLabel(posX, posY, Debug::g_managerFontSize, pColor, false, "%s on %s", szTriggerName, pEvent->m_pAudioObject->m_name.c_str());

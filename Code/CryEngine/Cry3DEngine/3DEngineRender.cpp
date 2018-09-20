@@ -560,7 +560,7 @@ void C3DEngine::ScreenshotDispatcher(const int nRenderFlags, const SRenderingPas
 	case ESST_HIGHRES:
 		{
 			GetConsole()->ShowConsole(false);
-			pStitchedImage = new CStitchedImage(*this, ImageWidth, ImageHeight, 0, 0, 1, 0);
+			pStitchedImage = new CStitchedImage(*this, ImageWidth, ImageHeight, ImageWidth, ImageHeight, 1, 0);
 
 			CCamera newCamera = passInfo.GetCamera();
 			newCamera.SetFrustum(ImageWidth, ImageHeight, passInfo.GetCamera().GetFov(), passInfo.GetCamera().GetNearPlane(),
@@ -579,7 +579,7 @@ void C3DEngine::ScreenshotDispatcher(const int nRenderFlags, const SRenderingPas
 		{
 			CRY_ASSERT_MESSAGE(0, "Panorama screenshot not supported right now !");
 			GetConsole()->ShowConsole(false);
-			pStitchedImage = new CStitchedImage(*this, ImageWidth, ImageHeight, 0, 0, 1, 0);
+			pStitchedImage = new CStitchedImage(*this, ImageWidth, ImageHeight, ImageWidth, ImageHeight, 1, 0);
 			ScreenShotPanorama(pStitchedImage, nRenderFlags, passInfo, 0, 0);
 			pStitchedImage->SaveImage("Panorama");
 			pStitchedImage->Clear();    // good for debugging
@@ -616,7 +616,7 @@ void C3DEngine::ScreenshotDispatcher(const int nRenderFlags, const SRenderingPas
 			}
 			
 			GetConsole()->ShowConsole(false);
-			pStitchedImage = new CStitchedImage(*this, mipMapSnapshotSize, mipMapSnapshotSize, 0, 0, 1, 0, true);
+			pStitchedImage = new CStitchedImage(*this, mipMapSnapshotSize, mipMapSnapshotSize, mipMapSnapshotSize, mipMapSnapshotSize, 1, 0, true);
 
 			ScreenShotMap(pStitchedImage, nRenderFlags, passInfo, 0, 0);
 			if (abs(GetCVars()->e_ScreenShot) == ESST_MAP)
@@ -1218,8 +1218,8 @@ void C3DEngine::PrintDebugInfo(const SRenderingPassInfo& passInfo)
 				            objectsStreamingStatus.nReady, objectsStreamingStatus.nInProgress, objectsStreamingStatus.nTotal, objectsStreamingStatus.nActive, float(objectsStreamingStatus.nAllocatedBytes) / 1024 / 1024, float(objectsStreamingStatus.nMemRequired) / 1024 / 1024, GetCVars()->e_StreamCgfPoolSize);
 			}
 
-			bool bOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize);
-			bool bCloseToOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize * 90 / 100);
+			bool bOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize * 98 / 100);
+			bool bCloseToOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize * 85 / 100);
 
 			ColorF color = Col_White;
 			if (bOutOfMem)
@@ -1426,8 +1426,6 @@ void C3DEngine::RenderInternal(const int nRenderFlags, const SRenderingPassInfo&
 	m_pPartManager->GetLightProfileCounts().ResetFrameTicks();
 	if (passInfo.IsGeneralPass() && m_pPartManager)
 		m_pPartManager->Update();
-	if (passInfo.IsGeneralPass() && m_pParticleSystem)
-		m_pParticleSystem->Update();
 
 	if (passInfo.IsGeneralPass() && passInfo.RenderClouds())
 	{
@@ -1836,13 +1834,8 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 	if (passInfo.RenderFarSprites())
 		m_pObjManager->RenderFarObjects(passInfo);
 
-	pfx2::CParticleSystem* pParticleSystem = static_cast<pfx2::CParticleSystem*>(m_pParticleSystem.get());
-	if (pParticleSystem)
-		pParticleSystem->FinishUpdate();
 	if (m_pPartManager)
 		m_pPartManager->FinishParticleRenderTasks(passInfo);
-	if (pParticleSystem)
-		pParticleSystem->DeferredRender(passInfo);
 
 	if (passInfo.IsGeneralPass())
 		m_LightVolumesMgr.Update(passInfo);
@@ -2430,7 +2423,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 	#endif
 
 	DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "%s %s %dbit %s %s [%d.%d]",
-	                     pRenderType, mode, (int)sizeof(char*) * 8, szFlags, szLevelName, ver.v[1], ver.v[0]);
+	                     pRenderType, mode, (int)sizeof(char*) * 8, szFlags, szLevelName, ver[1], ver[0]);
 
 	// Polys in scene
 	int nPolygons, nShadowPolygons;
@@ -2526,8 +2519,8 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 			            float(objectsStreamingStatus.nAllocatedBytes) / 1024 / 1024, float(objectsStreamingStatus.nMemRequired) / 1024 / 1024, GetCVars()->e_StreamCgfPoolSize);
 		}
 
-		bool bOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize);
-		bool bCloseToOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize * 90 / 100);
+		bool bOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize * 98 / 100);
+		bool bCloseToOutOfMem((float(objectsStreamingStatus.nMemRequired) / 1024 / 1024) > GetCVars()->e_StreamCgfPoolSize * 85 / 100);
 
 		ColorF color = Col_White;
 		if (bOutOfMem)
@@ -2616,8 +2609,11 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 			const int iStaticPercentage = int((float)stats.nStaticTexturesSize / stats.nMaxPoolSize * 100.f);
 			cry_sprintf(szTexStreaming, "TexStrm: TexRend: %u NumTex: %u Req:%.1fMB Mem(strm/stat/tot):%.1f/%.1f/%.1fMB(%d%%/%d%%) PoolSize:%" PRISIZE_T "MB PoolFrag:%.1f%%",
 			            stats.nNumTexturesPerFrame, nTexCount, (float)nPlatformSize / 1024 / 1024,
-			            (float)stats.nStreamedTexturesSize / 1024 / 1024, (float)stats.nStaticTexturesSize / 1024 / 1024, (float)stats.nCurrentPoolSize / 1024 / 1024,
-			            iPercentage, iStaticPercentage, stats.nMaxPoolSize / 1024 / 1024,
+			            (float)stats.nStreamedTexturesSize / 1024 / 1024,
+			            (float)stats.nStaticTexturesSize / 1024 / 1024,
+			            (float)stats.nCurrentPoolSize / 1024 / 1024,
+			            iPercentage, iStaticPercentage,
+			            stats.nMaxPoolSize / 1024 / 1024,
 			            stats.fPoolFragmentation * 100.0f
 			            );
 			bOverloadedPool |= stats.bPoolOverflowTotally;
@@ -3214,50 +3210,9 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 
 	if (GetCVars()->e_ParticlesDebug & 1)
 	{
-		// Show particle stats.
-		static SParticleCounts Counts;
-		SParticleCounts CurCounts;
-		if (m_pPartManager)
-			m_pPartManager->GetCounts(CurCounts);
-
-		// Blend stats.
-		Counts = Lerp(Counts, CurCounts, fBlendCur);
-
-		if (m_pParticleSystem)
-		{
-			const Vec2 location = Vec2(fTextPosX, fTextPosY += fTextStepY);
-			pfx2::CParticleSystem* pPSystem = static_cast<pfx2::CParticleSystem*>(m_pParticleSystem.get());
-			fTextPosY = pPSystem->DisplayDebugStats(location, fTextStepY);
-		}
-		else
-		{
-			float fScreenPix = (float)(GetRenderer()->GetOverlayWidth() * GetRenderer()->GetOverlayHeight());
-
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY,
-			                     "(Rendered/Active/Alloc): Particles %5.0f/%5.0f/%5.0f, Emitters %3.0f/%3.0f/%3.0f, SubEmitter: %3.0f, Fill %5.2f/%5.2f",
-			                     Counts.particles.rendered, Counts.particles.updated, Counts.particles.alive,
-			                     Counts.components.rendered, Counts.components.updated, Counts.components.alive, Counts.subemitters.updated,
-			                     Counts.pixels.rendered / fScreenPix, Counts.pixels.updated / fScreenPix);
-			fTextPosY += fTextStepY;
-		}
-
-		if (GetCVars()->e_ParticlesDebug & AlphaBit('r'))
-		{
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY,
-			                     "Reiter %4.0f, Reject %4.0f, Clip %4.1f, Coll %4.1f / %4.1f",
-			                     Counts.particles.reiterate, Counts.particles.reject, Counts.particles.clip,
-			                     Counts.particles.collideHit, Counts.particles.collideTest);
-		}
-		if (GetCVars()->e_ParticlesDebug & AlphaBits('bx'))
-		{
-			if (Counts.volume.stat + Counts.volume.dyn > 0.0f)
-			{
-				float fDiv = 1.f / (Counts.volume.dyn + FLT_MIN);
-				DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY,
-					"Particle BB vol: Stat %.3g, Stat/Dyn %.2f, Err/Dyn %.3g",
-					Counts.volume.stat, Counts.volume.stat * fDiv, Counts.volume.error * fDiv);
-			}
-		}
+		Vec2 location = Vec2(fTextPosX, fTextPosY += fTextStepY);
+		m_pPartManager->DisplayStats(location, fTextStepY);
+		fTextPosY = location.y;
 	}
 
 	if (GetCVars()->e_ParticlesDebug & AlphaBit('m'))
@@ -3394,37 +3349,11 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 
 	if (GetCVars()->e_ProcVegetation == 2)
 	{
-		CProcVegetPoolMan& pool = *CTerrainNode::GetProcObjPoolMan();
-		int nAll;
-		int nUsed = pool.GetUsedInstancesCount(nAll);
-
-		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "---------------------------------------");
-		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "Procedural sectors pool status: used=%d, all=%d, active=%d",
-		                     nUsed, nAll, GetTerrain()->GetActiveProcObjNodesCount());
-		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "---------------------------------------");
-		for (int i = 0; i < min(16, pool.m_lstUsed.Count()); i++)
-		{
-			CProcObjSector* pSubPool = pool.m_lstUsed[i];
-			nUsed = pSubPool->GetUsedInstancesCount(nAll);
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY,
-			                     "Used sector: used=%d, all=%dx%d", nUsed, nAll, (int)GetCVars()->e_ProcVegetationMaxObjectsInChunk);
-		}
-		for (int i = 0; i < min(16, pool.m_lstFree.Count()); i++)
-		{
-			CProcObjSector* pSubPool = pool.m_lstFree[i];
-			nUsed = pSubPool->GetUsedInstancesCount(nAll);
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY,
-			                     "Free sector: used=%d, all=%dx%d", nUsed, nAll, (int)GetCVars()->e_ProcVegetationMaxObjectsInChunk);
-		}
-		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "---------------------------------------");
-		{
-			SProcObjChunkPool& chunks = *CTerrainNode::GetProcObjChunkPool();
-			nUsed = chunks.GetUsedInstancesCount(nAll);
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY,
-			                     "chunks pool status: used=%d, all=%d, %d MB", nUsed, nAll,
-			                     nAll * int(GetCVars()->e_ProcVegetationMaxObjectsInChunk) * (int)sizeof(CVegetation) / 1024 / 1024);
-		}
+		int objectsNum = 0;
+		int nodesNum = GetTerrain()->GetActiveProcObjNodesCount(objectsNum);
+		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "ProcVeg: sectors num: %d, objects num: %d", nodesNum, objectsNum);
 	}
+
 	if (GetCVars()->e_MergedMeshesDebug)
 	{
 		if (m_pMergedMeshesManager->PoolOverFlow())

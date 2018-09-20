@@ -4,6 +4,7 @@
 
 #include <CryThreading/CryThreadSafeRendererContainer.h>
 #include <CryThreading/CryThreadSafeWorkerContainer.h>
+#include <CryThreading/IJobManager.h>
 #include <CryMath/Range.h>
 
 #include <Common/RendererResources.h>
@@ -145,7 +146,7 @@ public:
 	// Begin/End writing items to the view from 3d engine traversal.
 	virtual void                 SwitchUsageMode(EUsageMode mode) override;
 
-	virtual CryJobState*         GetWriteMutex() override { return &m_jobstate_Write; };
+	virtual CryJobState*         GetWriteMutex() override { return &m_jobstate_Write; }
 
 	virtual void                 AddRenderObject(CRenderElement* pRenderElement, SShaderItem& pShaderItem, CRenderObject* pRenderObject, const SRenderingPassInfo& passInfo, int list, int afterWater) threadsafe final;
 	virtual void                 AddPermanentObject(CRenderObject* pObject, const SRenderingPassInfo& passInfo) final;
@@ -227,7 +228,7 @@ public:
 	void       PrepareForRendering();
 	void       PrepareForWriting();
 
-	bool       IsHDRModeEnabled() const;
+	bool       AllowsHDRRendering() const;
 	bool       IsPostProcessingEnabled() const;
 	bool       IsRecursive() const        { return m_viewType == eViewType_Recursive; }
 	bool       IsShadowGenView() const    { return m_viewType == eViewType_Shadow; }
@@ -461,6 +462,7 @@ private:
 
 	ColorF                      m_targetClearColor = {};
 	bool                        m_bClearTarget = false;
+	bool                        m_bRenderToSwapChain = false;
 	//////////////////////////////////////////////////////////////////////////
 
 	//////////////////////////////////////////////////////////////////////////
@@ -522,8 +524,8 @@ private:
 	// Internal job states to control when view job processing is done.
 	CryJobState                    m_jobstate_Sort;
 	CryJobState                    m_jobstate_PostWrite;
-	CryJobStateLambda              m_jobstate_Write;
-	CryJobStateLambda              m_jobstate_ShadowGen;
+	CryJobState                    m_jobstate_Write;
+	CryJobState                    m_jobstate_ShadowGen;
 
 	CryCriticalSectionNonRecursive m_lock_UsageMode;
 	CryCriticalSectionNonRecursive m_lock_PostWrite;

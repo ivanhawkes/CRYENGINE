@@ -25,6 +25,7 @@ void CTiledShadingStage::Init()
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 	
 	m_pPerViewConstantBuffer = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(HLSL_PerViewGlobalConstantBuffer));
+	if (m_pPerViewConstantBuffer) m_pPerViewConstantBuffer->SetDebugName("TiledShadingStage Per-View CB");
 }
 
 
@@ -96,7 +97,7 @@ void CTiledShadingStage::Execute()
 
 	rtFlags |= CVrProjectionManager::Instance()->GetRTFlags();
 
-	CTexture* texClipVolumeIndex = CRendererResources::s_ptexVelocity;
+	CTexture* texClipVolumeIndex = CRendererResources::s_ptexClipVolumes;
 	CTexture* pTexCaustics = tiledLights->IsCausticsVisible() ? CRendererResources::s_ptexSceneTargetR11G11B10F[1] : CRendererResources::s_ptexBlack;
 	CTexture* pTexAOColorBleed = CRenderer::CV_r_ssdoColorBleeding ? CRendererResources::s_ptexAOColorBleed : CRendererResources::s_ptexBlack;
 
@@ -128,7 +129,7 @@ void CTiledShadingStage::Execute()
 		m_passCullingShading.SetTexture(3, CRendererResources::s_ptexSceneDiffuse);
 		m_passCullingShading.SetTexture(4, CRendererResources::s_ptexShadowMask);
 		m_passCullingShading.SetTexture(5, CRendererResources::s_ptexSceneNormalsBent);
-		m_passCullingShading.SetTexture(6, CRendererResources::s_ptexHDRTargetScaledTmp[0]);
+		m_passCullingShading.SetTexture(6, CRendererResources::s_ptexHDRTargetMaskedScaled[0][0]);
 		m_passCullingShading.SetTexture(7, CRendererResources::s_ptexEnvironmentBRDF);
 		m_passCullingShading.SetTexture(8, texClipVolumeIndex);
 		m_passCullingShading.SetTexture(9, pTexAOColorBleed);

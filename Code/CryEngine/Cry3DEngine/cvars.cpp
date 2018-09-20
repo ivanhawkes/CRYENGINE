@@ -183,6 +183,8 @@ void CVars::Init()
 
 	REGISTER_CVAR(e_TerrainDetailMaterials, 1, VF_CHEAT | VF_CHEAT_ALWAYS_CHECK,
 	              "Activates drawing of detail materials on terrain ground");
+	REGISTER_CVAR(e_TerrainDetailMaterialsWeightedBlending, 1, VF_NULL,
+	              "Enable advanced weighted blending between terrain detail materials");
 	DefineConstIntCVar(e_TerrainDetailMaterialsDebug, 0, VF_CHEAT,
 	                   "Shows number of materials in use per terrain sector");
 	REGISTER_CVAR(e_TerrainDetailMaterialsViewDistZ, e_TerrainDetailMaterialsViewDistZDefault, VF_NULL,
@@ -193,6 +195,12 @@ void CVars::Init()
 	                     "Sun dir snap control");
 	DefineConstFloatCVar(e_SunAngleSnapDot, VF_NULL,
 	                     "Sun dir snap control");
+
+	REGISTER_CVAR(e_TerrainBlendingDebug, 0, VF_CHEAT, 
+                  "Options:\n"
+                  "0 = Only blend objects that have FOB_ALLOW_TERRAIN_LAYER_BLEND set (default)\n"
+                  "1 = Disable blending on all objects\n"
+                  "2 = Enable blending on all objects");
 
 	REGISTER_CVAR(e_Particles, 1, VF_CHEAT | VF_CHEAT_ALWAYS_CHECK,
 	              "Activates drawing of particles");
@@ -207,9 +215,12 @@ void CVars::Init()
 	                   " c = disable clipping against water and vis area bounds"
 	                   " z = freeze particle system"
 	                   " t = used by developers to debug test algorithms");
-	REGISTER_CVAR(e_ParticlesThread, 4, VF_BITFIELD,
+	REGISTER_CVAR(e_ParticlesThread, 4, VF_NULL,
 	              "Enable particle threading: 1 = basic, 4 = optimal");
-	REGISTER_CVAR(e_ParticlesObjectCollisions, 2, VF_NULL,
+	REGISTER_CVAR(e_ParticlesCollisions, 3,  VF_BITFIELD,
+	              "Enable collisions for non-physical particles:\n"
+	              "  1 = terrain only, 2 = static objects also, 3 = dynamic objects also");
+	REGISTER_CVAR(e_ParticlesObjectCollisions, -1, VF_CHEAT,
 	              "Enable particle/object collisions for SimpleCollision:\n"
 	              "  1 = against static objects only, 2 = dynamic also");
 	REGISTER_CVAR(e_ParticlesMinPhysicsDynamicBounds, 2, VF_NULL,
@@ -821,10 +832,8 @@ void CVars::Init()
 	              "Number of heightmap quad-tree levels used for vegetation spawning");
 	REGISTER_CVAR(e_ProcVegetationMaxSectorsInCache, 16, VF_REQUIRE_APP_RESTART,
 	              "Maximum number of 64x64 meter sectors cached in memory");
-	REGISTER_CVAR(e_ProcVegetationMaxChunksInCache, 128, VF_REQUIRE_APP_RESTART,
-	              "Maximum number of object chunks cached in memory");
-	REGISTER_CVAR(e_ProcVegetationMaxObjectsInChunk, 1024, VF_REQUIRE_APP_RESTART,
-	              "Maximum number of instances per chunk");
+	REGISTER_CVAR(e_ProcVegetationMaxObjectsPerSector, 2048, VF_REQUIRE_APP_RESTART,
+	              "Maximum number of procedural instances in level");
 
 	REGISTER_CVAR(e_Recursion, 1, VF_NULL,
 	              "If 0 - will skip recursive render calls like render into texture");

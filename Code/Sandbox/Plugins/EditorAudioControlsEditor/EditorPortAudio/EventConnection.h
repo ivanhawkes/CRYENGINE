@@ -14,11 +14,12 @@ class CEventConnection final : public IConnection
 {
 public:
 
-	enum class EActionType
+	enum class EActionType : CryAudio::EnumFlagsType
 	{
 		Start,
-		Stop,
-	};
+		Stop, };
+
+	CEventConnection() = delete;
 
 	explicit CEventConnection(ControlId const id)
 		: m_id(id)
@@ -29,8 +30,6 @@ public:
 
 	virtual ~CEventConnection() override = default;
 
-	CEventConnection() = delete;
-
 	// IConnection
 	virtual ControlId GetID() const override                                                                   { return m_id; }
 	virtual bool      HasProperties() const override                                                           { return true; }
@@ -40,10 +39,21 @@ public:
 	virtual void      ClearPlatforms() override                                                                {}
 	// ~IConnection
 
+	void        SetActionType(EActionType const type)  { m_actionType = type; }
+	EActionType GetActionType() const                  { return m_actionType; }
+
+	void        SetInfiniteLoop(bool const isInfinite) { m_isInfiniteLoop = isInfinite; }
+	bool        IsInfiniteLoop() const                 { return m_isInfiniteLoop; }
+
+	void        SetLoopCount(uint32 const loopCount)   { m_loopCount = loopCount; }
+	uint32      GetLoopCount() const                   { return m_loopCount; }
+
+private:
+
 	ControlId const m_id;
 	EActionType     m_actionType;
-	uint32          m_loopCount;
 	bool            m_isInfiniteLoop;
+	uint32          m_loopCount;
 };
 } // namespace PortAudio
 } // namespace Impl

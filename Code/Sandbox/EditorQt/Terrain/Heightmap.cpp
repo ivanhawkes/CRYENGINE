@@ -1,10 +1,10 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include "Terrain/Layer.h"
+#include "Heightmap.h"
+
 #include "Terrain/Noise.h"
 #include "Terrain/SurfaceType.h"
-#include "Terrain/TerrainGrid.h"
 #include "Terrain/TerrainManager.h"
 #include "Util/DynamicArray2D.h"
 #include "Util/ImagePainter.h"
@@ -455,10 +455,21 @@ void CHeightmap::Resize(int iWidth, int iHeight, float unitSize, bool bCleanOld,
 				IRenderNode** pFirst = &lstInstances[0];
 				gEnv->p3DEngine->GetObjectsInBox(aabbAll, pFirst);
 
+				for (int i = 0; i < lstInstances.size(); i++)
+				{
+					if (lstInstances[i]->GetRndFlags() & ERF_PROCEDURAL)
+					{
+						lstInstances[i] = nullptr;
+					}
+				}
+
 				// unregister all objects from scene graph
 				for (int i = 0; i < lstInstances.size(); i++)
 				{
-					gEnv->p3DEngine->UnRegisterEntityDirect(lstInstances[i]);
+					if (lstInstances[i])
+					{
+					  gEnv->p3DEngine->UnRegisterEntityDirect(lstInstances[i]);
+				  }
 				}
 
 				// recreate terrain in the engine
@@ -471,7 +482,10 @@ void CHeightmap::Resize(int iWidth, int iHeight, float unitSize, bool bCleanOld,
 				// register all objects back into scene graph
 				for (int i = 0; i < lstInstances.size(); i++)
 				{
-					gEnv->p3DEngine->RegisterEntity(lstInstances[i]);
+					if (lstInstances[i])
+					{
+					  gEnv->p3DEngine->RegisterEntity(lstInstances[i]);
+				  }
 				}
 
 				// restore level rendering
@@ -1841,20 +1855,15 @@ void CHeightmap::MakeBeaches()
 	if (GetIEditorImpl()->GetIUndoManager()->IsUndoRecording())
 		GetIEditorImpl()->GetIUndoManager()->RecordUndo(new CUndoHeightmapModify(this));
 
-	unsigned int i, j;
-	t_hmap* pHeightmapData = NULL;
-	t_hmap* pHeightmapDataStart = NULL;
-	double dCurHeight;
-
 	// Get the water level
 	double dWaterLevel = m_fWaterLevel;
 
 	// Make the beaches
-	for (j = 0; j < m_iHeight; j++)
+	for (uint64 j = 0; j < m_iHeight; j++)
 	{
-		for (i = 0; i < m_iWidth; i++)
+		for (uint64 i = 0; i < m_iWidth; i++)
 		{
-			dCurHeight = m_pHeightmap[i + j * m_iWidth];
+			double dCurHeight = m_pHeightmap[i + j * m_iWidth];
 
 			// Center water level at zero
 			dCurHeight -= dWaterLevel;
@@ -3111,7 +3120,7 @@ void CHeightmap::ExportBlock(const CRect& inrect, CXmlArchive& xmlAr, bool expor
 
 void CHeightmap::ImportBlock(CXmlArchive& xmlAr, CPoint newPos, bool useNewPos, float heightOffset, bool importOnlyVegetation, int nRot)
 {
-	CLogFile::WriteLine("Importing Heightmap settings...");
+	CLogFile::WriteLine("Importing Heightmap ...");
 
 	XmlNodeRef heightmap = xmlAr.root->findChild("Heightmap");
 	if (!heightmap)
@@ -3156,13 +3165,14 @@ void CHeightmap::ImportBlock(CXmlArchive& xmlAr, CPoint newPos, bool useNewPos, 
 		subRc.OffsetRect(offset);
 	}
 
+	if (GetIEditorImpl()->GetVegetationMap())
+	{
+		Vec3 ofs = HmapToWorld(offset);
+		GetIEditorImpl()->GetVegetationMap()->ImportBlock(xmlAr, CPoint(ofs.x, ofs.y));
+	}
+
 	if (importOnlyVegetation)
 	{
-		if (GetIEditorImpl()->GetVegetationMap())
-		{
-			Vec3 ofs = HmapToWorld(offset);
-			GetIEditorImpl()->GetVegetationMap()->ImportBlock(xmlAr, CPoint(ofs.x, ofs.y));
-		}
 		return;
 	}
 
@@ -3185,6 +3195,8 @@ void CHeightmap::ImportBlock(CXmlArchive& xmlAr, CPoint newPos, bool useNewPos, 
 		}
 		else
 			hmap.SetSubImage(subRc.left, subRc.top, hmapSubImage, heightOffset, m_fMaxHeight);
+
+		GetIEditorImpl()->GetTerrainManager()->signalTerrainChanged();
 	}
 
 	if (xmlAr.pNamedData->GetDataBlock(HEIGHTMAP_LAYERINFO_BLOCK_NAME, pData, size))
@@ -3202,6 +3214,8 @@ void CHeightmap::ImportBlock(CXmlArchive& xmlAr, CPoint newPos, bool useNewPos, 
 		{
 			m_layerIdBitmap.SetSubImage(subRc.left, subRc.top, LayerIdBitmapImage);
 		}
+
+		GetIEditorImpl()->GetTerrainManager()->signalLayersChanged();
 	}
 
 	XmlNodeRef rgbLayer = xmlAr.root->findChild("rgbLayer");
@@ -3244,6 +3258,8 @@ void CHeightmap::ImportBlock(CXmlArchive& xmlAr, CPoint newPos, bool useNewPos, 
 					UpdateSectorTexture(CPoint(x, y), rgbRegion.left, rgbRegion.top, rgbRegion.right, rgbRegion.bottom);
 				}
 			}
+
+			GetIEditorImpl()->GetTerrainManager()->signalTerrainChanged();
 		}
 	}
 

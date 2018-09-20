@@ -1,10 +1,10 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
-
+#include "MFCToolsDefines.h"
 #include "ColorCtrl.h"
 
-class PLUGIN_API CCustomButton : public CXTPButton
+class MFC_TOOLS_PLUGIN_API CCustomButton : public CXTPButton
 {
 public:
 	CCustomButton();
@@ -14,4 +14,3 @@ public:
 	void SetToolTip(const char* tooltipText);
 };
 typedef CCustomButton CColoredPushButton;
-

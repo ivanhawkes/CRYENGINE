@@ -977,12 +977,16 @@ void SOBJECTSTATE::Serialize(TSerialize ser)
 			{
 				vSignals.resize(signalsCount);
 			}
-			for (DynArray<AISIGNAL>::iterator ai(vSignals.begin()); ai != vSignals.end(); ++ai)
+			for (DynArray<AISignals::SignalSharedPtr>::iterator ai(vSignals.begin()); ai != vSignals.end(); ++ai)
 			{
+				if (ser.IsReading())
+				{
+					*ai = gAIEnv.pSignalManager->CreateSignal(AISIGNAL_DEFAULT, gAIEnv.pSignalManager->GetBuiltInSignalDescriptions().GetNone());
+				}
+
 				ser.BeginGroup("Signal");
 				{
-					AISIGNAL& signal = *ai;
-					signal.Serialize(ser);
+					(*ai)->Serialize(ser);
 				}
 				ser.EndGroup();
 			}

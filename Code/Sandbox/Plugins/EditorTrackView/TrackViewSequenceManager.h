@@ -7,6 +7,7 @@
 
 struct ITrackViewSequenceManagerListener
 {
+	virtual ~ITrackViewSequenceManagerListener()                  {}
 	virtual void OnSequenceAdded(CTrackViewSequence* pSequence)   {}
 	virtual void OnSequenceRemoved(CTrackViewSequence* pSequence) {}
 };
@@ -78,4 +79,3 @@ private:
 	// Used to handle object attach/detach
 	std::unordered_map<CTrackViewNode*, Matrix34> m_prevTransforms;
 };
-

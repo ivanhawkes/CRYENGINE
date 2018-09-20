@@ -2,20 +2,23 @@
 
 #include "StdAfx.h"
 #include "GravityVolumeObject.h"
-#include "Viewport.h"
-#include "Util\Triangulate.h"
-#include "Material\Material.h"
-#include "LevelEditor/Tools/EditTool.h"
-#include "Objects/DisplayContext.h"
-#include "Objects/ObjectLoader.h"
-#include "Objects/InspectorWidgetCreator.h"
-#include "Util/MFCUtil.h"
-#include <Cry3DEngine/I3DEngine.h>
-#include "Serialization/Decorators/EditToolButton.h"
-#include "Gizmos/ITransformManipulator.h"
-#include "Gizmos/IGizmoManager.h"
 
-#include <Grid.h>
+#include "Material/Material.h"
+#include "Util/Triangulate.h"
+
+#include <Util/MFCUtil.h>
+
+#include <Gizmos/IGizmoManager.h>
+#include <Gizmos/ITransformManipulator.h>
+#include <LevelEditor/Tools/EditTool.h>
+#include <Objects/DisplayContext.h>
+#include <Objects/InspectorWidgetCreator.h>
+#include <Objects/ObjectLoader.h>
+#include <Preferences/SnappingPreferences.h>
+#include <Serialization/Decorators/EditToolButton.h>
+#include <Viewport.h>
+
+#include <Cry3DEngine/I3DEngine.h>
 
 class CEditGravityVolumeTool : public CEditTool, public ITransformManipulatorOwner
 {
@@ -58,10 +61,8 @@ private:
 	ITransformManipulator* m_pManipulator;
 };
 
-//////////////////////////////////////////////////////////////////////////
 IMPLEMENT_DYNCREATE(CEditGravityVolumeTool, CEditTool)
 
-//////////////////////////////////////////////////////////////////////////
 CEditGravityVolumeTool::CEditGravityVolumeTool()
 {
 	m_GravityVolume = 0;
@@ -75,7 +76,6 @@ CEditGravityVolumeTool::CEditGravityVolumeTool()
 	m_pManipulator->signalEndDrag.Connect(this, &CEditGravityVolumeTool::OnManipulatorEndDrag);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditGravityVolumeTool::SetUserData(const char* key, void* userData)
 {
 	m_GravityVolume = (CGravityVolumeObject*)userData;
@@ -91,7 +91,6 @@ void CEditGravityVolumeTool::SetUserData(const char* key, void* userData)
 	m_GravityVolume->SelectPoint(-1);
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEditGravityVolumeTool::~CEditGravityVolumeTool()
 {
 	if (m_GravityVolume)
@@ -195,7 +194,6 @@ bool CEditGravityVolumeTool::IsManipulatorVisible()
 	return m_GravityVolume->GetSelectedPoint() >= 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEditGravityVolumeTool::MouseCallback(CViewport* view, EMouseEvent event, CPoint& point, int flags)
 {
 	if (!m_GravityVolume)
@@ -357,12 +355,6 @@ bool CEditGravityVolumeTool::MouseCallback(CViewport* view, EMouseEvent event, C
 
 REGISTER_CLASS_DESC(CGravityVolumeObjectClassDesc);
 
-//////////////////////////////////////////////////////////////////////////
-// class CGravityVolume Sector
-
-//////////////////////////////////////////////////////////////////////////
-// CBase implementation.
-//////////////////////////////////////////////////////////////////////////
 IMPLEMENT_DYNCREATE(CGravityVolumeObject, CEntityObject)
 
 #define RAY_DISTANCE 100000.0f
@@ -387,7 +379,6 @@ CGravityVolumeObject::CGravityVolumeObject()
 	SetColor(ColorB(0, 204, 255));
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::Done()
 {
 	m_points.clear();
@@ -395,7 +386,6 @@ void CGravityVolumeObject::Done()
 	__super::Done();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CGravityVolumeObject::Init(CBaseObject* prev, const string& file)
 {
 	bool res = CEntityObject::Init(prev, file);
@@ -414,7 +404,6 @@ bool CGravityVolumeObject::Init(CBaseObject* prev, const string& file)
 	return res;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::InitVariables()
 {
 	if (m_pVarObject == nullptr)
@@ -431,7 +420,6 @@ void CGravityVolumeObject::InitVariables()
 	mv_step.SetLimits(0.1f, 1000.f);
 }
 
-//////////////////////////////////////////////////////////////////////////
 string CGravityVolumeObject::GetUniqueName() const
 {
 	char prefix[32];
@@ -439,7 +427,6 @@ string CGravityVolumeObject::GetUniqueName() const
 	return string(prefix) + GetName();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::CreateInspectorWidgets(CInspectorWidgetCreator& creator)
 {
 	CEntityObject::CreateInspectorWidgets(creator);
@@ -472,7 +459,6 @@ void CGravityVolumeObject::CreateInspectorWidgets(CInspectorWidgetCreator& creat
 	});
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::InvalidateTM(int nWhyFlags)
 {
 	__super::InvalidateTM(nWhyFlags);
@@ -480,7 +466,6 @@ void CGravityVolumeObject::InvalidateTM(int nWhyFlags)
 	//	CalcBBox();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::GetBoundBox(AABB& box)
 {
 	box.SetTransformedAABB(GetWorldTM(), m_bbox);
@@ -489,13 +474,11 @@ void CGravityVolumeObject::GetBoundBox(AABB& box)
 	box.max += Vec3(s, s, s);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::GetLocalBounds(AABB& box)
 {
 	box = m_bbox;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CGravityVolumeObject::HitTest(HitContext& hc)
 {
 	// First check if ray intersect our bounding box.
@@ -545,7 +528,6 @@ bool CGravityVolumeObject::HitTest(HitContext& hc)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 int CGravityVolumeObject::MouseCreateCallback(IDisplayViewport* view, EMouseEvent event, CPoint& point, int flags)
 {
 	if (event == eMouseMove || event == eMouseLDown || event == eMouseLDblClick)
@@ -602,7 +584,6 @@ int CGravityVolumeObject::MouseCreateCallback(IDisplayViewport* view, EMouseEven
 	return __super::MouseCreateCallback(view, event, point, flags);
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CGravityVolumeObject::GetBezierPos(CGravityVolumePointVector& points, int index, float t)
 {
 	return points[index].pos * ((1 - t) * (1 - t) * (1 - t)) +
@@ -611,7 +592,6 @@ Vec3 CGravityVolumeObject::GetBezierPos(CGravityVolumePointVector& points, int i
 	       points[index + 1].pos * (t * t * t);
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CGravityVolumeObject::GetSplinePos(CGravityVolumePointVector& points, int index, float t)
 {
 	int indprev = index - 1;
@@ -626,7 +606,6 @@ Vec3 CGravityVolumeObject::GetSplinePos(CGravityVolumePointVector& points, int i
 	return ((p0 + p2) / 2 - p1) * t * t + (p1 - p0) * t + (p0 + p1) / 2;
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CGravityVolumeObject::GetBezierNormal(int index, float t)
 {
 	float kof = 0.0f;
@@ -651,7 +630,6 @@ Vec3 CGravityVolumeObject::GetBezierNormal(int index, float t)
 	return n;
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CGravityVolumeObject::GetBezierSegmentLength(int index, float t)
 {
 	const Matrix34& wtm = GetWorldTM();
@@ -666,7 +644,6 @@ float CGravityVolumeObject::GetBezierSegmentLength(int index, float t)
 	return fRet;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::DrawBezierSpline(SDisplayContext& dc, CGravityVolumePointVector& points, COLORREF col, bool isDrawJoints, bool isDrawGravityVolume)
 {
 	const Matrix34& wtm = GetWorldTM();
@@ -757,8 +734,7 @@ void CGravityVolumeObject::DrawBezierSpline(SDisplayContext& dc, CGravityVolumeP
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
-void CGravityVolumeObject::Display(SDisplayContext& dc)
+void CGravityVolumeObject::Display(CObjectRenderHelper& objRenderHelper)
 {
 	//dc.renderer->EnableDepthTest(false);
 
@@ -773,6 +749,7 @@ void CGravityVolumeObject::Display(SDisplayContext& dc)
 		bPointSelected = true;
 	}
 
+	SDisplayContext& dc = objRenderHelper.GetDisplayContextRef();
 	if (m_points.size() > 1)
 	{
 		if ((IsSelected() || IsHighlighted()))
@@ -815,7 +792,6 @@ void CGravityVolumeObject::Display(SDisplayContext& dc)
 	DrawDefault(dc, CMFCUtils::ColorBToColorRef(GetColor()));
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::Serialize(CObjectArchive& ar)
 {
 	m_bIgnoreParamUpdate = true;
@@ -869,14 +845,12 @@ void CGravityVolumeObject::Serialize(CObjectArchive& ar)
 	m_bIgnoreParamUpdate = false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 XmlNodeRef CGravityVolumeObject::Export(const string& levelPath, XmlNodeRef& xmlNode)
 {
 	XmlNodeRef objNode = __super::Export(levelPath, xmlNode);
 	return objNode;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::CalcBBox()
 {
 	if (m_points.empty())
@@ -913,7 +887,6 @@ void CGravityVolumeObject::CalcBBox()
 	m_bbox.max += Vec3(mv_radius, mv_radius, mv_radius);
 }
 
-//////////////////////////////////////////////////////////////////////////
 int CGravityVolumeObject::InsertPoint(int index, const Vec3& point)
 {
 	if (GetPointCount() >= GetMaxPoints())
@@ -947,7 +920,6 @@ int CGravityVolumeObject::InsertPoint(int index, const Vec3& point)
 	return newindex;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::RemovePoint(int index)
 {
 	if ((index >= 0 || index < m_points.size()) && m_points.size() > 3)
@@ -966,7 +938,6 @@ void CGravityVolumeObject::RemovePoint(int index)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::SelectPoint(int index)
 {
 	if (m_selectedPoint == index)
@@ -974,7 +945,6 @@ void CGravityVolumeObject::SelectPoint(int index)
 	m_selectedPoint = index;
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CGravityVolumeObject::GetPointAngle()
 {
 	int index = m_selectedPoint;
@@ -983,7 +953,6 @@ float CGravityVolumeObject::GetPointAngle()
 	return 0.0f;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::SetPointAngle(float angle)
 {
 	int index = m_selectedPoint;
@@ -1024,7 +993,6 @@ void CGravityVolumeObject::PointDafaultWidthIs(bool isDefault)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::BezierAnglesCorrection(CGravityVolumePointVector& points, int index)
 {
 	int maxindex = points.size() - 1;
@@ -1087,7 +1055,6 @@ void CGravityVolumeObject::BezierAnglesCorrection(CGravityVolumePointVector& poi
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::SplinePointsCorrection(CGravityVolumePointVector& points, int index)
 {
 	int maxindex = points.size() - 1;
@@ -1150,7 +1117,6 @@ void CGravityVolumeObject::SplinePointsCorrection(CGravityVolumePointVector& poi
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::BezierCorrection(int index)
 {
 	BezierAnglesCorrection(m_points, index - 1);
@@ -1160,7 +1126,6 @@ void CGravityVolumeObject::BezierCorrection(int index)
 	BezierAnglesCorrection(m_points, index + 2);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::SplineCorrection(int index)
 {
 	/*
@@ -1172,7 +1137,6 @@ void CGravityVolumeObject::SplineCorrection(int index)
 	 */
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::SetPoint(int index, const Vec3& pos)
 {
 	Vec3 p = pos;
@@ -1191,7 +1155,6 @@ void CGravityVolumeObject::SetPoint(int index, const Vec3& pos)
 	UpdateGameArea();
 }
 
-//////////////////////////////////////////////////////////////////////////
 int CGravityVolumeObject::GetNearestPoint(const Vec3& raySrc, const Vec3& rayDir, float& distance)
 {
 	int index = -1;
@@ -1213,7 +1176,6 @@ int CGravityVolumeObject::GetNearestPoint(const Vec3& raySrc, const Vec3& rayDir
 	return index;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::GetNearestEdge(const Vec3& pos, int& p1, int& p2, float& distance, Vec3& intersectPoint)
 {
 	p1 = -1;
@@ -1249,7 +1211,6 @@ void CGravityVolumeObject::GetNearestEdge(const Vec3& pos, int& p1, int& p2, flo
 	distance = minDist;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CGravityVolumeObject::RayToLineDistance(const Vec3& rayLineP1, const Vec3& rayLineP2, const Vec3& pi, const Vec3& pj, float& distance, Vec3& intPnt)
 {
 	Vec3 pa, pb;
@@ -1276,7 +1237,6 @@ bool CGravityVolumeObject::RayToLineDistance(const Vec3& rayLineP1, const Vec3& 
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::GetNearestEdge(const Vec3& raySrc, const Vec3& rayDir, int& p1, int& p2, float& distance, Vec3& intersectPoint)
 {
 	p1 = -1;
@@ -1317,13 +1277,11 @@ void CGravityVolumeObject::GetNearestEdge(const Vec3& raySrc, const Vec3& rayDir
 	distance = minDist;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::OnParamChange(IVariable* var)
 {
 	UpdateGameArea();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CGravityVolumeObject::HitTestRect(HitContext& hc)
 {
 	//BBox box;
@@ -1371,7 +1329,6 @@ bool CGravityVolumeObject::CreateGameObject()
 	return bRes;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::UpdateGameArea()
 {
 	if (!m_pEntity)
@@ -1393,7 +1350,6 @@ void CGravityVolumeObject::UpdateGameArea()
 	m_pEntity->GetRenderInterface()->SetLocalBounds(box, true);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CGravityVolumeObject::OnEvent(ObjectEvent event)
 {
 	if (event == EVENT_INGAME)

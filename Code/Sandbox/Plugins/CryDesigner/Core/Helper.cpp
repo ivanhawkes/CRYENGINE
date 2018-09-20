@@ -2,24 +2,19 @@
 
 #include "StdAfx.h"
 #include "Helper.h"
-#include "Objects/DesignerObject.h"
-#include "Objects/PrefabObject.h"
-#include "Model.h"
-#include "Polygon.h"
-#include "BSPTree2D.h"
+
+#include "Core/BSPTree2D.h"
+#include "Core/PolygonDecomposer.h"
+#include "Core/UVIslandManager.h"
 #include "Objects/AreaSolidObject.h"
 #include "Objects/ClipVolumeObject.h"
-#include "DesignerEditor.h"
-#include "Viewport.h"
-#include "Core/PolygonDecomposer.h"
-#include "Util/ElementSet.h"
-#include "Core/UVIslandManager.h"
-#include "Core/SmoothingGroupManager.h"
-#include "Material/Material.h"
-#include "DesignerSession.h"
-#include "DesignerEditor.h"
+#include "Objects/DesignerObject.h"
 #include "Tools/AreaSolidTool.h"
 #include "Tools/ClipVolumeTool.h"
+
+#include <Material/Material.h>
+
+#include <Viewport.h>
 
 namespace Designer
 {
@@ -134,7 +129,7 @@ bool GenerateGameFilename(CBaseObject* pObj, string& outFileName)
 	return false;
 }
 
-bool GetRenderFlag(CBaseObject* pObj, int& outRenderFlag)
+bool GetRenderFlag(CBaseObject* pObj, uint64& outRenderFlag)
 {
 	if (pObj == NULL)
 		return false;
@@ -906,4 +901,3 @@ int AddVertex(std::vector<Vertex>& vertices, const Vertex& newVertex)
 	return vertices.size() - 1;
 }
 }
-

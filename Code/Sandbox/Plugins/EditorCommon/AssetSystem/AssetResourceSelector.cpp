@@ -27,6 +27,32 @@ namespace Private_AssetSelector
 		}
 	}
 
+	CAsset* FindAssetForFileAndContext(const SResourceSelectorContext& selectorContext, const char* value)
+	{
+		const CryPathString assetFile(PathUtil::ToUnixPath<CryPathString>(value));
+		CAssetManager* const pManager = CAssetManager::GetInstance();
+		CAsset* pAsset = pManager->FindAssetForFile(assetFile.c_str());
+
+		if (!pAsset)
+		{
+			CRY_ASSERT(selectorContext.resourceSelectorEntry && selectorContext.resourceSelectorEntry->IsAssetSelector());
+			const SStaticAssetSelectorEntry* selector = static_cast<const SStaticAssetSelectorEntry*>(selectorContext.resourceSelectorEntry);
+			const auto& assetTypes = selector->GetAssetTypes();
+
+			if (assetTypes.size() != 1)
+				return nullptr;
+
+			const CAssetType* const pType = assetTypes.front();
+			if (!pType)
+				return nullptr;
+
+			// value may points to source file (e.g. tif), try to find asset based on the asset type.
+			pAsset = pManager->FindAssetForFile(PathUtil::ReplaceExtension(assetFile.c_str(), pType->GetFileExtension()));
+		}
+
+		return pAsset;
+	}
+
 	dll_string SelectAssetLegacy(const SResourceSelectorContext& selectorContext, const char* previousValue)
 	{
 		CRY_ASSERT(selectorContext.resourceSelectorEntry->IsAssetSelector());
@@ -64,23 +90,10 @@ namespace Private_AssetSelector
 		const auto& assetTypes = selector->GetAssetTypes();
 
 		CAssetBrowserDialog dialog(selector->GetAssetTypeNames(), CAssetBrowserDialog::Mode::OpenSingleAsset, selectorContext.parentWidget);
+
 		if (previousValue)
 		{
-			const CryPathString assetFile(PathUtil::ToUnixPath<CryPathString>(previousValue));
-
-			CAssetManager* const pManager = CAssetManager::GetInstance();
-
-			const CAsset* pAsset = pManager->FindAssetForFile(assetFile.c_str());
-
-			// previousValue may points to source file (e.g. tif), try to find asset based on the asset type.
-			if (!pAsset && assetTypes.size() == 1)
-			{
-				const CAssetType* const pType = assetTypes.front();
-				if (pType)
-				{
-					pAsset = pManager->FindAssetForFile(PathUtil::ReplaceExtension(assetFile.c_str(), pType->GetFileExtension()));
-				}
-			}
+			const CAsset* pAsset = FindAssetForFileAndContext(selectorContext, previousValue);
 
 			if (pAsset)
 			{
@@ -88,7 +101,7 @@ namespace Private_AssetSelector
 			}
 		}
 
-		QObject::connect(&dialog, &CAssetBrowserDialog::SelectionChanged, [selectorContext](const QVector<CAsset*>& assets)
+		QObject::connect(&dialog, &CAssetBrowserDialog::SelectionChanged, [selectorContext](const std::vector<CAsset*>& assets)
 		{
 			CRY_ASSERT(assets.size() <= 1);
 			if (!assets.empty() && selectorContext.callback)
@@ -101,7 +114,7 @@ namespace Private_AssetSelector
 		{
 			if (CAsset* pSelectedAsset = dialog.GetSelectedAsset())
 			{
-				return pSelectedAsset->GetFile(0);
+				return pSelectedAsset->GetFile(0).c_str();
 			}
 		}
 
@@ -112,9 +125,10 @@ namespace Private_AssetSelector
 	{
 		if (value && *value)
 		{
-			CAsset* asset = CAssetManager::GetInstance()->FindAssetForFile(value);
-			if (asset)
-				return asset->Edit();
+			CAsset* pAsset = FindAssetForFileAndContext(selectorContext, value);
+
+			if (pAsset)
+				return pAsset->Edit();
 		}
 	}
 
@@ -131,7 +145,7 @@ namespace Private_AssetSelector
 
 		if (fileInfo.suffix().isEmpty())
 		{
-			//Try to autocomplete it
+			//Try to auto complete it
 			if (selector->GetAssetTypes().size() == 1)
 			{
 				assetPath += ".";
@@ -139,7 +153,7 @@ namespace Private_AssetSelector
 			}
 			else
 			{
-				//cannot autocomplete, invalid
+				//cannot auto complete, invalid
 				return previousValue;
 			}
 		}
@@ -267,7 +281,7 @@ dll_string SStaticAssetSelectorEntry::SelectFromAsset(const SResourceSelectorCon
 		}
 	}
 
-	QObject::connect(&dialog, &CAssetBrowserDialog::SelectionChanged, [&context](const QVector<CAsset*>& assets)
+	QObject::connect(&dialog, &CAssetBrowserDialog::SelectionChanged, [&context](const std::vector<CAsset*>& assets)
 	{
 		CRY_ASSERT(assets.size() <= 1);
 		if (!assets.empty() && context.callback)
@@ -280,7 +294,7 @@ dll_string SStaticAssetSelectorEntry::SelectFromAsset(const SResourceSelectorCon
 	{
 		if (CAsset* pSelectedAsset = dialog.GetSelectedAsset())
 		{
-			return pSelectedAsset->GetFile(0);
+			return pSelectedAsset->GetFile(0).c_str();
 		}
 	}
 

@@ -302,6 +302,7 @@ struct IStatInstGroup
 		nCastShadowMinSpec = 0;
 		bDynamicDistanceShadows = false;
 		bGIMode = true;
+		offlineProcedural = false;
 		bInstancing = true;
 		fSpriteDistRatio = 1.f;
 		fShadowDistRatio = 1.f;
@@ -328,6 +329,7 @@ struct IStatInstGroup
 		bUseTerrainColor = false;
 		fAlignToTerrainCoefficient = 0.f;
 		bAutoMerged = false;
+		bIgnoreTerrainLayerBlend = true;
 		minConfigSpec = (ESystemConfigSpec)0;
 		nTexturesAreStreamedIn = 0;
 		nPlayerHideable = ePlayerHideable_None;
@@ -343,6 +345,7 @@ struct IStatInstGroup
 	uint8                nCastShadowMinSpec;
 	bool                 bDynamicDistanceShadows;
 	bool                 bGIMode;
+	bool                 offlineProcedural;
 	bool                 bInstancing;
 	float                fSpriteDistRatio;
 	float                fLodDistRatio;
@@ -356,6 +359,7 @@ struct IStatInstGroup
 	bool                 bUseTerrainColor;
 	bool                 bAllowIndoor;
 	bool                 bAutoMerged;
+	bool                 bIgnoreTerrainLayerBlend;
 	float                fDensity;
 	float                fElevationMax;
 	float                fElevationMin;
@@ -386,7 +390,7 @@ struct IStatInstGroup
 	uint8 nTexturesAreStreamedIn;
 
 	//! Flags similar to entity render flags.
-	int m_dwRndFlags;
+	uint64 m_dwRndFlags;
 };
 //! \endcond
 
@@ -1370,6 +1374,9 @@ struct I3DEngine : public IProcess
 
 	//! Update all ShaderItems flags, only required after shaders were reloaded at runtime.
 	virtual void UpdateShaderItems() = 0;
+
+	//! Notifies all permanent objects to be invalidated.
+	virtual void ReleasePermanentObjectsRenderResources() = 0;
 
 	//! Deletes the 3D Engine instance.
 	virtual void Release() = 0;

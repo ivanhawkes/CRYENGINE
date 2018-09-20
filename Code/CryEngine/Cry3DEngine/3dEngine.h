@@ -4,6 +4,7 @@
 
 #include <CryThreading/CryThreadSafeRendererContainer.h>
 #include <CryCore/Containers/CryListenerSet.h>
+#include <CryThreading/IJobManager.h>
 #include "VisibleRenderNodeManager.h"
 #include "LightVolumeManager.h"
 
@@ -93,23 +94,6 @@ public:
 
 	uint8* m_pData;
 	int    m_nSize;
-};
-
-// Values to combine for phys area type selection
-enum EAreaPhysics
-{
-	Area_Water = BIT(0),
-	Area_Air   = BIT(1),
-	// Other physics media can be masked in as well
-
-	Area_Gravity = BIT(14),
-	Area_Other   = BIT(15),
-};
-
-struct SAreaChangeRecord
-{
-	AABB   boxAffected;         // Area of change
-	uint16 uPhysicsMask;        // Types of mediums for this area
 };
 
 struct SOptimizedOutdoorWindArea
@@ -685,6 +669,8 @@ public:
 
 	void                   SetRecomputeCachedShadows(IRenderNode* pNode, uint updateStrategy);
 
+	virtual void           ReleasePermanentObjectsRenderResources();
+
 public:
 	C3DEngine(ISystem* pSystem);
 	~C3DEngine();
@@ -839,6 +825,7 @@ public:
 	float                 m_dayNightIndicator;
 	bool                  m_bHeightMapAoEnabled;
 	bool                  m_bIntegrateObjectsIntoTerrain;
+	bool                  m_supportOfflineProceduralVegetation = false;
 
 	Vec3                  m_fogColor2;
 	Vec3                  m_fogColorRadial;

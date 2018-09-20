@@ -15,7 +15,7 @@
 #include <CryCore/Containers/VectorMap.h>
 
 #include <CryAISystem/NavigationSystem/MNMNavMesh.h>
-#include <CryAISystem/NavigationSystem/INavigationQuery.h>
+#include <CryAISystem/NavigationSystem/INavMeshQuery.h>
 
 class OffMeshNavigationManager;
 
@@ -155,7 +155,7 @@ public:
 	size_t     GetTriangles(aabb_t localAabb, TriangleID* triangles, size_t maxTriCount, const INavMeshQueryFilter* pFilter, float minIslandArea = 0.f) const;
 	TriangleID GetTriangleAt(const vector3_t& localPosition, const real_t verticalDownwardRange, const real_t verticalUpwardRange, const INavMeshQueryFilter* pFilter, float minIslandArea = 0.f) const;
 	TriangleID GetClosestTriangle(const vector3_t& localPosition, real_t vrange, real_t hrange, const INavMeshQueryFilter* pFilter, real_t* distance = nullptr, vector3_t* closest = nullptr, float minIslandArea = 0.f) const;
-	TriangleID GetClosestTriangle(const vector3_t& localPosition, const aabb_t& aroundPositionAABB, const INavMeshQueryFilter* pFilter, real_t* distance = nullptr, vector3_t* closest = nullptr, float minIslandArea = 0.f) const;
+	TriangleID GetClosestTriangle(const vector3_t& localPosition, const aabb_t& aroundPositionAABB, const INavMeshQueryFilter* pFilter, real_t* distance = nullptr, vector3_t* closest = nullptr, const real_t maxDistance = real_t::max(), const float minIslandArea = 0.f) const;
 
 	bool IsTriangleAcceptableForLocation(const vector3_t& localPosition, TriangleID triangleID) const;
 
@@ -194,16 +194,6 @@ public:
 		size_t     edge;
 	};
 
-	enum ERayCastResult
-	{
-		eRayCastResult_NoHit = 0,
-		eRayCastResult_Hit,
-		eRayCastResult_RayTooLong,
-		eRayCastResult_Unacceptable,
-		eRayCastResult_InvalidStart,
-		eRayCastResult_InvalidEnd,
-	};
-
 	/*
 	 ********************************************************************************************
 	   RayCastRequestBase holds the actual request information needed to perform a RayCast request.
@@ -220,7 +210,7 @@ public:
 			: maxWayTriCount(_maxWayTriCount)
 			, way(NULL)
 			, wayTriCount(0)
-			, result(ERayCastResult::eRayCastResult_NoHit)
+			, result(ERayCastResult::NoHit)
 		{}
 
 	public:
@@ -253,7 +243,7 @@ public:
 	ERayCastResult RayCast_v2(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, TriangleID toTriangleID, RaycastRequestBase& wayRequest) const;
 	
 	template<typename TFilter>
-	ERayCastResult RayCast_v3(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, const TFilter& filter, RaycastRequestBase& wayRequest) const;
+	ERayCastResult RayCast_v3(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, TriangleID toTriangleID, const TFilter& filter, RaycastRequestBase& wayRequest) const;
 
 	TileID         SetTile(size_t x, size_t y, size_t z, STile& tile);
 	void           ClearTile(TileID tileID, bool clearNetwork = true);
@@ -325,7 +315,8 @@ public:
 	TileID GetNeighbourTileID(const TileID tileId, size_t side) const;
 
 	void SetTrianglesAnnotation(const MNM::TriangleID* pTrianglesArray, const size_t trianglesCount, const MNM::AreaAnnotation areaAnnotation, std::vector<TileID>& affectedTiles);
-	bool SnapPosition(const vector3_t& localPosition, const SSnapToNavMeshRulesInfo& snappingRules, const INavMeshQueryFilter* pFilter, vector3_t& snappedLocalPosition, MNM::TriangleID* pTriangleId) const;
+	bool SnapPosition(const vector3_t& localPosition, const SOrderedSnappingMetrics& snappingMetrics, const INavMeshQueryFilter* pFilter, vector3_t* pSnappedLocalPosition, MNM::TriangleID* pTriangleId) const;
+	bool SnapPosition(const vector3_t& localPosition, const MNM::SSnappingMetric& snappingMetric, const INavMeshQueryFilter* pFilter, vector3_t* pSnappedLocalPosition, MNM::TriangleID* pTriangleId) const;
 
 	// MNM::INavMesh
 	virtual void       GetMeshParams(NavMesh::SParams& outParams) const override;

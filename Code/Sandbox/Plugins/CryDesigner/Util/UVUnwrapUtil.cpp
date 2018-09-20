@@ -2,9 +2,8 @@
 
 #include "StdAfx.h"
 #include "UVUnwrapUtil.h"
-#include "Core/Model.h"
-#include "Util/ElementSet.h"
-#include "DesignerEditor.h"
+
+#include "Core/Helper.h"
 #include "DesignerSession.h"
 
 namespace Designer {
@@ -413,4 +412,3 @@ void MakeUVIslandsFromSelectedElements(std::vector<UVIslandPtr>& outUVIslands)
 }
 }
 }
-

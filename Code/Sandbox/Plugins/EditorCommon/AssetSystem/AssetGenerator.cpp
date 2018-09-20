@@ -75,6 +75,12 @@ void CAssetGenerator::OnFileChange(const char* szFilename, EChangeType changeTyp
 		return;
 	}
 
+	// Ignore auto backup folders.
+	if (strstr(szFilename, "/_autobackup/"))
+	{
+		return;
+	}
+
 	// Refresh cryasset files for the following types even if exists. 
 	// These asset types do not have true asset editors to update cryasset files.
 	static const char* const update[] = { "mtl", "cdf" };
@@ -90,7 +96,7 @@ void CAssetGenerator::OnFileChange(const char* szFilename, EChangeType changeTyp
 	m_fileQueue.ProcessItemUniqueAsync(filePath, [this, updateExisting](const string& path)
 	{
 		// It can be that the file is still being opened for writing.
-		if (m_waitForTextureCompiler || IsFileOpened(path))
+		if (m_pTextureCompilerProgress || IsFileOpened(path))
 		{
 			// Try again
 			return false;
@@ -218,28 +224,20 @@ void CAssetGenerator::OnCompilationQueueTriggered(int nPending)
 {
 	std::unique_lock<std::mutex> lock(m_textureCompilerMutex);
 
-	if (!m_waitForTextureCompiler)
+	if (!m_pTextureCompilerProgress)
 	{
 		m_pTextureCompilerProgress.reset(new CProgressNotification(QObject::tr("Compiling textures"), QString()));
 	}
-
-	++m_waitForTextureCompiler;
 }
 
 void CAssetGenerator::OnCompilationQueueDepleted()
 {
 	std::unique_lock<std::mutex> lock(m_textureCompilerMutex);
 
-	if (m_waitForTextureCompiler > 0)
-	{
-		--m_waitForTextureCompiler;
-	}
-	
-	if (!m_waitForTextureCompiler)
+	if (m_pTextureCompilerProgress)
 	{
 		m_pTextureCompilerProgress.reset();
 	}
-
 }
 
 }

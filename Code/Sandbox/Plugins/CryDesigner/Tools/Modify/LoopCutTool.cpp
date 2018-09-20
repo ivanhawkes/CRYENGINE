@@ -2,13 +2,13 @@
 
 #include "StdAfx.h"
 #include "LoopCutTool.h"
-#include "Util/ElementSet.h"
+
 #include "Core/Model.h"
 #include "Tools/Select/LoopSelectionTool.h"
-#include "ViewManager.h"
 #include "Util/HeightManipulator.h"
 #include "DesignerEditor.h"
-#include "Objects/DisplayContext.h"
+
+#include <Viewport.h>
 
 namespace Designer
 {
@@ -357,4 +357,3 @@ void LoopCutTool::FreezeLoops()
 
 REGISTER_DESIGNER_TOOL_WITH_PROPERTYTREE_PANEL_AND_COMMAND(eDesigner_LoopCut, eToolGroup_Modify, "LoopCut", LoopCutTool,
                                                            loopcut, "runs loopcut tool", "designer.loopcut");
-

@@ -9,7 +9,6 @@
 #include <CryAudioImplFmod/GlobalData.h>
 #include <CrySystem/File/CryFile.h>
 #include <CrySystem/ISystem.h>
-#include <CrySystem/ILocalizationManager.h>
 
 namespace ACE
 {
@@ -30,26 +29,26 @@ string const g_vcasPath = "/metadata/vca/";
 string const g_bankPath = "/metadata/bank/";
 
 //////////////////////////////////////////////////////////////////////////
-CProjectLoader::CProjectLoader(string const& projectPath, string const& soundbanksPath, CItem& rootItem, ItemCache& itemCache, CImpl const& impl)
+void AddNonStreamsBank(AssetNames& banks, string const& fileName)
+{
+	size_t const pos = fileName.rfind(".streams.bank");
+
+	if (pos == string::npos)
+	{
+		banks.emplace_back(fileName);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+CProjectLoader::CProjectLoader(string const& projectPath, string const& banksPath, string const& localizedBanksPath, CItem& rootItem, ItemCache& itemCache, CImpl const& impl)
 	: m_rootItem(rootItem)
 	, m_itemCache(itemCache)
 	, m_projectPath(projectPath)
 	, m_impl(impl)
 {
 	CItem* const pSoundBanksFolder = CreateItem(s_soundBanksFolderName, EItemType::EditorFolder, &m_rootItem, EItemFlags::IsContainer);
-	LoadBanks(soundbanksPath, false, *pSoundBanksFolder);
-
-	char const* const szLanguage = gEnv->pSystem->GetLocalizationManager()->GetLanguage();
-	string const locaFolder =
-		PathUtil::GetLocalizationFolder() +
-		"/" +
-		szLanguage +
-		"/" AUDIO_SYSTEM_DATA_ROOT "/" +
-		CryAudio::Impl::Fmod::s_szImplFolderName +
-		"/" +
-		CryAudio::s_szAssetsFolderName;
-
-	LoadBanks(locaFolder, true, *pSoundBanksFolder);
+	LoadBanks(banksPath, false, *pSoundBanksFolder);
+	LoadBanks(localizedBanksPath, true, *pSoundBanksFolder);
 
 	CItem* const pEventsFolder = CreateItem(s_eventsFolderName, EItemType::EditorFolder, &m_rootItem, EItemFlags::IsContainer);
 	CItem* const pParametersFolder = CreateItem(s_parametersFolderName, EItemType::EditorFolder, &m_rootItem, EItemFlags::IsContainer);
@@ -104,39 +103,39 @@ void CProjectLoader::LoadBanks(string const& folderPath, bool const isLocalized,
 
 		do
 		{
-			string const filename = fd.name;
+			string const fileName = fd.name;
 
-			if ((filename != ".") && (filename != "..") && !filename.empty())
+			if ((fileName != ".") && (fileName != "..") && !fileName.empty())
 			{
 				if (isLocalized)
 				{
-					banks.emplace_back(filename);
+					AddNonStreamsBank(banks, fileName);
 				}
 				else
 				{
-					int const pos = filename.rfind(".strings.bank");
+					size_t const pos = fileName.rfind(".strings.bank");
 
 					if (pos != string::npos)
 					{
-						masterBankName = filename.substr(0, pos);
+						masterBankName = fileName.substr(0, pos);
 					}
 					else
 					{
-						banks.emplace_back(filename);
+						AddNonStreamsBank(banks, fileName);
 					}
 				}
 			}
 		}
 		while (pCryPak->FindNext(handle, &fd) >= 0);
 
-		for (string const& filename : banks)
+		for (string const& bankName : banks)
 		{
-			if (isLocalized || (filename.compareNoCase(0, masterBankName.length(), masterBankName) != 0))
+			if (isLocalized || (bankName.compareNoCase(0, masterBankName.length(), masterBankName) != 0))
 			{
-				string const filePath = folderPath + "/" + filename;
+				string const filePath = folderPath + "/" + bankName;
 				EPakStatus const pakStatus = pCryPak->IsFileExist(filePath.c_str(), ICryPak::eFileLocation_OnDisk) ? EPakStatus::OnDisk : EPakStatus::None;
 
-				CreateItem(filename, EItemType::Bank, &parent, flags, pakStatus, filePath);
+				CreateItem(bankName, EItemType::Bank, &parent, flags, pakStatus, filePath);
 			}
 		}
 
@@ -619,11 +618,6 @@ CItem* CProjectLoader::CreateItem(
 	{
 		pItem = new CItem(name, id, type, flags, pakStatus, filePath);
 
-		if (type == EItemType::MixerGroup)
-		{
-			m_emptyMixerGroups.push_back(pItem);
-		}
-
 		if (pParent != nullptr)
 		{
 			pParent->AddChild(pItem);
@@ -631,6 +625,15 @@ CItem* CProjectLoader::CreateItem(
 		else
 		{
 			m_rootItem.AddChild(pItem);
+		}
+
+		if (type == EItemType::Event)
+		{
+			pItem->SetPathName(Utils::GetPathName(pItem, m_rootItem));
+		}
+		else if (type == EItemType::MixerGroup)
+		{
+			m_emptyMixerGroups.push_back(pItem);
 		}
 
 		m_itemCache[id] = pItem;

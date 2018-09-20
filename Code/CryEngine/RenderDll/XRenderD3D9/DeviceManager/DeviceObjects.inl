@@ -211,3 +211,45 @@ inline void EraseExpiredEntriesFromCache(TCache& cache)
 			std::next(it);
 	}
 }
+
+template<typename TCache>
+inline void EraseExpiredEntriesFromCache(TCache& cache, int currentFrame, int eraseBeforeFrame)
+{
+	for (auto it = cache.begin(); it != cache.end(); )
+	{
+		auto  itCurrent   = it++;
+		auto& pCacheEntry = itCurrent->second;
+
+		if (pCacheEntry.use_count() == 1)
+		{
+			if (pCacheEntry->GetLastUseFrame() < eraseBeforeFrame)
+				cache.erase(itCurrent);
+		}
+		else
+		{
+			pCacheEntry->SetLastUseFrame(currentFrame);
+		}
+	}
+}
+
+inline void CDeviceObjectFactory::OnEndFrame(int frameID)
+{
+	// Garbage collect native API resources and objects
+#if (CRY_RENDERER_DIRECT3D >= 110) && (CRY_RENDERER_DIRECT3D < 120)
+	m_pDX11Scheduler->EndOfFrame(false);
+
+#if CRY_PLATFORM_DURANGO
+	m_texturePool.RT_Tick();
+#endif
+#endif
+
+	// Garbage collect device layer resources and objects
+	TrimPipelineStates(frameID, frameID - UnusedPsoKeepAliveFrames);
+}
+
+inline void CDeviceObjectFactory::OnBeginFrame(int frameID)
+{
+#if CRY_RENDERER_VULKAN
+	UpdateDeferredUploads();
+#endif
+}

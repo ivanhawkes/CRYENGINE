@@ -21,7 +21,7 @@
 #include <CryPhysics/AgePriorityQueue.h>
 #include <CryAISystem/INavigationSystem.h>
 #include <CryAISystem/IPathfinder.h>
-#include <CryAISystem/NavigationSystem/INavigationQuery.h>
+#include <CryAISystem/NavigationSystem/INavMeshQuery.h>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -62,6 +62,12 @@ struct QueuedRequest
 			{
 				pFilter->Release();
 			});
+		}
+
+		// Create default snapping metrics if none are provided
+		if (requestParams.snappingMetrics.metricsArray.empty())
+		{
+			requestParams.snappingMetrics.CreateDefault();
 		}
 		
 		SetupDangerousLocationsData();

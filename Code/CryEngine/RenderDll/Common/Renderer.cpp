@@ -161,6 +161,7 @@ void CRenderer::InitRenderer()
 	m_bDeferredRainOcclusionEnabled = false;
 	m_bDeferredSnowEnabled = false;
 
+	m_bAllowTerrainLayerBlending = 0;
 	m_nDisableTemporalEffects = 0;
 
 	m_ReqViewportScale = m_CurViewportScale = m_PrevViewportScale = Vec2(1, 1);
@@ -915,7 +916,7 @@ bool CRenderer::WriteDDS(const byte* dat, int wdt, int hgt, int Size, const char
 	bool bMips = false;
 	if (NumMips != 1)
 		bMips = true;
-	int nDxtSize;
+	uint32 nDxtSize;
 	const byte* dst = CTexture::Convert(dat, wdt, hgt, NumMips, eTF_R8G8B8A8, eFDst, NumMips, nDxtSize, true);
 	if (dst)
 	{
@@ -958,7 +959,7 @@ IShader* CRenderer::EF_LoadShader (const char* name, int flags, uint64 nMaskGen)
 
 void CRenderer::EF_SetShaderQuality(EShaderType eST, EShaderQuality eSQ)
 {
-	ExecuteRenderThreadCommand( [=]{ this->m_cEF.RT_SetShaderQuality(eST, eSQ); }, ERenderCommandFlags::None );
+	ExecuteRenderThreadCommand( [=]{ this->m_cEF.RT_SetShaderQuality(eST, eSQ); }, ERenderCommandFlags::FlushAndWait );
 
 	if (gEnv->p3DEngine)
 		gEnv->p3DEngine->GetMaterialManager()->RefreshMaterialRuntime();
@@ -1048,7 +1049,7 @@ bool CRenderer::EF_ReloadFile (const char* szFileName)
 	{
 		gRenDev->m_cEF.m_Bin.InvalidateCache();
 		// This is a temporary fix so that shaders would reload during hot update.
-		bool bRet = gRenDev->m_cEF.mfReloadAllShaders(FRO_SHADERS, 0);
+		bool bRet = gRenDev->m_cEF.mfReloadAllShaders(FRO_SHADERS, 0, gRenDev->GetMainFrameID());
 		if (gEnv && gEnv->p3DEngine)
 			gEnv->p3DEngine->UpdateShaderItems();
 		return bRet;
@@ -1104,7 +1105,7 @@ _smart_ptr<IImageFile> CRenderer::EF_LoadImage(const char* szFileName, uint32 nF
 	return CImageFile::mfLoad_file(szFileName, nFlags);
 }
 
-DynArray<uint16_t> CRenderer::EF_RenderEnvironmentCubeHDR (std::size_t size, const Vec3& Pos)
+DynArray<uint16_t> CRenderer::EF_RenderEnvironmentCubeHDR(int size, const Vec3& Pos)
 {
 	return CTexture::RenderEnvironmentCMHDR(size, Pos);
 }
@@ -1223,7 +1224,6 @@ void CRenderer::EF_StartEf (const SRenderingPassInfo& passInfo)
 
 	ASSERT_IS_MAIN_THREAD(m_pRT)
 	int nThreadID = passInfo.ThreadID();
-	assert(nThreadID == SRenderThread::GetLocalThreadCommandBufferId());
 	int nR = passInfo.GetRecursiveLevel();
 	assert(nR < 2);
 	if (!passInfo.IsRecursivePass())
@@ -1929,7 +1929,7 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 
 	case EFQ_TexturesPoolSize:
 	{
-		uint32 streamPoolSize = (uint32)(CRenderer::GetTexturesStreamPoolSize() * 1024 * 1024);
+		size_t streamPoolSize = CRenderer::GetTexturesStreamPoolSize() * 1024 * 1024;
 		WriteQueryResult(pInOut0, nInOutSize0, streamPoolSize);
 	}
 	break;
@@ -1942,7 +1942,7 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 
 	case EFQ_HDRModeEnabled:
 	{
-		WriteQueryResult(pInOut0, nInOutSize0, static_cast<bool>(IsHDRModeEnabled() ? 1 : 0));
+		WriteQueryResult(pInOut0, nInOutSize0, true);
 	}
 	break;
 
@@ -2069,11 +2069,11 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 		{
 #if CRY_PLATFORM_DURANGO && (CRY_RENDERER_DIRECT3D >= 110) && (CRY_RENDERER_DIRECT3D < 120)
 			IDefragAllocatorStats allocStats = GetDeviceObjectFactory().GetTexturePoolStats();
-			stats->nCurrentPoolSize = allocStats.nInUseSize;
+			stats->nCurrentPoolSize         = allocStats.nInUseSize;
 #else
-			stats->nCurrentPoolSize = CTexture::s_pPoolMgr->GetReservedSize();      // s_nStatsStreamPoolInUseMem;
+			stats->nCurrentPoolSize         = CTexture::s_pPoolMgr->GetReservedSize();      // s_nStatsStreamPoolInUseMem;
 #endif
-			stats->nStreamedTexturesSize = CTexture::s_nStatsStreamPoolInUseMem;
+			stats->nStreamedTexturesSize    = CTexture::s_nStatsStreamPoolInUseMem;
 
 			stats->nStaticTexturesSize      = CTexture::s_nStatsCurManagedNonStreamedTexMem;
 			stats->nNumStreamingRequests    = CTexture::s_nNumStreamingRequests;
@@ -2093,7 +2093,7 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 			  : 0.0f;
 #endif
 
-			if (stats->bComputeReuquiredTexturesPerFrame)
+			if (stats->bComputeRequiredTexturesPerFrame)
 			{
 				stats->nRequiredStreamedTexturesCount = 0;
 				stats->nRequiredStreamedTexturesSize  = 0;
@@ -2123,7 +2123,7 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 						int nMips = tp->GetNumMips();
 						nCurMip = min(nCurMip, nPersMip);
 
-						int nTexSize = tp->StreamComputeSysDataSize(nCurMip);
+						uint32 nTexSize = tp->StreamComputeSysDataSize(nCurMip);
 
 						stats->nRequiredStreamedTexturesSize += nTexSize;
 						++stats->nRequiredStreamedTexturesCount;
@@ -2133,8 +2133,10 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 
 			stats->bPoolOverflow            = CTexture::s_pTextureStreamer->IsOverflowing();
 			stats->bPoolOverflowTotally     = CTexture::s_bOutOfMemoryTotally;
+
 			CTexture::s_bOutOfMemoryTotally = 0;
 		}
+
 		if (pInOut1)
 			WriteQueryResult(pInOut1, nInOutSize1, static_cast<bool>(CTexture::s_nStreamingTotalTime > 0.f && stats != NULL));
 	}
@@ -2558,6 +2560,7 @@ static float LinearToGamma(float x)
 
 #include <squish-ccr/squish.h>
 #include <squish-ccr/squish.inl>
+#include <CryCore/Assert/CryAssert.h> // Ensure assert is redefined as CRY_ASSERT
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -2905,8 +2908,6 @@ bool CRenderer::DXTCompress(const byte* sourceData, int width, int height, ETEX_
 		return false;
 	if (bGenMips)
 		return false;
-	if (CV_r_TextureCompressor == 0)
-		return false;
 
 #if CRY_PLATFORM_WINDOWS
 	if (IsBadReadPtr(sourceData, width * height * nSrcBytesPerPix))
@@ -3175,7 +3176,7 @@ const char* CRenderer::GetTextureFormatName(ETEX_Format eTF)
 	return CTexture::NameForTextureFormat(eTF);
 }
 
-int CRenderer::GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF)
+uint32 CRenderer::GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF)
 {
 	return CTexture::TextureDataSize(nWidth, nHeight, nDepth, nMips, 1, eTF);
 }
@@ -3756,7 +3757,7 @@ void CRenderer::GetBandwidthStats(float* fBandwidthRequested)
 #if !defined (_RELEASE) || defined(ENABLE_STATOSCOPE_RELEASE)
 	if (fBandwidthRequested)
 	{
-		*fBandwidthRequested = (CTexture::s_nBytesSubmittedToStreaming + CTexture::s_nBytesRequiredNotSubmitted) / 1024.0f;
+		*fBandwidthRequested = (CTexture::s_nBytesSubmittedToStreaming) / 1024.0f;
 	}
 #endif
 }
@@ -3843,7 +3844,7 @@ void CRenderer::UpdateRenderingModesInfo()
 		return;
 	}
 
-	m_nNightVisionMode = ((pNightVision->IsActive() && (CV_r_NightVision == 2)) || ((CV_r_NightVision == 3) && gRenDev->IsHDRModeEnabled()));             // check only for HDR version
+	m_nNightVisionMode = (pNightVision->IsActive() && (CV_r_NightVision == 2)) || ((CV_r_NightVision == 3));
 
 	if (!m_nNightVisionMode && pThermalVision->GetTransitionEffectState())
 		m_nThermalVisionMode = 0;
@@ -4151,10 +4152,15 @@ void CRenderer::EF_EnqueueComputeSkinningData(IRenderView* pRenderView, SSkinnin
 
 size_t CRenderer::GetTexturesStreamPoolSize()
 {
-	size_t poolSize = CV_r_TexturesStreamPoolSize + CV_r_TexturesStreamPoolSecondarySize;
-	return gEnv->IsEditor()
-		   ? max(poolSize, static_cast<size_t>(512))
-		   : poolSize;
+	if (CRenderer::CV_r_TexturesStreamPoolSize >= 0)
+		return CV_r_TexturesStreamPoolSize;
+
+	const size_t totalUsableMemory = gcpRendD3D->m_MaxTextureMemory * 7 / 8;
+	const size_t totalUsedMemory = size_t(2.5f * 1014 * 1024); // Best guess: 2GB allocations in targets and buffers etc. pp.
+	const size_t totalStreamMemory = CTexture::s_pPoolMgr->GetInUseSize();
+	const size_t totalAvailableMemory = totalUsableMemory - totalUsedMemory;
+
+	return std::max<size_t>(totalStreamMemory + totalAvailableMemory, 192ULL);
 }
 
 void CRenderer::ClearSkinningDataPool()
@@ -4255,6 +4261,17 @@ bool CRenderer::LoadShaderStartupCache()
 void CRenderer::UnloadShaderStartupCache()
 {
 	m_cEF.UnloadShaderStartupCache();
+}
+
+void CRenderer::ClearShaderPipelineStateCache()
+{
+	for (auto pShaderResources : CShader::s_ShaderResources_known)
+	{
+		if (pShaderResources)
+		{
+			pShaderResources->ClearPipelineStateCache();
+		}
+	}
 }
 
 void CRenderer::FlushPendingTextureTasks()

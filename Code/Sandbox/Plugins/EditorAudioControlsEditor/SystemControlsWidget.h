@@ -86,6 +86,7 @@ private:
 	QAction*                          m_pCreateStateAction;
 	QAction*                          m_pCreateEnvironmentAction;
 	QAction*                          m_pCreatePreloadAction;
+	QAction*                          m_pCreateSettingAction;
 
 	bool                              m_isReloading;
 	bool                              m_isCreatedFromMenu;
@@ -93,4 +94,3 @@ private:
 	int const                         m_nameColumn;
 };
 } // namespace ACE
-

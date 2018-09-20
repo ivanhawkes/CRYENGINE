@@ -44,25 +44,12 @@ static constexpr uint16 MaxMiscStringLength = 512;
 static constexpr uint32 InvalidCRC32 = 0xFFFFffff;
 static constexpr float FloatEpsilon = 1.0e-3f;
 
-static constexpr char const* s_szRelativeVelocityTrackingSwitchName = "relative_velocity_tracking";
-static constexpr char const* s_szRelativeVelocityParameterName = "relative_velocity";
-static constexpr char const* s_szAbsoluteVelocityTrackingSwitchName = "absolute_velocity_tracking";
-static constexpr char const* s_szAbsoluteVelocityParameterName = "absolute_velocity";
 static constexpr char const* s_szLoseFocusTriggerName = "lose_focus";
 static constexpr char const* s_szGetFocusTriggerName = "get_focus";
 static constexpr char const* s_szMuteAllTriggerName = "mute_all";
 static constexpr char const* s_szUnmuteAllTriggerName = "unmute_all";
 static constexpr char const* s_szPauseAllTriggerName = "pause_all";
 static constexpr char const* s_szResumeAllTriggerName = "resume_all";
-static constexpr char const* s_szDoNothingTriggerName = "do_nothing";
-static constexpr char const* s_szOcclCalcSwitchName = "occlusion_calculation_type";
-static constexpr char const* s_szIgnoreStateName = "ignore";
-static constexpr char const* s_szAdaptiveStateName = "adaptive";
-static constexpr char const* s_szLowStateName = "low";
-static constexpr char const* s_szMediumStateName = "medium";
-static constexpr char const* s_szHighStateName = "high";
-static constexpr char const* s_szOnStateName = "on";
-static constexpr char const* s_szOffStateName = "off";
 static constexpr char const* s_szGlobalPreloadRequestName = "global_audio_system_preload";
 
 static constexpr char const* s_szDefaultLibraryName = "default_controls";
@@ -73,6 +60,7 @@ static constexpr char const* s_szParametersNodeTag = "Parameters";
 static constexpr char const* s_szSwitchesNodeTag = "Switches";
 static constexpr char const* s_szPreloadsNodeTag = "Preloads";
 static constexpr char const* s_szEnvironmentsNodeTag = "Environments";
+static constexpr char const* s_szSettingsNodeTag = "Settings";
 
 static constexpr char const* s_szTriggerTag = "Trigger";
 static constexpr char const* s_szParameterTag = "Parameter";
@@ -80,13 +68,13 @@ static constexpr char const* s_szSwitchTag = "Switch";
 static constexpr char const* s_szStateTag = "State";
 static constexpr char const* s_szEnvironmentTag = "Environment";
 static constexpr char const* s_szPreloadRequestTag = "PreloadRequest";
+static constexpr char const* s_szSettingTag = "Setting";
 static constexpr char const* s_szPlatformTag = "Platform";
 static constexpr char const* s_szEventTag = "Event";
 
 static constexpr char const* s_szNameAttribute = "name";
 static constexpr char const* s_szVersionAttribute = "version";
 static constexpr char const* s_szTypeAttribute = "type";
-static constexpr char const* s_szRadiusAttribute = "radius";
 
 static constexpr char const* s_szDataLoadType = "autoload";
 
@@ -104,17 +92,6 @@ static constexpr IdType StringToId(char const* const szSource)
 	return static_cast<IdType>(CCrc32::ComputeLowercase_CompileTime(szSource));
 }
 
-static constexpr ControlId RelativeVelocityTrackingSwitchId = StringToId(s_szRelativeVelocityTrackingSwitchName);
-static constexpr ControlId AbsoluteVelocityTrackingSwitchId = StringToId(s_szAbsoluteVelocityTrackingSwitchName);
-static constexpr ControlId DoNothingTriggerId = StringToId(s_szDoNothingTriggerName);
-static constexpr ControlId OcclusionCalcSwitchId = StringToId(s_szOcclCalcSwitchName);
-static constexpr SwitchStateId IgnoreStateId = StringToId(s_szIgnoreStateName);
-static constexpr SwitchStateId AdaptiveStateId = StringToId(s_szAdaptiveStateName);
-static constexpr SwitchStateId LowStateId = StringToId(s_szLowStateName);
-static constexpr SwitchStateId MediumStateId = StringToId(s_szMediumStateName);
-static constexpr SwitchStateId HighStateId = StringToId(s_szHighStateName);
-static constexpr SwitchStateId OnStateId = StringToId(s_szOnStateName);
-static constexpr SwitchStateId OffStateId = StringToId(s_szOffStateName);
 static constexpr PreloadRequestId GlobalPreloadRequestId = StringToId(s_szGlobalPreloadRequestName);
 static constexpr LibraryId DefaultLibraryId = StringToId(s_szDefaultLibraryName);
 
@@ -176,20 +153,43 @@ enum class ERequestResult : EnumFlagsType
 	Failure, /**< Set if the request failed to process. */
 };
 
+/**
+ * @enum CryAudio::EOcclusionType
+ * @brief A strongly typed enum class representing different audio occlusion types that can be set on audio objects.
+ * @var CryAudio::EOcclusionType::None
+ * @var CryAudio::EOcclusionType::Ignore
+ * @var CryAudio::EOcclusionType::Adaptive
+ * @var CryAudio::EOcclusionType::Low
+ * @var CryAudio::EOcclusionType::Medium
+ * @var CryAudio::EOcclusionType::High
+ * @var CryAudio::EOcclusionType::Count
+ */
+enum class EOcclusionType : EnumFlagsType
+{
+	None,     /**< Used to initialize variables of this type and to determine whether the variable was properly handled. */
+	Ignore,   /**< The audio object does not calculate occlusion against level geometry. */
+	Adaptive, /**< The audio object switches between occlusion types depending on its distance to the audio listener. */
+	Low,      /**< The audio object uses a coarse grained occlusion plane for calculation. */
+	Medium,   /**< The audio object uses a medium grained occlusion plane for calculation. */
+	High,     /**< The audio object uses a fine grained occlusion plane for calculation. */
+	Count,    /**< Used to initialize arrays to this size. */
+};
+CRY_CREATE_ENUM_FLAG_OPERATORS(EOcclusionType);
+
 class CObjectTransformation
 {
 public:
 
 	CObjectTransformation()
-		: m_position(Vec3Constants<float>::fVec3_Zero)
-		, m_forward(Vec3Constants<float>::fVec3_OneY)
-		, m_up(Vec3Constants<float>::fVec3_OneZ)
+		: m_position(0.0f, 0.0f, 0.0f)
+		, m_forward(0.0f, 1.0f, 0.0f)
+		, m_up(0.0f, 0.0f, 1.0f)
 	{}
 
 	CObjectTransformation(Vec3 const& position)
 		: m_position(position)
-		, m_forward(Vec3Constants<float>::fVec3_OneY)
-		, m_up(Vec3Constants<float>::fVec3_OneZ)
+		, m_forward(0.0f, 1.0f, 0.0f)
+		, m_up(0.0f, 0.0f, 1.0f)
 	{}
 
 	CObjectTransformation(Matrix34 const& transformation)

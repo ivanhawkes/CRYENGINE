@@ -71,7 +71,7 @@ size_t CMaterialLayer::GetResourceMemoryUsage(ICrySizer* pSizer)
 					if (piTexture)
 					{
 						SIZER_COMPONENT_NAME(pSizer, "MemoryTexture");
-						size_t nCurrentResourceMemoryUsage = piTexture->GetDataSize();
+						uint32 nCurrentResourceMemoryUsage = piTexture->GetDataSize();
 						nResourceMemory += nCurrentResourceMemoryUsage;
 						pSizer->AddObject(piTexture, nCurrentResourceMemoryUsage);
 
@@ -244,6 +244,7 @@ void CMatInfo::UpdateMaterialFlags()
 		const bool bAlphaBlended = (m_shaderItem.m_pShader->GetFlags() & (EF_NODRAW | EF_DECAL)) || (pRendShaderResources && pRendShaderResources->IsTransparent());
 		const bool bIsHair = (m_shaderItem.m_pShader->GetFlags2() & EF2_HAIR) != 0;
 		const bool bIsGlass = m_shaderItem.m_pShader->GetShaderType() == eST_Glass;
+		const bool bIsTerrain = m_shaderItem.m_pShader->GetShaderType() == eST_Terrain;
 
 		if (bAlphaBlended && !(m_shaderItem.m_pShader->GetFlags2() & EF2_NODRAW) && !(m_shaderItem.m_pShader->GetFlags() & EF_DECAL))
 		{
@@ -262,9 +263,10 @@ void CMatInfo::UpdateMaterialFlags()
 			m_Flags |= MTL_FLAG_REQUIRE_NEAREST_CUBEMAP;
 		}
 
-		// Make sure to refresh sectors
+		// Make sure to refresh sectors on terrain material changes
 		static int nLastUpdateFrameId = 0;
-		if (gEnv->IsEditing() && GetTerrain() && GetVisAreaManager() && nLastUpdateFrameId != GetRenderer()->GetFrameID())
+		if (gEnv->IsEditing() && GetTerrain() && GetVisAreaManager() && 
+			bIsTerrain && nLastUpdateFrameId != GetRenderer()->GetFrameID())
 		{
 			GetTerrain()->MarkAllSectorsAsUncompiled();
 			GetVisAreaManager()->MarkAllSectorsAsUncompiled();
@@ -1012,7 +1014,7 @@ int CMatInfo::GetTextureMemoryUsage(ICrySizer* pSizer, int nSubMtlSlot)
 				continue;
 			used.insert(pTexture);
 
-			int nTexSize = pTexture->GetDataSize();
+			uint32 nTexSize = pTexture->GetDataSize();
 			textureSize += nTexSize;
 
 			if (pSizer)

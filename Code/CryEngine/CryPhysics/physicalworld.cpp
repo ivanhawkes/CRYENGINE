@@ -92,22 +92,22 @@ int g_nPhysWorlds;
 #if MAX_TOT_THREADS<=2
 threadID g_physThreadId = THREADID_NULL;
 #else
-TLS_DEFINE(int*, g_pidxPhysThread);
-TLS_DEFINE_DEFAULT_VALUE(int, g_idxExtThread, 0);
+thread_local int* tls_pidxPhysThread = 0;
+thread_local int tls_idxExtThread = 0;
 
 void MarkAsPhysThread() {
 	static int g_ibufPhysThread[2] = { 1,0 };
 	static int *g_lastPtr = g_ibufPhysThread;
-	int *ptr = TLS_GET(int*, g_pidxPhysThread);
+	int *ptr = tls_pidxPhysThread;
 	if (ptr!=g_lastPtr) {
 		ptr = g_ibufPhysThread+(g_lastPtr-g_ibufPhysThread^1);
 		*g_lastPtr = MAX_PHYS_THREADS; *ptr = 0;
-		TLS_SET(g_pidxPhysThread, g_lastPtr=ptr);
+		tls_pidxPhysThread = g_lastPtr=ptr;
 	}
 	set_extCaller(0);
 }
 void MarkAsPhysWorkerThread(int *pidx) {
-	TLS_SET(g_pidxPhysThread, pidx);
+	tls_pidxPhysThread = pidx;
 }
 #endif
 
@@ -2460,6 +2460,8 @@ void CPhysicalWorld::TimeStep(float time_interval, int flags)
 
 	{
     WriteLock lock1(m_lockCaller[MAX_PHYS_THREADS]),lock2(m_lockStep);
+		int iCaller = get_iCaller();
+		WriteLockCond lock3(m_lockCaller[iCaller], iCaller>MAX_PHYS_THREADS);
 		char **pQueueSlots;
 		int nQueueSlots;
 		volatile int64 timer = CryGetTicks();
@@ -2530,7 +2532,8 @@ void CPhysicalWorld::TimeStep(float time_interval, int flags)
 	}
 
 	{ 
-	WriteLockCond lock1(m_lockCaller[MAX_PHYS_THREADS], flags & ent_flagged_only && get_iCaller() == MAX_PHYS_THREADS);
+	int iCaller = get_iCaller();
+	WriteLockCond lock1(m_lockCaller[iCaller], flags & ent_flagged_only && iCaller >= MAX_PHYS_THREADS);
 	WriteLock lock(m_lockStep);
 	if (time_interval>0 && !(flags & ent_flagged_only))
 		MarkAsPhysThread();

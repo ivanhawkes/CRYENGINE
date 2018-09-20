@@ -17,7 +17,9 @@ CControl::CControl(string const& name, ControlId const id, EAssetType const type
 	: CAsset(name, type)
 	, m_id(id)
 	, m_scope(GlobalScopeId)
-{}
+	, m_isAutoLoad(true)
+{
+}
 
 //////////////////////////////////////////////////////////////////////////
 CControl::~CControl()
@@ -112,40 +114,9 @@ void CControl::Serialize(Serialization::IArchive& ar)
 	// Auto Load
 	bool isAutoLoad = m_isAutoLoad;
 
-	if (m_type == EAssetType::Preload)
+	if ((m_type == EAssetType::Preload) || (m_type == EAssetType::Setting))
 	{
 		ar(isAutoLoad, "auto_load", "Auto Load");
-	}
-
-	// Max Radius
-	float radius = m_radius;
-
-	if (((m_flags& EAssetFlags::IsDefaultControl) == 0) && (m_type == EAssetType::Trigger))
-	{
-		bool hasPlaceholderConnections = false;
-		float connectionMaxRadius = 0.0f;
-
-		for (auto const& connection : m_connections)
-		{
-			Impl::IItem const* const pIItem = g_pIImpl->GetItem(connection->GetID());
-
-			if ((pIItem != nullptr) && ((pIItem->GetFlags() & EItemFlags::IsPlaceHolder) == 0))
-			{
-				connectionMaxRadius = std::max(connectionMaxRadius, pIItem->GetRadius());
-			}
-			else
-			{
-				// If control has placeholder connection we cannot enforce the link between activity radius
-				// and attenuation as the user could be missing the middleware project.
-				hasPlaceholderConnections = true;
-				break;
-			}
-		}
-
-		if (!hasPlaceholderConnections)
-		{
-			radius = connectionMaxRadius;
-		}
 	}
 
 	if (ar.isInput())
@@ -154,7 +125,6 @@ void CControl::Serialize(Serialization::IArchive& ar)
 		SetDescription(description);
 		SetScope(scope);
 		SetAutoLoad(isAutoLoad);
-		SetRadius(radius);
 	}
 }
 
@@ -176,17 +146,6 @@ void CControl::SetAutoLoad(bool const isAutoLoad)
 	{
 		SignalControlAboutToBeModified();
 		m_isAutoLoad = isAutoLoad;
-		SignalControlModified();
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CControl::SetRadius(float const radius)
-{
-	if (radius != m_radius)
-	{
-		SignalControlAboutToBeModified();
-		m_radius = radius;
 		SignalControlModified();
 	}
 }
@@ -239,7 +198,6 @@ void CControl::AddConnection(ConnectionPtr const pConnection)
 			g_pIImpl->EnableConnection(pConnection, g_assetsManager.IsLoading());
 			pConnection->SignalConnectionChanged.Connect(this, &CControl::SignalConnectionModified);
 			m_connections.push_back(pConnection);
-			MatchRadiusToAttenuation();
 			SignalConnectionAdded(pIItem);
 			SignalControlModified();
 		}
@@ -262,7 +220,6 @@ void CControl::RemoveConnection(ConnectionPtr const pConnection)
 				g_pIImpl->DisableConnection(pConnection, g_assetsManager.IsLoading());
 				pConnection->SignalConnectionChanged.DisconnectById(reinterpret_cast<uintptr_t>(this));
 				m_connections.erase(it);
-				MatchRadiusToAttenuation();
 				SignalConnectionRemoved(pIItem);
 				SignalControlModified();
 			}
@@ -289,7 +246,6 @@ void CControl::ClearConnections()
 		}
 
 		m_connections.clear();
-		MatchRadiusToAttenuation();
 		SignalControlModified();
 	}
 }
@@ -301,7 +257,7 @@ void CControl::BackupAndClearConnections()
 	// when middleware data gets reloaded.
 	m_rawConnections.clear();
 
-	if (m_type != EAssetType::Preload)
+	if ((m_type != EAssetType::Preload) && (m_type != EAssetType::Setting))
 	{
 		for (auto const& connection : m_connections)
 		{
@@ -371,7 +327,6 @@ void CControl::RemoveConnection(Impl::IItem* const pIItem)
 				g_pIImpl->DisableConnection(*it, isLoading);
 
 				m_connections.erase(it);
-				MatchRadiusToAttenuation();
 				SignalConnectionRemoved(pIItem);
 				SignalControlModified();
 				break;
@@ -414,7 +369,6 @@ void CControl::SignalConnectionRemoved(Impl::IItem* const pIItem)
 //////////////////////////////////////////////////////////////////////////
 void CControl::SignalConnectionModified()
 {
-	MatchRadiusToAttenuation();
 	SignalControlModified();
 }
 
@@ -425,7 +379,7 @@ void CControl::LoadConnectionFromXML(XmlNodeRef const xmlNode, int const platfor
 
 	if (pConnection != nullptr)
 	{
-		if (m_type == EAssetType::Preload)
+		if ((m_type == EAssetType::Preload) || (m_type == EAssetType::Setting))
 		{
 			// The connection could already exist but using a different platform
 			ConnectionPtr const pPreviousConnection = GetConnection(pConnection->GetID());
@@ -453,35 +407,6 @@ void CControl::LoadConnectionFromXML(XmlNodeRef const xmlNode, int const platfor
 		{
 			AddConnection(pConnection);
 		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CControl::MatchRadiusToAttenuation()
-{
-	float radius = 0.0f;
-	bool isPlaceHolder = false;
-
-	for (auto const& connection : m_connections)
-	{
-		Impl::IItem const* const pIItem = g_pIImpl->GetItem(connection->GetID());
-
-		if ((pIItem != nullptr) && ((pIItem->GetFlags() & EItemFlags::IsPlaceHolder) == 0))
-		{
-			radius = std::max(radius, pIItem->GetRadius());
-		}
-		else
-		{
-			// We don't match controls that have placeholder
-			// connections as we don't know what the real values should be.
-			isPlaceHolder = true;
-			break;
-		}
-	}
-
-	if (!isPlaceHolder)
-	{
-		SetRadius(radius);
 	}
 }
 } // namespace ACE

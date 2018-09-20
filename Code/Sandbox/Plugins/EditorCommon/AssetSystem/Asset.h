@@ -75,7 +75,7 @@ public:
 
 	const CAssetType* GetType() const { return m_type; }
 	//! Returns the name of the asset. The name is only guaranteed to be unique per asset type.
-	const char* GetName() const { return m_name; }
+	const string& GetName() const { return m_name; }
 	const CryGUID& GetGUID() const { return m_guid; }
 	uint64 GetLastModifiedTime() const { return m_lastModifiedTime; }
 
@@ -83,26 +83,26 @@ public:
 	const size_t GetFilesCount() const { return m_files.size(); }
 
 	//! Returns path to the i-st data file. The path is relative to the assets root directory.
-	const char* GetFile(size_t i) const { return m_files[i]; }
+	const string& GetFile(size_t i) const { return m_files[i]; }
 
 	//! Returns paths to the data files. The paths are relative to the assets root directory.
-	std::vector<string> GetFiles() const { return m_files; }
+	const std::vector<string>& GetFiles() const { return m_files; }
 
 	//! Computes the folder of the asset. This relies on the assumption that all the files for this asset are in the same place. The path will have a trailing /
-	const char* GetFolder() const;
+	const string& GetFolder() const;
 
 	//! Returns true if this asset was imported from a source file
 	bool HasSourceFile() const;
 
 	//! Returns path relative to the assets root directory. Can be empty.
 	//! The asset and the source file must be in the same folder. Therefore all the assets that use the same source file must be in one directory.
-	const char* GetSourceFile() const { return m_sourceFile; }
+	const string& GetSourceFile() const { return m_sourceFile; }
 
 	//! Opens the source file in a separate process
 	void OpenSourceFile() const;
 
 	//! Returns path to the .cryasset file relative to the assets root directory.
-	const char* GetMetadataFile() const { return m_metadataFile; }
+	const string& GetMetadataFile() const { return m_metadataFile; }
 
 	const std::vector<std::pair<string, string>>& GetDetails() const { return m_details; }
 
@@ -110,7 +110,7 @@ public:
 
 	//! Returns asset dependencies as a collection of SAssetDependencyInfo
 	// \sa SAssetDependencyInfo
-	const std::vector<SAssetDependencyInfo>& GetDependencies() const { return m_dependencies; };
+	const std::vector<SAssetDependencyInfo>& GetDependencies() const { return m_dependencies; }
 
 	//! Tests if the specified asset is used by another asset.
 	//! \param szAnotherAssetPath paths to the main data file of another asset. The path must be relative to the assets root directory, as it returns by CAsset::GetFile.
@@ -133,10 +133,13 @@ public:
 	bool CanBeEdited() const;
 	bool IsBeingEdited() const { return m_flags.open != 0; }
 	bool IsModified() const { return m_flags.modified != 0; }
-
-	//! Can this asset be edited? Returns false if read only on disk due to source control or if folder is read-only.
-	bool IsReadOnly() const;
 	void SetModified(bool bModified);
+
+	//! Returns true if the editor can write to asset files.
+	bool IsWritable(bool includeSourceFile = true) const;
+
+	//! Asset that is immutable cannot be changed. Engine assets are example of immutable assets.  
+	bool IsImmutable() const;
 
 	//! Opens asset for editing. If \pEditor is nullptr, a new editor is created based on the asset type.
 	//! If pEditor is specified, it will open the asset in that editor
@@ -189,7 +192,7 @@ private:
 	//Filter string is how we handle "smart searching" in the content browser. All data aggregated into this string is going to be searchable in the main search bar. 
 	const QString& GetFilterString(bool forceCompute = false) const;
 
-	void WriteToFile();
+	bool WriteToFile();
 	void SetName(const char* szName);
 	void SetLastModifiedTime(uint64 t);
 	void SetMetadataFile(const char* szFilepath);
@@ -203,16 +206,16 @@ private:
 	void OnOpenedInEditor(CAssetEditor* pEditor);
 
 	void NotifyChanged(int changeFlags = eAssetChangeFlags_All);
-
+	
 private:
 	CAsset(const CAsset&) = delete;
 	CAsset& operator=(const CAsset&) = delete;
 
 	//Serialized metadata
-	string				m_name;
+	string              m_name;
 	const CAssetType*	m_type;
-	const CryGUID		m_guid;
-	uint64				m_lastModifiedTime = 0;
+	const CryGUID       m_guid;
+	uint64              m_lastModifiedTime = 0;
 	std::vector<string> m_files;
 	string				m_sourceFile;
 	string				m_metadataFile; //!< Unix path.
@@ -230,7 +233,7 @@ private:
 		{
 			uint8 open : 1;
 			uint8 modified : 1;
-			uint8 readOnly : 1;
+			uint8 immutable : 1;
 		};
 	} m_flags;
 

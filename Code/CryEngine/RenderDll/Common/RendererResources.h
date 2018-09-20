@@ -4,6 +4,11 @@
 
 #include <CryRenderer/ITexture.h>
 
+//===================================================================
+
+#define MAX_ENVTEXTURES    16
+#define MAX_ENVTEXSCANDIST 0.1f
+
 class CTexture;
 struct SEnvTexture;
 
@@ -103,12 +108,17 @@ public:
 	static CTexture* CreateDepthTarget(int nWidth, int nHeight, const ColorF& cClear, ETEX_Format eTF);
 	static CTexture* CreateRenderTarget(int nWidth, int nHeight, const ColorF& cClear, ETEX_Format eTF);
 
+	static ETEX_Format GetHDRFormat(bool withAlpha, bool lowQuality);
+	static ETEX_Format GetLDRFormat(bool precisionBits);
+	static ETEX_Format GetDisplayFormat();
+	static ETEX_Format GetDepthFormat();
+
 public:
 	static bool m_bLoadedSystem;
 
 	// Global renderer resources
 	static void CreateDepthMaps(int resourceWidth, int resourceHeight);
-	static void CreateSceneMaps(ETEX_Format eTF, int resourceWidth, int resourceHeight);
+	static void CreateSceneMaps(int resourceWidth, int resourceHeight);
 	static void CreateHDRMaps(int resourceWidth, int resourceHeight);
 	static bool CreatePostFXMaps(int resourceWidth, int resourceHeight);
 	static void CreateCachedShadowMaps();
@@ -153,7 +163,7 @@ public:
 
 	// ==============================================================================
 
-	static CTexture* s_ptexPrevFrameScaled;                   // CSonarVision, ?, 2x
+	static CTexture* s_ptexDisplayTargetScaledPrev;                   // CSonarVision, ?, 2x
 	static CTexture* s_ptexMipColors_Diffuse;                 // ?
 	static CTexture* s_ptexMipColors_Bump;                    // ?
 	static CTexture* s_ptexFromRE[8];                         // ?
@@ -233,7 +243,7 @@ public:
 	static CTexture* s_ptexCachedShadowMap[MAX_GSM_LODS_NUM];                    // CShadowMapStage
 	static CTexture* s_ptexHeightMapAODepth[2];                                  // CShadowMapStage, CHeightMapAOStage
 	static CTexture* s_ptexRT_ShadowPool;                                        // CShadowMapStage
-	static CTexture* s_ptexWaterCaustics[2];                                     // ?, caustics buffers
+	static CTexture* s_ptexWaterCaustics[2];                                     // CWaterStage caustics buffers
 	static CTexture* s_ptexVolCloudShadow;                                       // CVolumetricCloudsStage
 
 	// Render resolution [dependent] targets ===================================================================
@@ -245,9 +255,11 @@ public:
 	static CTexture* s_ptexLinearDepthScaled[3];                                 // Min, Max, Avg, med
 	static CTexture* s_ptexLinearDepthDownSample[4];                             // CDepthReadbackStage
 	static CTexture* s_ptexLinearDepthReadBack[4];                               // CDepthReadbackStage
+	static CTexture* s_ptexLinearDepthFixup;
+	static ResourceViewHandle s_ptexLinearDepthFixupUAV;
 
 	static CTexture* s_ptexSceneTarget;                                          // Shared rt for generic usage (refraction/srgb/diffuse accumulation/hdr motionblur/etc)
-	static CTexture* s_ptexSceneTargetR11G11B10F[2];
+	static CTexture* s_ptexSceneTargetR11G11B10F[2];                             // CMotionBlurStage
 	static CTexture* s_ptexSceneDiffuse;
 	static CTexture* s_ptexSceneDiffuseTmp;
 	static CTexture* s_ptexSceneSpecular;
@@ -263,21 +275,22 @@ public:
 	static CTexture* s_ptexVelocityObjects[CCamera::eEye_eCount];                // CSceneGBufferStage, Dynamic object velocity (for left and right eye)
 
 	static CTexture* s_ptexHDRTarget;
-	static CTexture* s_ptexHDRTargetPrev;
-	static CTexture* s_ptexHDRTargetScaled[4];
-	static CTexture* s_ptexHDRTargetScaledTmp[4];
-	static CTexture* s_ptexHDRTargetScaledTempRT[4];                             // CScreenSpaceReflectionsStage, CDepthOfFieldStage
+	static CTexture* s_ptexHDRTargetPrev;                                        // CScreenSpaceReflectionsStage, CWaterStage, CMotionBlurStage, CSvoRenderer
+	static CTexture* s_ptexHDRTargetScaled[4][4];                                // CAutoExposureStage, CBloomStage, CSunShaftsStage
 
-	static CTexture* s_ptexHDRDofLayers[2];                                      // CDepthOfFieldStage
-	static CTexture* s_ptexHDRTempBloom[2];                                      // CBloomStage
+	static CTexture* s_ptexHDRTargetMasked;                                      // CScreenSpaceReflectionsStage, CPostAAStage
+	static CTexture* s_ptexHDRTargetMaskedScaled[4][4];                          // CScreenSpaceReflectionsStage, CDepthOfFieldStage, CSnowStage
+
 	static CTexture* s_ptexHDRFinalBloom;                                        // CRainStage, CToneMappingStage, CBloomStage
 
-	static CTexture* s_ptexBackBuffer;                                           // back buffer copy
-	static CTexture* s_ptexBackBufferScaled[3];                                  // backbuffer low-resolution/blurred version. 2x/4x/8x/16x smaller than screen
-	static CTexture* s_ptexBackBufferScaledTemp[2];                              // backbuffer low-resolution/blurred version. 2x/4x/8x/16x smaller than screen, temp textures (used for blurring/ping-pong)
+	static CTexture* s_ptexDisplayTargetSrc;                                        // display-colorspace target
+	static CTexture* s_ptexDisplayTargetDst;                                     // display-colorspace target
+	static CTexture* s_ptexDisplayTargetScaled[3];                               // low-resolution/blurred version. 2x/4x/8x/16x smaller than screen
+	static CTexture* s_ptexDisplayTargetScaledTemp[2];                           // low-resolution/blurred version. 2x/4x/8x/16x smaller than screen, temp textures (used for blurring/ping-pong)
 
 	static CTexture* s_ptexAOColorBleed;                                         // CScreenSpaceObscuranceStage, CTiledShadingStage
 	static CTexture* s_ptexShadowMask;                                           // CShadowMapStage
+	static CTexture* s_ptexClipVolumes;                                          // CClipVolumeStage, CTiledShadingStage, CHeightMapAOStage
 	static CTexture* s_ptexModelHudBuffer;                                       // CV_r_UsePersistentRTForModelHUD, used by Menu3DModelRenderer to postprocess render models
 	static CTexture* s_ptexSceneCoC[MIN_DOF_COC_K];                              // CDepthOfFieldStage
 	static CTexture* s_ptexSceneCoCTemp;                                         // CDepthOfFieldStage
@@ -285,7 +298,7 @@ public:
 	static CTexture* s_ptexWaterVolumeRefl[2];                                   // CWaterStage, water volume reflections buffer
 	static CTexture* s_ptexRainSSOcclusion[2];                                   // CRainStage, screen-space rain occlusion accumulation
 #if defined(VOLUMETRIC_FOG_SHADOWS)
-	static CTexture* s_ptexVolFogShadowBuf[2];                                   // CVolumetricFogStage, CFogStage
+	static CTexture* s_ptexVolFogShadowBuf[2];                                   // CVolumetricCloudStage, CVolumetricFogStage, CFogStage, CWaterStage
 #endif
 
 	// Display resolution [dependent] targets ==================================================================

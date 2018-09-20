@@ -1,10 +1,10 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 #pragma once
 
-#include <CryMath/Cry_Geo.h>
-
 class CBaseObject;
 class CSOTemplate;
+
+struct AABB;
 
 //! DEPRECATED, only there for smart object support
 //! map of all known smart object templates mapped by template id
@@ -32,4 +32,3 @@ public:
 	//! Returns false when the AI system isn't ready for exporting game data and the user has canceled the export request
 	virtual bool IsReadyToGameExport(unsigned int& adjustedExportFlags) const = 0;
 };
-

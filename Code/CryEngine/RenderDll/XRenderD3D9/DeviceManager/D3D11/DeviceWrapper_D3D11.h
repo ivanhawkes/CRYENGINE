@@ -1212,18 +1212,18 @@ public:
 
 private:
 	// DX11-specific without type-branches
-	typedef void    (ID3D11DeviceContext::*typeSetShader)(ID3D11DeviceChild* pShader, ID3D11ClassInstance* const* ppClassInstances, UINT NumClassInstances);
-	typedef void    (ID3D11DeviceContext::*typeGetShader)(ID3D11DeviceChild** ppShader, ID3D11ClassInstance** ppClassInstances, UINT* pNumClassInstances);
-	typedef void    (ID3D11DeviceContext::*typeSetSamplers)(UINT StartSlot, UINT NumSamplers, ID3D11SamplerState* const* ppSamplers);
-	typedef void    (ID3D11DeviceContext::*typeGetSamplers)(UINT StartSlot, UINT NumSamplers, ID3D11SamplerState** ppSamplers);
-	typedef void    (ID3D11DeviceContext::*typeSetConstantBuffers)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers);
-	typedef void    (ID3D11DeviceContext::*typeGetConstantBuffers)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer** ppConstantBuffers);
-	typedef void    (ID3D11DeviceContext::*typeSetShaderResources)(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView* const* ppShaderResourceViews);
-	typedef void    (ID3D11DeviceContext::*typeGetShaderResources)(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView** ppShaderResourceViews);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeSetShader)(ID3D11DeviceChild* pShader, ID3D11ClassInstance* const* ppClassInstances, UINT NumClassInstances);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeGetShader)(ID3D11DeviceChild** ppShader, ID3D11ClassInstance** ppClassInstances, UINT* pNumClassInstances);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeSetSamplers)(UINT StartSlot, UINT NumSamplers, ID3D11SamplerState* const* ppSamplers);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeGetSamplers)(UINT StartSlot, UINT NumSamplers, ID3D11SamplerState** ppSamplers);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeSetConstantBuffers)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeGetConstantBuffers)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer** ppConstantBuffers);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeSetShaderResources)(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView* const* ppShaderResourceViews);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext::*typeGetShaderResources)(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView** ppShaderResourceViews);
 
 #if (CRY_RENDERER_DIRECT3D >= 111)
-	typedef void    (ID3D11DeviceContext1::*typeSetConstantBuffers1)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers, const UINT* pFirstConstant, const UINT* pNumConstants);
-	typedef void    (ID3D11DeviceContext1::*typeGetConstantBuffers1)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer** ppConstantBuffers, UINT* pFirstConstant, UINT* pNumConstants);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext1::*typeSetConstantBuffers1)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers, const UINT* pFirstConstant, const UINT* pNumConstants);
+	typedef void    (STDMETHODCALLTYPE ID3D11DeviceContext1::*typeGetConstantBuffers1)(UINT StartSlot, UINT NumBuffers, ID3D11Buffer** ppConstantBuffers, UINT* pFirstConstant, UINT* pNumConstants);
 #endif
 
 	typeSetShader           mapSetShader[6];
@@ -3953,8 +3953,8 @@ inline void CCryDeviceContextWrapper::CopySubresourcesRegion1(ID3D11Resource* pD
 		// NOTE: too complex case which is not supported as it leads to fe. [slice,mip] sequences like [0,4],[0,5],[0,6],[1,0],[1,1],...
 		// which we don't support because the offsets and dimensions are relative to a intermediate mip-level, while crossing the
 		// slice-boundary forces us to extrapolate dimensions to larger mips, which is probably not what is wanted in the first place.
-		CRY_ASSERT(!srcMipLevels || !((SrcSubresource) % (srcMipLevels)) || (SrcSubresource + NumSubresources <= srcMipLevels));
-		CRY_ASSERT(!dstMipLevels || !((DstSubresource) % (dstMipLevels)) || (DstSubresource + NumSubresources <= dstMipLevels));
+		CRY_ASSERT(!srcMipLevels || (SrcSubresource / srcMipLevels == (SrcSubresource + NumSubresources - 1) / srcMipLevels));
+		CRY_ASSERT(!dstMipLevels || (DstSubresource / dstMipLevels == (DstSubresource + NumSubresources - 1) / dstMipLevels));
 
 		for (UINT n = 0; n < NumSubresources; ++n)
 		{

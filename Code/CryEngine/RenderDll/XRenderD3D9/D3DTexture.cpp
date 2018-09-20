@@ -96,7 +96,7 @@ static bool DecompressSubresourcePayload(const STextureLayout& pLayout, const ET
 }
 
 #if defined(TEXTURE_GET_SYSTEM_COPY_SUPPORT)
-const byte* CTexture::Convert(const byte* pSrc, int nWidth, int nHeight, int nMips, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nOutMips, int& nOutSize, bool bLinear)
+const byte* CTexture::Convert(const byte* pSrc, int nWidth, int nHeight, int nMips, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nOutMips, uint32& nOutSize, bool bLinear)
 {
 	nOutSize = 0;
 	byte* pDst = NULL;
@@ -114,7 +114,7 @@ const byte* CTexture::Convert(const byte* pSrc, int nWidth, int nHeight, int nMi
 	}
 	if (nMips <= 0)
 		nMips = 1;
-	int nSizeDSTMips = 0;
+	uint32 nSizeDSTMips = 0;
 	int i;
 
 	if (eTFSrc == eTF_BC5S)
@@ -133,8 +133,8 @@ const byte* CTexture::Convert(const byte* pSrc, int nWidth, int nHeight, int nMi
 			int hgt = nHeight;
 			nSizeDSTMips = CTexture::TextureDataSize(wdt, hgt, 1, nOutMips, 1, eTF_BC3);
 			pDst = new byte[nSizeDSTMips];
-			int nOffsDST = 0;
-			int nOffsSRC = 0;
+			size_t nOffsDST = 0;
+			size_t nOffsSRC = 0;
 			for (i = 0; i < nOutMips; i++)
 			{
 				if (i >= nMips)
@@ -144,8 +144,8 @@ const byte* CTexture::Convert(const byte* pSrc, int nWidth, int nHeight, int nMi
 				if (hgt <= 0)
 					hgt = 1;
 				const byte* outSrc = &pSrc[nOffsSRC];
-				DWORD outSize = CTexture::TextureDataSize(wdt, hgt, 1, 1, 1, eTFDst);
 
+				uint32 outSize = CTexture::TextureDataSize(wdt, hgt, 1, 1, 1, eTFDst);
 				nOffsSRC += CTexture::TextureDataSize(wdt, hgt, 1, 1, 1, eTFSrc);
 
 				{
@@ -302,17 +302,8 @@ bool CTexture::RT_CreateDeviceTexture(const SSubresourceData& pData)
 	if (!(m_pDevTexture = CDeviceTexture::Create(TL, bHasPayload ? &TI : nullptr)))
 		return false;
 
-	if (m_pDevTexture)
-	{
-		// Assign name to Texture for enhanced debugging
-#if !defined(RELEASE) && (CRY_PLATFORM_WINDOWS || CRY_PLATFORM_ORBIS)
-#if CRY_RENDERER_VULKAN || CRY_PLATFORM_ORBIS
-		m_pDevTexture->GetBaseTexture()->DebugSetName(m_SrcName.c_str());
-#else
-		m_pDevTexture->GetBaseTexture()->SetPrivateData(WKPDID_D3DDebugObjectName, strlen(m_SrcName.c_str()), m_SrcName.c_str());
-#endif
-#endif
-	}
+	// Assign name to Texture for enhanced debugging
+	m_pDevTexture->SetDebugName(m_SrcName);
 
 	assert(!IsStreamed());
 
@@ -355,24 +346,27 @@ void CTexture::ReleaseDeviceTexture(bool bKeepLastMips, bool bFromUnload) thread
 		// The responsible code-path for deconstruction is the m_pFileTexMips->m_pPoolItem's dtor, if either of these is set
 		if (!m_pFileTexMips || !m_pFileTexMips->m_pPoolItem)
 		{
-			CDeviceTexture* pDevTex = m_pDevTexture;
-			if (pDevTex)
-				pDevTex->SetOwner(NULL);
-
-			if (IsStreamed())
+			if (CDeviceTexture* const pDevTex = m_pDevTexture)
 			{
-				SAFE_DELETE(pDevTex);      // for manually created textures
-			}
-			else
-			{
-				SAFE_RELEASE(pDevTex);
+				pDevTex->SetOwner(nullptr);
 
-				volatile size_t* pTexMem = &CTexture::s_nStatsCurManagedNonStreamedTexMem;
-				if (IsDynamic())
-					pTexMem = &CTexture::s_nStatsCurDynamicTexMem;
+				// Ref-Counting only works when there is a backing native objects, otherwise it's -1
+				if (IsStreamed() || !pDevTex->GetNativeResource())
+				{
+					// for manually created textures
+					delete pDevTex;
+				}
+				else
+				{
+					pDevTex->Release();
 
-				assert(*pTexMem >= m_nDevTextureSize);
-				CryInterlockedAdd(pTexMem, -m_nDevTextureSize);
+					volatile size_t* pTexMem = &CTexture::s_nStatsCurManagedNonStreamedTexMem;
+					if (IsDynamic())
+						pTexMem = &CTexture::s_nStatsCurDynamicTexMem;
+
+					CRY_ASSERT(*pTexMem >= ptrdiff_t(m_nDevTextureSize));
+					CryInterlockedAdd(pTexMem, -ptrdiff_t(m_nDevTextureSize));
+				}
 			}
 		}
 
@@ -536,8 +530,8 @@ void CTexture::UpdateTextureRegion(const byte* pSrcData, int nX, int nY, int nZ,
 	}
 	else
 	{
-		int nSize = TextureDataSize(USize, VSize, ZSize, GetNumMips(), 1, eSrcFormat);
-		std::shared_ptr<std::vector<uint8>> tempData = std::make_shared<std::vector<uint8>>(pSrcData,pSrcData+nSize);
+		uint32 nSize = TextureDataSize(USize, VSize, ZSize, GetNumMips(), 1, eSrcFormat);
+		std::shared_ptr<std::vector<uint8>> tempData = std::make_shared<std::vector<uint8>>(pSrcData, pSrcData + nSize);
 		_smart_ptr<CTexture> pSelf(this);
 
 		ERenderCommandFlags flags = ERenderCommandFlags::LevelLoadingThread_defer;

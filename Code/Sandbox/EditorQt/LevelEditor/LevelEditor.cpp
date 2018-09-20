@@ -3,48 +3,48 @@
 #include "LevelEditor.h"
 
 // LevelEditor
+#include "LevelAssetType.h"
+#include "LevelExplorer.h"
 #include "LevelFileUtils.h"
 #include "NewLevelDialog.h"
-#include "OpenLevelDialog.h"
-#include "SaveLevelDialog.h"
-#include "LevelAssetType.h"
-
-// EditorQt
-#include "GameEngine.h"
-#include "GameExporter.h"
-#include "LevelIndependentFileMan.h"
-#include "AlignTool.h"
-#include "IEditorImpl.h"
-#include "CryEdit.h"
-#include "CryEditDoc.h"
-#include "ViewManager.h"
-#include "QT/QtMainFrame.h"
-#include "QT/QToolTabManager.h"
-#include "Commands/QCommandAction.h"
-#include "EditMode/VertexSnappingModeTool.h"
-#include "LevelExplorer.h"
-#include "Util/Clipboard.h"
-#include "Grid.h"
-#include "QtViewPane.h"
 #include "TagLocations.h"
 
+// EditorQt
+#include "Commands/QCommandAction.h"
+#include "EditMode/VertexSnappingModeTool.h"
+#include "QT/QtMainFrame.h"
+#include "QT/QToolTabManager.h"
+#include "AlignTool.h"
+#include "CryEdit.h"
+#include "CryEditDoc.h"
+#include "GameEngine.h"
+#include "GameExporter.h"
+#include "IEditorImpl.h"
+#include "LevelIndependentFileMan.h"
+#include "ViewManager.h"
+
+#include <Util/Clipboard.h>
+
 // EditorCommon
-#include <AssetSystem/EditableAsset.h>
-#include <QtUtil.h>
-#include <EditorFramework/Inspector.h>
-#include <Notifications/NotificationCenterTrayWidget.h>
-#include <EditorFramework/PreferencesDialog.h>
-#include <Preferences/GeneralPreferences.h>
-#include <Objects/ObjectLoader.h>
 #include <AssetSystem/AssetManager.h>
-#include <AssetSystem/Browser/AssetBrowserDialog.h>
 #include <AssetSystem/Browser/AssetBrowser.h>
+#include <AssetSystem/Browser/AssetBrowserDialog.h>
+#include <AssetSystem/EditableAsset.h>
 #include <Controls/DockableDialog.h>
-#include <FilePathUtil.h>
-#include <ThreadingUtils.h>
-#include <EditorStyleHelper.h>
-#include <Util/FileUtil.h>
+#include <Controls/QuestionDialog.h>
+#include <EditorFramework/Inspector.h>
+#include <EditorFramework/PreferencesDialog.h>
 #include <LevelEditor/Tools/PickObjectTool.h>
+#include <Notifications/NotificationCenterTrayWidget.h>
+#include <Objects/ObjectLoader.h>
+#include <Preferences/GeneralPreferences.h>
+#include <Preferences/SnappingPreferences.h>
+#include <Util/FileUtil.h>
+#include <EditorStyleHelper.h>
+#include <FilePathUtil.h>
+#include <QtUtil.h>
+#include <QtViewPane.h>
+#include <ThreadingUtils.h>
 
 // CryCommon
 #include <CrySandbox/ScopedVariableSetter.h>
@@ -52,15 +52,12 @@
 #include <CrySystem/ICmdLine.h>
 
 // Qt
-#include <QMenu>
-#include <QtGlobal>
-#include <QMenuBar>
 #include <QDir>
-#include <QFileInfo>
 #include <QDirIterator>
-#include <QTimer>
-
-#include "Controls/QuestionDialog.h"
+#include <QFileInfo>
+#include <QMenu>
+#include <QMenuBar>
+#include <QtGlobal>
 
 // Register viewpanes defined in EditorCommon
 REGISTER_VIEWPANE_FACTORY_AND_MENU(CNotificationCenterDockable, "Notification Center", "Advanced", true, "Advanced")
@@ -331,11 +328,6 @@ void CLevelEditor::customEvent(QEvent* pEvent)
 				EnableSurfaceNormalSnapping(!IsSurfaceNormalSnappingEnabled());
 				pEvent->setAccepted(true);
 			}
-			else if (command == "toggle_display_helpers")
-			{
-				EnableHelpersDisplay(!IsHelpersDisplayed());
-				pEvent->setAccepted(true);
-			}
 			else if (command == "tag_location")
 			{
 				bool result;
@@ -537,13 +529,6 @@ void CLevelEditor::EnableSurfaceNormalSnapping(bool bEnable)
 	SurfaceNormalSnappingEnabled(bEnable);
 }
 
-void CLevelEditor::EnableHelpersDisplay(bool bEnable)
-{
-	GetIEditorImpl()->EnableHelpersDisplay(bEnable);
-	HelpersDisplayEnabled(bEnable);
-	GetIEditorImpl()->GetObjectManager()->SendEvent(GetIEditor()->IsHelpersDisplayed() ? EVENT_SHOW_HELPER : EVENT_HIDE_HELPER);
-}
-
 bool CLevelEditor::IsVertexSnappingEnabled() const
 {
 	CEditTool* pTool = GetIEditorImpl()->GetLevelEditorSharedState()->GetEditTool();
@@ -583,11 +568,6 @@ bool CLevelEditor::IsGeometrySnappingEnabled() const
 bool CLevelEditor::IsSurfaceNormalSnappingEnabled() const
 {
 	return gSnappingPreferences.IsSnapToNormalEnabled();
-}
-
-bool CLevelEditor::IsHelpersDisplayed() const
-{
-	return GetIEditorImpl()->IsHelpersDisplayed();
 }
 
 bool CLevelEditor::IsLevelLoaded()
@@ -636,13 +616,11 @@ bool CLevelEditor::OnNew()
 		return false;
 	}
 
-	CSaveLevelDialog levelSaveDialog(QString(tr("Create New Level")));
-	QString lastLoadedLevelName(GetIEditorImpl()->GetDocument()->GetLastLoadedLevelName());
-	if (!lastLoadedLevelName.isEmpty())
-	{
-		levelSaveDialog.SelectLevelFile(lastLoadedLevelName);
-	}
-	if (levelSaveDialog.exec() != QDialog::Accepted)
+	const static CAssetType* const pLevelType = GetIEditorImpl()->GetAssetManager()->FindAssetType("Level");
+	CRY_ASSERT(pLevelType);
+
+	const string selectedAssetPath = CAssetBrowserDialog::CreateSingleAssetForType(pLevelType->GetTypeName(), CAssetBrowserDialog::OverwriteMode::AllowOverwrite);
+	if (selectedAssetPath.empty())
 	{
 		return true;
 	}
@@ -653,14 +631,8 @@ bool CLevelEditor::OnNew()
 		return true;
 	}
 
-	const static CAssetType* const pLevelType = GetIEditorImpl()->GetAssetManager()->FindAssetType("Level");
-	CRY_ASSERT(pLevelType);
-
-	// Convert "Levels/LevelName/LevelName.cry" to "Levels/LevelName.cry.cryasset"
-	const QString absoluteFilePath = levelSaveDialog.GelAcceptedAbsoluteLevelFile();
-	const QString levelFilePath = LevelFileUtils::ConvertAbsoluteToGamePath(absoluteFilePath);
-	const QString levelPath = QFileInfo(levelFilePath).path();
-	const string cryassetPath = QtUtil::ToString(QString("%1.%2.cryasset").arg(levelPath).arg(QtUtil::ToQString(pLevelType->GetFileExtension())));
+	const string cryassetPath = string().Format("%s.%s.cryasset", selectedAssetPath.c_str(), pLevelType->GetFileExtension());
+	const QString levelDirectory = QtUtil::ToQString(selectedAssetPath);
 
 	// levelSaveDialog has got the confirmation to overwrite the level.
 	CAsset* pAsset = CAssetManager::GetInstance()->FindAssetForMetadata(cryassetPath);
@@ -669,16 +641,16 @@ bool CLevelEditor::OnNew()
 	// If new level path does not point to a level
 	if (!pAsset)
 	{
-		QDir dirToDelete(QFileInfo(absoluteFilePath).path());
+		const QString absLevelDirectory = QtUtil::ToQString(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), selectedAssetPath));
+
+		QDir dirToDelete(absLevelDirectory);
 		if (dirToDelete.exists())
 		{
-			const QString question = tr("All existing contents of the folder %1 will be deleted.\nDo you really want to continue?").arg(levelPath);
+			const QString question = tr("All existing contents of the folder %1 will be deleted.\nDo you really want to continue?").arg(levelDirectory);
 			if (CQuestionDialog::SQuestion(tr("New Level"), question) != QDialogButtonBox::Yes)
 			{
 				return true;
 			}
-
-			QDir dirToDelete(QFileInfo(absoluteFilePath).path());
 
 			// Make sure none of files to be deleted are read only.
 			QDirIterator iterator(dirToDelete, QDirIterator::Subdirectories);
@@ -694,19 +666,16 @@ bool CLevelEditor::OnNew()
 
 			if (!dirToDelete.removeRecursively())
 			{
-				auto messageText = tr("Failed to remove some files of the existing folder:\n%1").arg(levelPath);
+				auto messageText = tr("Failed to remove some files of the existing folder:\n%1").arg(levelDirectory);
 				CQuestionDialog::SWarning(tr("New Level failed"), messageText);
 				return true;
 			}
 		}
 	}
-	else if (!pLevelType->DeleteAssetFiles(*pAsset, false, filesDeleted))
+	else if (!CAssetManager::GetInstance()->DeleteAssetsWithFiles({ pAsset }))
 	{
-		if (filesDeleted)
-		{
-			auto messageText = tr("Failed to remove some files of the level that has to be overwritten:\n%1").arg(levelPath);
-			CQuestionDialog::SWarning(tr("New Level failed"), messageText);
-		}
+		auto messageText = tr("Failed to remove some files of the level that has to be overwritten:\n%1").arg(levelDirectory);
+		CQuestionDialog::SWarning(tr("New Level failed"), messageText);
 		return true;
 	}
 
@@ -722,21 +691,13 @@ bool CLevelEditor::OnOpen()
 	{
 		return true;
 	}
-	// We need to ensure that the level path exists before calling the dialog, else the filesystem model will be initialized
-	// with an invalid path
-	if (!LevelFileUtils::EnsureLevelPathsValid())
-	{
-		return true;
-	}
 
 	CAssetBrowserDialog dialog({ "Level" }, CAssetBrowserDialog::Mode::OpenSingleAsset);
 	QString lastLoadedLevelName(GetIEditorImpl()->GetDocument()->GetLastLoadedLevelName());
 	if (!lastLoadedLevelName.isEmpty())
 	{
 		CAssetManager* const pManager = CAssetManager::GetInstance();
-
 		const CAsset* pAsset = pManager->FindAssetForFile(lastLoadedLevelName.toStdString().c_str());
-
 		if (pAsset)
 		{
 			dialog.SelectAsset(*pAsset);
@@ -774,16 +735,22 @@ bool CLevelEditor::OnSaveAs()
 	if (openlevel.empty())
 		return true;
 
-	CSaveLevelDialog levelSaveDialog;
+	CAssetBrowserDialog dialog({ "Level" }, CAssetBrowserDialog::Mode::Save);
 	QString lastLoadedLevelName(GetIEditorImpl()->GetDocument()->GetLastLoadedLevelName());
 	if (!lastLoadedLevelName.isEmpty())
 	{
-		levelSaveDialog.SelectLevelFile(lastLoadedLevelName);
+		CAssetManager* const pManager = CAssetManager::GetInstance();
+		const CAsset* const pAsset = pManager->FindAssetForFile(QtUtil::ToString(lastLoadedLevelName).c_str());
+		if (pAsset)
+		{
+			dialog.SelectAsset(*pAsset);
+		}
 	}
-	if (levelSaveDialog.exec() == QDialog::Accepted)
+
+	if (dialog.Execute())
 	{
-		auto filename = levelSaveDialog.GetAcceptedLevelFile().toStdString();
-		GetIEditorImpl()->GetDocument()->DoSave(filename.c_str(), true);
+		auto filename = CLevelType::MakeLevelFilename(dialog.GetSelectedAssetPath());
+		GetIEditorImpl()->GetDocument()->DoSave(PathUtil::GamePathToCryPakPath(filename,  true), true);
 		SaveCryassetFile(GetIEditorImpl()->GetDocument()->GetPathName());
 	}
 	return true;
@@ -868,7 +835,7 @@ void CLevelEditor::SaveCryassetFile(const string& levelPath)
 	if (pAsset)
 	{
 		CEditableAsset editAsset(*pAsset);
-		CLevelType::UpdateDependencies(editAsset);
+		CLevelType::UpdateFilesAndDependencies(editAsset);
 		editAsset.WriteToFile();
 		return;
 	}
@@ -881,8 +848,7 @@ void CLevelEditor::SaveCryassetFile(const string& levelPath)
 	CAsset asset(pType->GetTypeName(), CryGUID::Create(), PathUtil::GetFile(cryassetPath));
 	CEditableAsset editAsset(asset);
 	editAsset.SetMetadataFile(cryassetPath);
-	editAsset.AddFile(localLevelPath);
-	CLevelType::UpdateDependencies(editAsset);
+	CLevelType::UpdateFilesAndDependencies(editAsset);
 	editAsset.WriteToFile();
 }
 

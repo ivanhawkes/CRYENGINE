@@ -399,13 +399,13 @@ JobManager::CJobManager::CJobManager()
 const bool JobManager::CJobManager::WaitForJob(JobManager::SJobState& rJobState) const
 {
 	static ICVar* isActiveWaitEnableCVar = gEnv->pConsole ? gEnv->pConsole->GetCVar("sys_job_system_worker_boost_enabled") : nullptr;
-	if (!rJobState.syncVar.NeedsToWait())
+	if (!rJobState.GetSyncVar().NeedsToWait())
 	{
 		return true;
 	}
 
 #if defined(JOBMANAGER_SUPPORT_PROFILING)
-	SJobProfilingData* pJobProfilingData = gEnv->GetJobManager()->GetProfilingData(rJobState.nProfilerIndex);
+	SJobProfilingData* pJobProfilingData = gEnv->GetJobManager()->GetProfilingData(rJobState.GetProfilerIndex());
 	pJobProfilingData->nWaitBegin = gEnv->pTimer->GetAsyncTime();
 	pJobProfilingData->nThreadId = CryGetCurrentThreadId();
 #endif
@@ -434,7 +434,7 @@ const bool JobManager::CJobManager::WaitForJob(JobManager::SJobState& rJobState)
 		KickTempWorker();
 	}
 
-	rJobState.syncVar.Wait();
+	rJobState.GetSyncVar().Wait();
 
 	if (processJobsWhileWaiting)
 	{
@@ -551,7 +551,6 @@ void JobManager::CJobManager::AddJob(JobManager::CJobDelegator& crJob, const Job
 	infoBlock.nflags = 0;
 	infoBlock.paramSize = cParamSize;
 	infoBlock.jobInvoker = crJob.GetGenericDelegator();
-	infoBlock.jobLambdaInvoker = crJob.GetLambda();
 #if defined(JOBMANAGER_SUPPORT_PROFILING)
 	infoBlock.profilerIndex = crJob.GetProfilingDataIndex();
 #endif
@@ -576,15 +575,6 @@ void JobManager::CJobManager::AddJob(JobManager::CJobDelegator& crJob, const Job
 	
 	CRY_ASSERT(m_pBlockingBackEnd);
 	return static_cast<BlockingBackEnd::CBlockingBackEnd*>(m_pBlockingBackEnd)->AddJob(crJob, cJobHandle, infoBlock);
-}
-
-void JobManager::CJobManager::AddLambdaJob(const char* jobName, const std::function<void()>& callback, TPriorityLevel priority, SJobState* pJobState)
-{
-	CJobLambda job(jobName, callback);
-	job.SetPriorityLevel(priority);
-	if (pJobState)
-		job.RegisterJobState(pJobState);
-	job.Run();
 }
 
 void JobManager::CJobManager::ShutDown()
@@ -1620,7 +1610,7 @@ void JobManager::CJobManager::StopTempWorker() const
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-TLS_DEFINE(uint32, gWorkerThreadId);
+thread_local uint32 tls_workerThreadId = 0;
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace JobManager {
@@ -1636,12 +1626,11 @@ bool   is_marked_worker_thread_id(uint32 nWorkerThreadID) { return (nWorkerThrea
 ///////////////////////////////////////////////////////////////////////////////
 void JobManager::detail::SetWorkerThreadId(uint32 nWorkerThreadId)
 {
-	TLS_SET(gWorkerThreadId, (size_t)mark_worker_thread_id(nWorkerThreadId));
+	tls_workerThreadId = mark_worker_thread_id(nWorkerThreadId);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 uint32 JobManager::detail::GetWorkerThreadId()
 {
-	uint32 nID = (uint32)TLS_GET(uintptr_t, gWorkerThreadId);
-	return is_marked_worker_thread_id(nID) ? unmark_worker_thread_id(nID) : ~0;
+	return is_marked_worker_thread_id(tls_workerThreadId) ? unmark_worker_thread_id(tls_workerThreadId) : ~0;
 }

@@ -89,6 +89,14 @@ struct IObject
 	virtual void SetOcclusionType(EOcclusionType const occlusionType, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
+	 * Sets the occlusion ray offset to be used by this audio object.
+	 * @param offset - occlusion ray offset to apply.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 */
+	virtual void SetOcclusionRayOffset(float const offset, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
 	 * Plays the given file on this audio object.
 	 * @param playFileInfo - reference to a struct that holds data necessary for playback.
 	 * @param userData - optional struct used to pass additional data to the internal request.
@@ -120,6 +128,20 @@ struct IObject
 	 * @return EntityId
 	 */
 	virtual EntityId GetEntityId() const = 0;
+
+	/**
+	 * Toggles whether this audio object should track and update its absolute velocity.
+	 * @param enable - if true enables absolute velocity tracking otherwise disables it.
+	 * @return void
+	 */
+	virtual void ToggleAbsoluteVelocityTracking(bool const enable, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
+	 * Toggles whether this audio object should track and update its relative velocity (against the listener).
+	 * @param enable - if true enables relative velocity tracking otherwise disables it.
+	 * @return void
+	 */
+	virtual void ToggleRelativeVelocityTracking(bool const enable, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 	// </interfuscator:shuffle>
 };
 } // namespace CryAudio

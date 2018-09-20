@@ -63,14 +63,15 @@ uint64 CPostEffectContext::GetShaderRTMask() const
 
 CTexture* CPostEffectContext::GetSrcBackBufferTexture() const
 {
-	return CRendererResources::s_ptexBackBuffer;
+	return CRendererResources::s_ptexDisplayTargetSrc;
 }
 
 CTexture* CPostEffectContext::GetDstBackBufferTexture() const
 {
-	if (m_bUseAltBackBuffer)
-		return CRendererResources::s_ptexSceneDiffuse;
-	return GetRenderView()->GetColorTarget();
+	if (!m_bUseAltBackBuffer)
+		return GetRenderView()->GetColorTarget();
+	
+	return CRendererResources::s_ptexDisplayTargetDst;
 }
 
 CTexture* CPostEffectContext::GetDstDepthStencilTexture() const
@@ -193,7 +194,7 @@ bool CPostEffectStage::Execute()
 		return false;
 	}
 
-	IF (!CTexture::IsTextureExist(CRendererResources::s_ptexBackBuffer), 0)
+	IF (!CTexture::IsTextureExist(CRendererResources::s_ptexDisplayTargetSrc), 0)
 	{
 		return false;
 	}
@@ -240,6 +241,7 @@ bool CPostEffectStage::Execute()
 			pCurrEffect->SetCurrentContext(nullptr);
 			const auto id = pCurrEffect->GetID();
 
+			// TODO: Do this on the last effect, not after AA (because effects after AA use ptexDisplayTarget)
 			if (id >= EPostEffectID::PostAA)
 				m_context.EnableAltBackBuffer(false);
 
@@ -457,7 +459,7 @@ void CUnderwaterGodRaysPass::Execute(const CPostEffectContext& context)
 
 	// render god-rays into low-res render target for less fillrate hit.
 	{
-		CClearSurfacePass::Execute(CRendererResources::s_ptexBackBufferScaled[1], Clr_Transparent);
+		CClearSurfacePass::Execute(CRendererResources::s_ptexDisplayTargetScaled[1], Clr_Transparent);
 
 		const float fAmount = pAmount->GetParam();
 		const float fWatLevel = SPostEffectsUtils::m_fWaterLevel;
@@ -481,7 +483,7 @@ void CUnderwaterGodRaysPass::Execute(const CPostEffectContext& context)
 				pass.SetTechnique(CShaderMan::s_shPostEffects, techName, rtMask);
 				pass.SetState(GS_BLSRC_ONE | GS_BLDST_ONE | GS_NODEPTHTEST);
 
-				pass.SetRenderTarget(0, CRendererResources::s_ptexBackBufferScaled[1]);
+				pass.SetRenderTarget(0, CRendererResources::s_ptexDisplayTargetScaled[1]);
 
 				pass.SetTexture(0, pSrcBackBufferTexture);
 				pass.SetTexture(1, m_pWavesTex);
@@ -521,7 +523,7 @@ void CUnderwaterGodRaysPass::Execute(const CPostEffectContext& context)
 
 			pass.SetTexture(0, pSrcTex);
 			pass.SetTexture(1, m_pUnderwaterBumpTex);
-			pass.SetTexture(2, CRendererResources::s_ptexBackBufferScaled[1]);
+			pass.SetTexture(2, CRendererResources::s_ptexDisplayTargetScaled[1]);
 
 			pass.SetSampler(0, EDefaultSamplerStates::TrilinearClamp);
 			pass.SetSampler(1, EDefaultSamplerStates::TrilinearWrap);
@@ -684,18 +686,18 @@ void CSharpeningPass::Execute(const CPostEffectContext& context)
 
 	CD3D9Renderer* const RESTRICT_POINTER rd = gcpRendD3D;
 
+	CTexture* pSrcTex = context.GetSrcBackBufferTexture();
+	CTexture* pDstTex = context.GetDstBackBufferTexture();
+
 	const f32 fSharpenAmount = max(pAmount->GetParam(), CRenderer::CV_r_Sharpening + 1.0f);
 	if (fSharpenAmount > 1e-6f)
 	{
-		m_passStrechRect.Execute(CRendererResources::s_ptexBackBuffer, CRendererResources::s_ptexBackBufferScaled[0]);
+		m_passStrechRect.Execute(pSrcTex, CRendererResources::s_ptexDisplayTargetScaled[0]);
 	}
 
 	auto& pass = m_passSharpeningAndChromaticAberration;
 
-	CTexture* pSrcTex = context.GetSrcBackBufferTexture();
-	CTexture* pDstTex = context.GetDstBackBufferTexture();
-
-	if (pass.IsDirty(pDstTex->GetID(), pSrcTex->GetID()))
+	if (pass.IsDirty(pDstTex->GetID(), pSrcTex->GetID(), CRendererResources::s_ptexDisplayTargetScaled[0]->GetID()))
 	{
 		static CCryNameTSCRC techName("CA_Sharpening");
 		pass.SetPrimitiveFlags(CRenderPrimitive::eFlags_ReflectShaderConstants_PS);
@@ -706,7 +708,7 @@ void CSharpeningPass::Execute(const CPostEffectContext& context)
 		pass.SetRenderTarget(0, pDstTex);
 
 		pass.SetTexture(0, pSrcTex);
-		pass.SetTexture(1, CRendererResources::s_ptexBackBufferScaled[0]);
+		pass.SetTexture(1, CRendererResources::s_ptexDisplayTargetScaled[0]);
 
 		pass.SetSampler(0, EDefaultSamplerStates::PointClamp);
 		pass.SetSampler(1, EDefaultSamplerStates::LinearClamp);
@@ -752,13 +754,13 @@ void CBlurringPass::Execute(const CPostEffectContext& context)
 	// maximum blur amount to have nice results
 	const float fMaxBlurAmount = 5.0f;
 
-	m_passStrechRect.Execute(CRendererResources::s_ptexBackBuffer, CRendererResources::s_ptexBackBufferScaled[0]);
-	m_passGaussianBlur.Execute(CRendererResources::s_ptexBackBufferScaled[0], CRendererResources::s_ptexBackBufferScaledTemp[0], 1.0f, LERP(0.0f, fMaxBlurAmount, fAmount));
-
 	CTexture* pSrcTex = context.GetSrcBackBufferTexture();
 	CTexture* pDstTex = context.GetDstBackBufferTexture();
 
-	if (pass.IsDirty(pDstTex->GetID(), pSrcTex->GetID()))
+	m_passStrechRect.Execute(pSrcTex, CRendererResources::s_ptexDisplayTargetScaledTemp[0]);
+	m_passGaussianBlur.Execute(CRendererResources::s_ptexDisplayTargetScaledTemp[0], CRendererResources::s_ptexDisplayTargetScaled[0], 1.0f, LERP(0.0f, fMaxBlurAmount, fAmount));
+
+	if (pass.IsDirty(pDstTex->GetID(), pSrcTex->GetID(), CRendererResources::s_ptexDisplayTargetScaled[0]->GetID()))
 	{
 		static CCryNameTSCRC techName("BlurInterpolation");
 		pass.SetPrimitiveFlags(CRenderPrimitive::eFlags_ReflectShaderConstants_PS);
@@ -768,7 +770,7 @@ void CBlurringPass::Execute(const CPostEffectContext& context)
 
 		pass.SetRenderTarget(0, pDstTex);
 
-		pass.SetTexture(0, CRendererResources::s_ptexBackBufferScaled[0]);
+		pass.SetTexture(0, CRendererResources::s_ptexDisplayTargetScaled[0]);
 		pass.SetTexture(1, pSrcTex);
 
 		pass.SetSampler(0, EDefaultSamplerStates::PointClamp);
@@ -1426,12 +1428,18 @@ void CHudSilhouettesPass::ExecuteDeferredSilhouettesOptimised(const CPostEffectC
 	{
 		PROFILE_LABEL_SCOPE("DEFERRED_SILHOUETTES_PASS");
 
+		CTexture* pSilTex = CRendererResources::s_ptexSceneNormalsMap;
+		CTexture* pDstTex = context.GetDstBackBufferTexture();
+
+		const int flags = FT_USAGE_RENDERTARGET | FT_NOMIPS;
+		SDynTexture* pTmpTex = new SDynTexture(pSilTex->GetWidth() >> 1, pSilTex->GetHeight() >> 1, Clr_Empty, eTF_R8G8B8A8, eTT_2D, flags, "HudSilhouettesTempRT");
+		pTmpTex->Update(pSilTex->GetWidth() >> 1, pSilTex->GetHeight() >> 1);
+
 		// Down Sample
-		m_passStrechRect.Execute(CRendererResources::s_ptexSceneNormalsMap, CRendererResources::s_ptexBackBufferScaled[0]);
+		m_passStrechRect.Execute(pSilTex, pTmpTex->m_pTexture);
 
 		auto& pass = m_passDeferredSilhouettesOptimised;
-		CTexture* pDstTex = context.GetDstBackBufferTexture();
-		if (pass.IsDirty(pDstTex->GetID()))
+		if (pass.IsDirty(pDstTex->GetID(), pTmpTex->m_pTexture->GetID()))
 		{
 			static CCryNameTSCRC techName("DeferredSilhouettesOptimised");
 			pass.SetTechnique(CShaderMan::s_shPostEffectsGame, techName, 0);
@@ -1439,8 +1447,7 @@ void CHudSilhouettesPass::ExecuteDeferredSilhouettesOptimised(const CPostEffectC
 
 			pass.SetRenderTarget(0, pDstTex);
 
-			pass.SetTexture(0, CRendererResources::s_ptexBackBufferScaled[0]);
-
+			pass.SetTexture(0, pTmpTex->m_pTexture);
 			pass.SetSampler(0, EDefaultSamplerStates::LinearClamp);
 
 			pass.SetRequirePerViewConstantBuffer(true);
@@ -1473,6 +1480,8 @@ void CHudSilhouettesPass::ExecuteDeferredSilhouettesOptimised(const CPostEffectC
 		pass.SetConstant(psParamName, psParams, eHWSC_Pixel);
 
 		pass.Execute();
+
+		SAFE_DELETE(pTmpTex);
 	}
 }
 
@@ -1751,7 +1760,7 @@ void CHud3DPass::ExecuteBloomTexUpdate(const CPostEffectContext& context, class 
 	// Calculate HUD's projection matrix using fixed FOV.
 	hud3d.CalculateProjMatrix();
 
-	CTexture* pOutputRT = CRendererResources::s_ptexBackBufferScaled[1];
+	CTexture* pOutputRT = CRendererResources::s_ptexDisplayTargetScaled[1];
 
 	// temporary clear/fix - try avoiding this
 	CClearSurfacePass::Execute(pOutputRT, Clr_Transparent);
@@ -1845,7 +1854,7 @@ void CHud3DPass::ExecuteBloomTexUpdate(const CPostEffectContext& context, class 
 		pass.Execute();
 	}
 
-	CTexture* pBlurDst = CRendererResources::s_ptexBackBufferScaledTemp[1];
+	CTexture* pBlurDst = CRendererResources::s_ptexDisplayTargetScaledTemp[1];
 	if (pBlurDst)
 	{
 		m_passBlurGaussian.Execute(pOutputRT, pBlurDst, 1.0f, 0.85f);
@@ -2014,7 +2023,7 @@ void CHud3DPass::ExecuteFinalPass(const CPostEffectContext& context, CTexture* p
 				}
 				prim.SetSampler(0, EDefaultSamplerStates::LinearClamp);
 
-				prim.SetTexture(1, CRendererResources::s_ptexBackBufferScaled[1]);
+				prim.SetTexture(1, CRendererResources::s_ptexDisplayTargetScaled[1]);
 				prim.SetSampler(1, EDefaultSamplerStates::LinearClamp);
 
 				if (bInterferenceApplied)

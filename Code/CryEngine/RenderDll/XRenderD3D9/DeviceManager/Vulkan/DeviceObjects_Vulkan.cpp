@@ -53,7 +53,7 @@ CDeviceObjectFactory::CDeviceObjectFactory()
 	m_pVKDevice    = nullptr;
 	m_pVKScheduler = nullptr;
 
-#if defined(CRY_PLATFORM_MOBILE)
+#if !RENDERER_ENABLE_FULL_PIPELINE
 	m_objectValidator = CDeviceObjectValidator::CreateForMobile();
 #else
 	m_objectValidator = CDeviceObjectValidator::Create();
@@ -165,6 +165,33 @@ VkDescriptorSetLayout CDeviceObjectFactory::GetInlineConstantBufferLayout()
 	}
 
 	return m_inlineConstantBufferLayout;
+}
+
+VkDescriptorSetLayout CDeviceObjectFactory::GetInlineShaderResourceLayout()
+{
+	// NOTE: In order to avoid building a set of descriptors for each constant buffer
+	// (due to sub allocation) we currently set stageFlags to all possible stages.
+	if (m_inlineShaderResourceLayout == VK_NULL_HANDLE)
+	{
+		VkDescriptorSetLayoutBinding cbBinding;
+		cbBinding.binding = 0;
+		cbBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+		cbBinding.descriptorCount = 1;
+		cbBinding.stageFlags = GetShaderStageFlags(EShaderStage_All);
+		cbBinding.pImmutableSamplers = nullptr;
+
+		VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
+		layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutCreateInfo.pNext = nullptr;
+		layoutCreateInfo.flags = 0;
+		layoutCreateInfo.bindingCount = 1;
+		layoutCreateInfo.pBindings = &cbBinding;
+
+		VkResult result = vkCreateDescriptorSetLayout(GetDevice()->GetVkDevice(), &layoutCreateInfo, nullptr, &m_inlineShaderResourceLayout);
+		CRY_ASSERT(result == VK_SUCCESS);
+	}
+
+	return m_inlineShaderResourceLayout;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

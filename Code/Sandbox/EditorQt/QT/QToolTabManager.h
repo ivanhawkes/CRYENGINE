@@ -2,14 +2,10 @@
 
 #pragma once
 
-struct IViewPaneClass;
-class CWnd;
-
 #include "SandboxAPI.h"
-#include <QFrame>
-#include <QDir>
-#include "Controls/SandboxWindowing.h"
-#include <Util/UserDataUtil.h>
+#include <Controls/SandboxWindowing.h>
+
+class CWnd;
 
 //Internal class for IPane management.
 class QTabPane : public QBaseTabPane
@@ -94,8 +90,6 @@ private:
 	void                      StoreHistory(QTabPane* viewDesc);
 
 	class QToolWindowManager* GetToolManager() const;
-
-	void                      SetDefaultLayout();
 
 	QTabPane*                 FindTabPane(IPane* pane);
 

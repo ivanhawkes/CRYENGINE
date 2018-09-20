@@ -3,6 +3,7 @@
 #pragma once
 
 #include "DX12/CCryDX12Object.hpp"
+#include "DX12/Device/CCryDX12Device.hpp"
 
 DEFINE_GUID(WKPDID_D3DDebugObjectName, 0x429b8c22, 0x9188, 0x4b0c, 0x87, 0x42, 0xac, 0xb0, 0xbf, 0x85, 0xc2, 0x00);
 DEFINE_GUID(WKPDID_D3DDebugObjectNameW, 0x4cca5fd8, 0x921f, 0x42c8, 0x85, 0x66, 0x70, 0xca, 0xf2, 0xa9, 0xb7, 0x41);
@@ -130,10 +131,18 @@ public:
 					wchar_t objectname[4096] = { 0 };
 					size_t len = strlen((char*)pData);
 					MultiByteToWideChar(0, 0, (char*)pData, len, objectname, len);
-					m_pChild->SetName((LPCWSTR)objectname);
+					m_pChild->SetName(objectname);
 				}
 
+				// Reset previous contents
 				m_pChild->SetPrivateData(guid, 0, nullptr);
+			}
+			else
+			{
+				if (guid == WKPDID_D3DDebugObjectName)
+				{
+					m_pChild->SetName(L"");
+				}
 			}
 
 			return m_pChild->SetPrivateData(guid, DataSize, pData);

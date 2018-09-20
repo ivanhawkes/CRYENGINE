@@ -164,8 +164,6 @@ struct CRY_ALIGN(128) SRenderThread
 	SRenderThread();
 	~SRenderThread();
 
-	static int GetLocalThreadCommandBufferId();
-
 	inline void SignalFlushFinishedCond()
 	{
 #ifdef USE_LOCKS_FOR_FLUSH_SYNC
@@ -504,7 +502,7 @@ inline void SRenderThread::ExecuteRenderThreadCommand(RenderThreadCallback&& cal
 	}
 	else
 	{
-		CRY_ASSERT(!IsLevelLoadingThread());
+		CRY_ASSERT(IsMainThread());
 //		AUTO_LOCK_T(CryCriticalSectionNonRecursive, m_CommandsLock);
 		byte* p = AddCommandTo(eRC_LambdaCall, sizeof(void*), m_Commands[m_nCurThreadFill]);
 		void* pCallbackPtr = ::new(m_lambdaCallbacksPool.Allocate())SRenderThreadLambdaCallback{callback,flags};

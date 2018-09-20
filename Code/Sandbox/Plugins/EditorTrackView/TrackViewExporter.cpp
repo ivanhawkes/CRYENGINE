@@ -22,8 +22,8 @@
 #include "Controls/QuestionDialog.h"
 #include <QCheckBox>
 
-inline f32 Sandbox2MayaFOVDeg(const f32 fov, const f32 ratio)     { return RAD2DEG(2.0f * atan_tpl(tan(DEG2RAD(fov) / 2.0f) * ratio)); };
-inline f32 Sandbox2MayaFOVRad2Deg(const f32 fov, const f32 ratio) { return RAD2DEG(2.0f * atan_tpl(tan(fov / 2.0f) * ratio)); };
+inline f32 Sandbox2MayaFOVDeg(const f32 fov, const f32 ratio)     { return RAD2DEG(2.0f * atan_tpl(tan(DEG2RAD(fov) / 2.0f) * ratio)); }
+inline f32 Sandbox2MayaFOVRad2Deg(const f32 fov, const f32 ratio) { return RAD2DEG(2.0f * atan_tpl(tan(fov / 2.0f) * ratio)); }
 
 CTrackViewExporter::CTrackViewExporter()
 	: m_bBakedKeysSequenceExport(true)
@@ -307,7 +307,6 @@ bool CTrackViewExporter::ExportToFile(bool bCompleteSequence)
 	runParams.extensionFilters = extensionFilters;
 
 	string fileName = CSystemFileDialog::RunExportFile(runParams, nullptr).toLocal8Bit().data();
-	;
 	if (fileName.GetLength() > 0)
 	{
 		EFormat selFormat = eFormat_Unknown;
@@ -1354,4 +1353,3 @@ void CTrackViewExporter::CreateCurveFromTrack(const CTrackViewTrack* pTrack, SCu
 		}
 	}
 }
-

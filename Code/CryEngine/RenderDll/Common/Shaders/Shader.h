@@ -28,7 +28,7 @@
 
 // bump this value up if you want to invalidate shader cache (e.g. changed some code or .ext file)
 // #### VIP NOTE ####: DON'T USE MORE THAN ONE DECIMAL PLACE!!!! else it doesn't work...
-#define FX_CACHE_VER     0.3
+#define FX_CACHE_VER     0.4
 #define FX_SER_CACHE_VER 1.2    // Shader serialization version (FX_CACHE_VER + FX_SER_CACHE_VER)
 
 // Maximum 1 digit here
@@ -399,7 +399,8 @@ enum ERenderOrder
 {
 	eRO_PreProcess,
 	eRO_PostProcess,
-	eRO_PreDraw
+	eRO_PreDraw,
+	eRO_Managed
 };
 
 enum ERTUpdate
@@ -595,7 +596,7 @@ enum EHWSRMaskBit
 
 	HWSR_DECAL_TEXGEN_2D,
 
-	HWSR_SHADOW_MIXED_MAP_G16R16,
+	HWSR_SHADOW_DEPTH_OUTPUT_LINEAR,
 	HWSR_HW_PCF_COMPARE,
 	HWSR_SHADOW_JITTERING,
 	HWSR_POINT_LIGHT,

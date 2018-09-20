@@ -1255,7 +1255,7 @@ void CFacialSequenceDialog::CleanupKeys()
 		m_splineCtrl.StoreUndo();
 
 		for (SelectedTreeItemIterator it = BeginSelectedTreeItems(&m_channelsCtrl), end = EndSelectedTreeItems(&m_channelsCtrl); it != end; ++it)
-			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind2nd(std::mem_fun(&IFacialAnimChannel::CleanupKeys), m_fKeyCleanupThreshold));
+			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind(&IFacialAnimChannel::CleanupKeys, std::placeholders::_1, m_fKeyCleanupThreshold));
 
 		m_pContext->SendEvent(EFD_EVENT_SPLINE_CHANGE, 0);
 		m_pContext->bSequenceModfied = true;
@@ -1278,7 +1278,7 @@ void CFacialSequenceDialog::SmoothKeys()
 		m_splineCtrl.StoreUndo();
 
 		for (SelectedTreeItemIterator it = BeginSelectedTreeItems(&m_channelsCtrl), end = EndSelectedTreeItems(&m_channelsCtrl); it != end; ++it)
-			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind2nd(std::mem_fun(&IFacialAnimChannel::SmoothKeys), m_fSmoothingSigma));
+			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind(&IFacialAnimChannel::SmoothKeys, std::placeholders::_1, m_fSmoothingSigma));
 
 		m_pContext->SendEvent(EFD_EVENT_SPLINE_CHANGE, 0);
 		m_pContext->bSequenceModfied = true;
@@ -3140,4 +3140,3 @@ void CFacialSequenceDialog::UpdateRemoveNoiseSigma()
 	if (m_pRemoveNoiseValueEdit)
 		m_pRemoveNoiseValueEdit->SetEditText(text.c_str());
 }
-

@@ -2,11 +2,12 @@
 
 #pragma once
 
-#include <CryAudio/IAudioInterfacesCommonData.h>
+#include <CryMath/Cry_Math.h>
 
 namespace CryAudio
 {
 class CATLListener;
+class CObjectTransformation;
 
 class CAudioListenerManager final
 {
@@ -20,22 +21,20 @@ public:
 	CAudioListenerManager&       operator=(CAudioListenerManager const&) = delete;
 	CAudioListenerManager&       operator=(CAudioListenerManager&&) = delete;
 
+	void                         Terminate();
 	void                         OnAfterImplChanged();
 	void                         ReleaseImplData();
-	void                         Release();
 	void                         Update(float const deltaTime);
-	CATLListener*                CreateListener(char const* const szName = nullptr);
+	CATLListener*                CreateListener(CObjectTransformation const& transformation, char const* const szName);
 	void                         ReleaseListener(CATLListener* const pListener);
-	size_t                       GetNumActiveListeners() const;
 	CObjectTransformation const& GetActiveListenerTransformation() const;
-	Vec3 const&                  GetActiveListenerVelocity() const;
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-	char const* GetActiveListenerName() const;
+	size_t GetNumActiveListeners() const;
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
 private:
 
-	std::vector<CATLListener*> m_activeListeners;
+	std::vector<CATLListener*> m_constructedListeners;
 };
 } // namespace CryAudio

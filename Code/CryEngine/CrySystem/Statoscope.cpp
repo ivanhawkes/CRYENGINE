@@ -2123,15 +2123,12 @@ void CStatoscope::CloseTelemetryStream()
 
 void CStatoscope::PrepareScreenShot()
 {
-	const int widthDelta  = m_lastScreenWidth  - gEnv->pRenderer->GetWidth();
-	const int heightDelta = m_lastScreenHeight - gEnv->pRenderer->GetHeight();
+	const int widthDelta  = m_lastScreenWidth  - gEnv->pRenderer->GetOverlayWidth();
+	const int heightDelta = m_lastScreenHeight - gEnv->pRenderer->GetOverlayHeight();
 
-	m_lastScreenWidth  = gEnv->pRenderer->GetWidth();
-	m_lastScreenHeight = gEnv->pRenderer->GetHeight();
-
-	CRY_ASSERT(gEnv->pRenderer->GetWidth () == gEnv->pRenderer->GetOverlayWidth ());
-	CRY_ASSERT(gEnv->pRenderer->GetHeight() == gEnv->pRenderer->GetOverlayHeight());
-
+	m_lastScreenWidth  = gEnv->pRenderer->GetOverlayWidth();
+	m_lastScreenHeight = gEnv->pRenderer->GetOverlayHeight();
+	
 	const int shrunkenWidthNotAligned = OnGetFrameWidth();
 	const int shrunkenWidth = shrunkenWidthNotAligned - (shrunkenWidthNotAligned % 4);
 	const int shrunkenHeight = OnGetFrameHeight();
@@ -2391,7 +2388,7 @@ void CStatoscope::SetLogFilename()
 
 		const SFileVersion& ver = gEnv->pSystem->GetFileVersion();
 		char versionString[64];
-		cry_sprintf(versionString, "_%d_%d_%d_%d", ver.v[3], ver.v[2], ver.v[1], ver.v[0]);
+		cry_sprintf(versionString, "_%d_%d_%d_%d", ver[3], ver[2], ver[1], ver[0]);
 
 		m_logFilename += versionString;
 	}

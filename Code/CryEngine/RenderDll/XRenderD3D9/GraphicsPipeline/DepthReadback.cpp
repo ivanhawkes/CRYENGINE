@@ -170,6 +170,8 @@ bool CDepthReadbackStage::CreateResources(uint32 sourceWidth, uint32 sourceHeigh
 		}
 	}
 
+	const auto readbackData = [](void* pData, uint32 rowPitch, uint32 slicePitch) -> bool { return true; };
+
 	for (uint32 i = 0; i < kMaxReadbackPasses && !bFailed; ++i)
 	{
 		const uint32 readbackIndex = i;
@@ -180,7 +182,7 @@ bool CDepthReadbackStage::CreateResources(uint32 sourceWidth, uint32 sourceHeigh
 		{
 			// Let all previous requested readbacks finish
 			if (m_readback[readbackIndex].bIssued && !m_readback[readbackIndex].bCompleted)
-				m_readback[readbackIndex].bCompleted = pTarget->GetDevTexture()->AccessCurrStagingResource(0, false);
+				pTarget->GetDevTexture()->AccessCurrStagingResource(0, false, readbackData);
 		}
 
 		if (!pTarget->GetDevTexture() || pTarget->GetWidth() != CULL_SIZEX || pTarget->GetHeight() != CULL_SIZEY)
@@ -280,6 +282,10 @@ void CDepthReadbackStage::ConfigurePasses(CTexture* pSource, EConfigurationFlags
 	  (flags & kMSAA ? g_HWSR_MaskBit[HWSR_SAMPLE0] : 0) |
 	  (downsampleMode == SPostEffectsUtils::eDepthDownsample_Min ? g_HWSR_MaskBit[HWSR_REVERSE_DEPTH] : 0);
 
+	// TODO: Find out why the FullscreenPrimitive crashes when doubling resolution
+	for (uint32 i = 0; i < kMaxDownsamplePasses; ++i)
+		m_downsamplePass[i].ResetPrimitive();
+
 	for (uint32 i = kMaxDownsamplePasses - m_downsamplePassCount; i < kMaxDownsamplePasses; ++i)
 	{
 		CFullscreenPass& pass = m_downsamplePass[i];
@@ -334,12 +340,10 @@ void CDepthReadbackStage::ExecutePasses(float sourceWidth, float sourceHeight, f
 		pass.SetConstant(psParam0Name, psParams0, eHWSC_Pixel);
 		pass.SetConstant(psParam1Name, psParams1, eHWSC_Pixel);
 
-		if (pass.IsDirty())
-			return false;
-
 		pass.Execute();
 
-		return true;
+		// In case execution fails (missing pso, etc.)
+		return !pass.IsDirty(); 
 	};
 
 	// Issue downsample
@@ -365,7 +369,8 @@ void CDepthReadbackStage::ExecutePasses(float sourceWidth, float sourceHeight, f
 	CTexture* const pTarget = CRendererResources::s_ptexLinearDepthReadBack[readbackIndex];
 	SReadback& readback = m_readback[readbackIndex];
 	CFullscreenPass& pass = readback.pass;
-	executePass(pass, bInitial, sourceWidth, sourceHeight);
+	if (!executePass(pass, bInitial, sourceWidth, sourceHeight))
+		return;
 
 	readback.bIssued = true; pTarget->GetDevTexture()->DownloadToStagingResource(0);
 	readback.bCompleted =    pTarget->GetDevTexture()->AccessCurrStagingResource(0, false);

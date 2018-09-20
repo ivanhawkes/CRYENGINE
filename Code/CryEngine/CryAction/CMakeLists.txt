@@ -73,6 +73,7 @@ add_sources("CryAction_flashui_uber.cpp"
 		"FlashUI/FlashUIBaseNode.h"
 		"FlashUI/FlashUIDisplayNodes.h"
 		"FlashUI/FlashUIElement.h"
+		"FlashUI/FlashUIFlowNodeFactory.h"
 		"FlashUI/FlashUIElementNodes.h"
 		"FlashUI/FlashUIEventNodes.h"
 		"FlashUI/FlashUIEventSystem.h"
@@ -882,10 +883,6 @@ end_sources()
 #END-FILE-LIST
 
 CryEngineModule(CryAction PCH "StdAfx.cpp" SOLUTION_FOLDER "CryEngine")
-
-if(PROJECT_BUILD)
-	target_compile_definitions(${THIS_PROJECT} PRIVATE DISABLE_LEGACY_GAME_DLL=1)
-endif()
 
 target_link_libraries(${THIS_PROJECT} PRIVATE md5)
 if (WIN32 OR WIN64)

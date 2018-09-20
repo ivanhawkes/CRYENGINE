@@ -3,7 +3,6 @@
 #pragma once
 
 #include "Tools/BaseTool.h"
-#include "Util/SpotManager.h"
 
 namespace Designer
 {
@@ -88,4 +87,3 @@ private:
 	DrawStraight m_DS;
 };
 }
-

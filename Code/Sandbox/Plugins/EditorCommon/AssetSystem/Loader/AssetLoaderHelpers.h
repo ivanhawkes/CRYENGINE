@@ -22,10 +22,16 @@ struct SAssetMetadata;
 //! GetAssetName("Assets/Levels/Woods") = "Woods"
 string GetAssetName(const char* szPath);
 
+//! Returns true if the path points to an asset metadata file.
+bool EDITOR_COMMON_API IsMetadataFile(const char* szPath);
+
 class EDITOR_COMMON_API CAssetFactory
 {
 public:
 	static CAsset* CreateFromMetadata(const char* szAssetPath, const SAssetMetadata& metadata);
+
+	//! Read given metadata files from file system and update existing assets.
+	static std::vector<CAsset*> LoadAssetsFromMetadataFiles(const std::vector<string>& metadataFiles);
 
 	//! Reads xml with metadata from memory.
 	//! \param szAssetPath Must be relative to the assets root. 
@@ -42,4 +48,3 @@ public:
 };
 
 } // namespace AssetLoader
-

@@ -16,7 +16,7 @@ const int kMaterialFlagComputeSkinningWithMorphs = 0x04;
 // if it is useful
 const int kMaterialFlagComputeSkinningWithMorphsPostSkinning = 0x08;
 
-void SPerCharacterResources::RT_PushWeights(const int numWeights, const int numWeightsMap, const compute_skinning::SSkinning* w, const compute_skinning::SSkinningMap* weightsMap)
+void SPerCharacterResources::PushWeights(const int numWeights, const int numWeightsMap, const compute_skinning::SSkinning* w, const compute_skinning::SSkinningMap* weightsMap)
 {
 	skinningVector.UpdateBufferContent(w, numWeights);
 	skinningVectorMap.UpdateBufferContent(weightsMap, numWeightsMap);
@@ -32,7 +32,7 @@ size_t SPerCharacterResources::GetSizeBytesGpuBuffers()
 	return total;
 }
 
-void SPerMeshResources::RT_PushMorphs(const int numMorphs, const int numMorphsBitField, const Vec4* pMorphDeltas, const uint64* pMorphsBitField)
+void SPerMeshResources::PushMorphs(const int numMorphs, const int numMorphsBitField, const Vec4* pMorphDeltas, const uint64* pMorphsBitField)
 {
 	morphsDeltas.UpdateBufferContent(pMorphDeltas, numMorphs);
 	morphsBitField.UpdateBufferContent(pMorphsBitField, numMorphsBitField);
@@ -40,7 +40,7 @@ void SPerMeshResources::RT_PushMorphs(const int numMorphs, const int numMorphsBi
 	uploadState |= sState_MorphsInitialized;
 }
 
-void SPerMeshResources::RT_PushBindPoseBuffers(const int numVertices, const int numIndices, const int numAdjTriangles, const compute_skinning::SSkinVertexIn* vertices, const vtx_idx* indices, const uint32* adjTris)
+void SPerMeshResources::PushBindPoseBuffers(const int numVertices, const int numIndices, const int numAdjTriangles, const compute_skinning::SSkinVertexIn* vertices, const vtx_idx* indices, const uint32* adjTris)
 {
 	verticesIn.UpdateBufferContent(vertices, numVertices);
 	indicesIn.UpdateBufferContent(indices, numIndices);
@@ -512,7 +512,7 @@ void CComputeSkinningStage::PreDraw()
 {
 	CDeviceCommandListRef pCoreInterface(GetDeviceObjectFactory().GetCoreCommandList());
 
-	std::vector<CGpuBuffer*> UAVs;
+	std::vector<CDeviceBuffer*> UAVs;
 
 	// TODO:/NOTE: possibly multi-threadable recording
 	auto frameId = RenderView()->GetFrameId();
@@ -537,11 +537,11 @@ void CComputeSkinningStage::PreDraw()
 		bool bDoTangents = (pSD->nHWSkinningFlags & eHWS_DC_Deformation_Tangents ? true : false);
 
 		////////////////////////////////////////////////////////////////////////////////////////////
-		UAVs.emplace_back(&ir->verticesOut.GetBuffer());
+		UAVs.emplace_back(ir->verticesOut.GetBuffer().GetDevBuffer());
 
 		if (bDoTangents)
 		{
-			UAVs.emplace_back(&ir->tangentsOut.GetBuffer());
+			UAVs.emplace_back(ir->tangentsOut.GetBuffer().GetDevBuffer());
 		}
 	}
 

@@ -1,16 +1,10 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+#pragma once
 
-#if !defined(AFX_TOOLBARDIALOG_H__31620F0B_DB2D_45BA_A86B_E71BD4F79414__INCLUDED_)
-#define AFX_TOOLBARDIALOG_H__31620F0B_DB2D_45BA_A86B_E71BD4F79414__INCLUDED_
+#include "MFCToolsDefines.h"
+#include "Controls/DlgBars.h"
 
-#if _MSC_VER > 1000
-	#pragma once
-#endif // _MSC_VER > 1000
-
-#include "PluginAPI.h"
-#include "Controls\DlgBars.h"
-
-class PLUGIN_API CToolbarDialog : public CXTPDialogBase<CXTResizeDialog>
+class MFC_TOOLS_PLUGIN_API CToolbarDialog : public CXTPDialogBase<CXTResizeDialog>
 {
 	DECLARE_DYNAMIC(CToolbarDialog)
 public:
@@ -49,7 +43,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 // Custom frame window.
 //////////////////////////////////////////////////////////////////////////
-class PLUGIN_API CCustomFrameWnd : public CXTPFrameWnd
+class MFC_TOOLS_PLUGIN_API CCustomFrameWnd : public CXTPFrameWnd
 {
 public:
 	DECLARE_DYNAMIC(CCustomFrameWnd)
@@ -72,7 +66,7 @@ protected:
 
 	virtual BOOL    PreTranslateMessage(MSG* pMsg);
 	virtual BOOL    OnCmdMsg(UINT nID, int nCode, void* pExtra, AFX_CMDHANDLERINFO* pHandlerInfo);
-	virtual void    PostNcDestroy() {};
+	virtual void    PostNcDestroy() {}
 
 	afx_msg BOOL    OnEraseBkgnd(CDC* pDC);
 	afx_msg void    OnDestroy();
@@ -84,6 +78,3 @@ protected:
 	CXTPDockingPaneManager m_paneManager;
 	CString                m_profile;
 };
-
-#endif // !defined(AFX_TOOLBARDIALOG_H__31620F0B_DB2D_45BA_A86B_E71BD4F79414__INCLUDED_)
-

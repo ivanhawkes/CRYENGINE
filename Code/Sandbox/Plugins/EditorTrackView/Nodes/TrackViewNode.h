@@ -136,7 +136,7 @@ public:
 
 	// Name
 	virtual const char* GetName() const = 0;
-	virtual bool        SetName(const char* pName) { return false; };
+	virtual bool        SetName(const char* pName) { return false; }
 	virtual bool        CanBeRenamed() const       { return false; }
 
 	// CryMovie node type
@@ -194,7 +194,7 @@ public:
 
 	// Called when node is added/removed from sequence
 	virtual void OnAdded()   {}
-	virtual void OnRemoved() {};
+	virtual void OnRemoved() {}
 
 	// Only for displaying sequence properties at the moment
 	virtual void Serialize(Serialization::IArchive& ar);

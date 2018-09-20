@@ -18,7 +18,7 @@ enum EAssetColumns
 	eAssetColumns_Uid,
 	eAssetColumns_Thumbnail,
 	eAssetColumns_FilterString, //optimization for smart search
-	eAssetColumns_Details // First column of asset type-specific details. NOTE: Must be the last enumerator.
+	eAssetColumns_Details       // First column of asset type-specific details. NOTE: Must be the last enumerator.
 };
 
 enum EAssetModelRowType
@@ -29,13 +29,13 @@ enum EAssetModelRowType
 
 namespace AssetModelAttributes
 {
-	extern CAttributeType<QString> s_dependenciesAttributeType;
+extern CAttributeType<QString> s_dependenciesAttributeType;
 
-	extern CItemModelAttributeEnumFunc s_AssetTypeAttribute;
-	extern CItemModelAttributeEnumFunc s_AssetStatusAttribute;
-	extern CItemModelAttribute s_AssetFolderAttribute;
-	extern CItemModelAttribute s_AssetUidAttribute;
-	extern CItemModelAttribute s_FilterStringAttribute;
+extern CItemModelAttributeEnumFunc s_AssetTypeAttribute;
+extern CItemModelAttributeEnumFunc s_AssetStatusAttribute;
+extern CItemModelAttribute s_AssetFolderAttribute;
+extern CItemModelAttribute s_AssetUidAttribute;
+extern CItemModelAttribute s_FilterStringAttribute;
 };
 
 //! This model describes all the assets contained in the AssetManager
@@ -50,8 +50,8 @@ class EDITOR_COMMON_API CAssetModel : public QAbstractItemModel
 	struct SDetailAttribute
 	{
 		const CItemModelAttribute* pAttribute;
-		std::vector<CAssetType*> assetTypes; //!< All asset types sharing attribute \p pAttribute.
-		std::function<QVariant(const CAsset* pAsset, const CItemModelAttribute* pDetail)> getValueFn;
+		std::vector<CAssetType*>   assetTypes; //!< All asset types sharing attribute \p pAttribute.
+		std::function<QVariant(const CAsset* pAsset, const CItemModelAttribute* pDetail, int role)> getValueFn;
 	};
 
 public:
@@ -60,7 +60,7 @@ public:
 	enum class Roles : int
 	{
 		InternalPointerRole = Qt::UserRole, //intptr_t (CAsset*)
-		TypeCheckRole,						//EAssetModelRowType
+		TypeCheckRole,                      //EAssetModelRowType
 		Max,
 	};
 
@@ -69,22 +69,28 @@ public:
 	class CAutoRegisterColumn : public CAutoRegister<CAutoRegisterColumn>
 	{
 	public:
-		CAutoRegisterColumn(const CItemModelAttribute* pAttribute, std::function<QVariant(const CAsset* pAsset, const CItemModelAttribute* pAttribute)> getValueFn);
+		CAutoRegisterColumn(const CItemModelAttribute* pAttribute, std::function<QVariant(const CAsset* pAsset, const CItemModelAttribute* pAttribute, int role)> getValueFn);
 	};
 
-	CAsset* ToAsset(const QModelIndex& index);
-	const CAsset* ToAsset(const QModelIndex& index) const;
+	CAsset*                           ToAsset(const QModelIndex& index);
+	const CAsset*                     ToAsset(const QModelIndex& index) const;
 
-	QModelIndex ToIndex(const CAsset& asset, int col = 0) const;
+	QModelIndex                       ToIndex(const CAsset& asset, int col = 0) const;
 
+	static std::vector<CAsset*>       GetAssets(const CDragDropData& data);
 	static const CItemModelAttribute* GetColumnAttribute(int column);
 	static QVariant                   GetHeaderData(int section, Qt::Orientation orientation, int role);
 	static int                        GetColumnCount();
-	bool                              AddColumn(const CItemModelAttribute* pAttribute, std::function<QVariant(const CAsset* pAsset, const CItemModelAttribute* pAttribute)> getValueFn);
+	bool                              AddColumn(const CItemModelAttribute* pAttribute, std::function<QVariant(const CAsset* pAsset, const CItemModelAttribute* pAttribute, int role)> getValueFn);
+
+	//! Adds icons providers to the list.
+	//! This icon providers are called in order to get additional icons that need to be displayed in thumbnail view
+	void AddThumbnailIconProvider(const string& name, std::function<QIcon(const CAsset*)> iconProviderFunc);
+	void RemoveThumbnailIconProvider(const string& name);
 
 	//////////////////////////////////////////////////////////
 	// QAbstractItemModel implementation
-	virtual bool			hasChildren(const QModelIndex& parent = QModelIndex()) const override;
+	virtual bool            hasChildren(const QModelIndex& parent = QModelIndex()) const override;
 	virtual int             rowCount(const QModelIndex& parent) const override;
 	virtual int             columnCount(const QModelIndex& parent) const override;
 	virtual QVariant        data(const QModelIndex& index, int role) const override;
@@ -94,18 +100,15 @@ public:
 	virtual QModelIndex     index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
 	virtual QModelIndex     parent(const QModelIndex& index) const override;
 	virtual Qt::DropActions supportedDragActions() const override;
-	/*virtual Qt::DropActions supportedDropActions() const override;*/
 	virtual QStringList     mimeTypes() const override;
 	virtual QMimeData*      mimeData(const QModelIndexList& indexes) const override;
-	/*virtual bool            dropMimeData(const QMimeData* pData, Qt::DropAction action, int row, int column, const QModelIndex& parent) override;
-	virtual bool            canDropMimeData(const QMimeData* pData, Qt::DropAction action, int row, int column, const QModelIndex& parent) const override;*/
 	//////////////////////////////////////////////////////////
 
 	static QStringList GetAssetTypesStrList();
 	static QStringList GetStatusesList();
 
 private:
-	//! \see CAssetManager::Init() 
+	//! \see CAssetManager::Init()
 	void Init();
 
 	//! Builds the vector of detail attributes. A detail attribute stores a CItemModelAttribute A and a name map M.
@@ -128,8 +131,9 @@ private:
 
 	void OnAssetChanged(CAsset& asset);
 	void OnAssetThumbnailLoaded(CAsset& asset);
-	
-	FavoritesHelper m_favHelper;
+
+	FavoritesHelper               m_favHelper;
 
 	std::vector<SDetailAttribute> m_detailAttributes;
+	std::vector<std::pair<string, std::function<QIcon(const CAsset*)>>> m_tumbnailIconProviders;
 };

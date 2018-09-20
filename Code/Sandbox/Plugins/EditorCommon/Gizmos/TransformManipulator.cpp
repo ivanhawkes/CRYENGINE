@@ -1,23 +1,17 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include "IEditor.h"
 #include "TransformManipulator.h"
-#include "IUndoManager.h"
-#include "Grid.h"
-
-#include "IDisplayViewport.h"
 
 #include "Gizmos/AxisHelper.h"
 #include "Gizmos/AxisHelperExtended.h"
-
+#include "Preferences/SnappingPreferences.h"
+#include "IDisplayViewport.h"
 #include "QtUtil.h"
 
-//////////////////////////////////////////////////////////////////////////
-// CAxisGizmo implementation.
-//////////////////////////////////////////////////////////////////////////
+#include <IEditor.h>
+#include <IUndoManager.h>
 
-//////////////////////////////////////////////////////////////////////////
 CTransformManipulator::CTransformManipulator(ITransformManipulatorOwner* owner)
 	: m_bDragging(false)
 	, m_bUseCustomTransform(false)
@@ -36,7 +30,6 @@ CTransformManipulator::CTransformManipulator(ITransformManipulatorOwner* owner)
 	GetIEditor()->GetLevelEditorSharedState()->signalEditModeChanged.Connect(this, &CTransformManipulator::OnUpdateState);
 }
 
-//////////////////////////////////////////////////////////////////////////
 CTransformManipulator::~CTransformManipulator()
 {
 	GetIEditor()->GetLevelEditorSharedState()->signalAxisConstraintChanged.DisconnectObject(this);
@@ -291,6 +284,7 @@ void CTransformManipulator::UpdateGizmos()
 		m_zxMovePlane.SetYVector(m_matrix.GetColumn0());
 
 		m_viewMoveGizmo.SetPosition(position);
+		m_viewMoveGizmo.SetRotationAxis(m_matrix.GetColumn0(), m_matrix.GetColumn1());
 	}
 	else if (editMode == CLevelEditorSharedState::EditMode::Rotate)
 	{
@@ -356,33 +350,34 @@ void CTransformManipulator::UpdateGizmos()
 
 void CTransformManipulator::UpdateTransform()
 {
+	// if we have a custom transform our matrix is already as it should be
+	if (m_bUseCustomTransform)
+	{
+		return;
+	}
+
 	CLevelEditorSharedState::CoordSystem coordSystem = GetIEditor()->GetLevelEditorSharedState()->GetCoordSystem();
 
-	// if we have a custom transform our matrix is already as it should be
-	if (!m_bUseCustomTransform)
+	Vec3 position;
+	// TODO: This should not be necessary, but many tools have a separate step for getting a transform and also getting
+	// the real position of the transform manipulator and then expecting the original matrix to be modified here.
+	// GetManipulatorMatrix() should already return a matrix with the correct position data.
+	m_owner->GetManipulatorPosition(position);
+	if (coordSystem == CLevelEditorSharedState::CoordSystem::Local || coordSystem == CLevelEditorSharedState::CoordSystem::Parent)
 	{
-		Vec3 position;
-		// TODO: This should not be necessary, but many tools have a separate step for getting a transform and also getting
-		// the real position of the transform manipulator and then expecting the original matrix to be modified here.
-		// GetManipulatorMatrix() should already return a matrix with the correct position data.
-		m_owner->GetManipulatorPosition(position);
-		if (coordSystem == CLevelEditorSharedState::CoordSystem::Local || coordSystem == CLevelEditorSharedState::CoordSystem::Parent)
-		{
-			// attempt to get local or parent matrix from gizmo owner. If none is provided, just use world matrix instead
-			if (!m_owner->GetManipulatorMatrix(m_matrix))
-			{
-				m_matrix.SetIdentity();
-			}
-		}
-		else if (coordSystem == CLevelEditorSharedState::CoordSystem::World)
+		// attempt to get local or parent matrix from gizmo owner. If none is provided, just use world matrix instead
+		if (!m_owner->GetManipulatorMatrix(m_matrix))
 		{
 			m_matrix.SetIdentity();
 		}
-		m_matrix.SetTranslation(position);
 	}
+	else if (coordSystem == CLevelEditorSharedState::CoordSystem::World)
+	{
+		m_matrix.SetIdentity();
+	}
+	m_matrix.SetTranslation(position);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTransformManipulator::Display(SDisplayContext& dc)
 {
 	if (!m_owner->IsManipulatorVisible())
@@ -454,7 +449,7 @@ void CTransformManipulator::Display(SDisplayContext& dc)
 			m_zRotateAxis.Display(dc);
 		}
 
-		if (editMode == CLevelEditorSharedState::EditMode::Move && !(dc.flags & DISPLAY_2D))
+		if (editMode == CLevelEditorSharedState::EditMode::Move && !dc.display2D)
 		{
 			// TODO: Use SHIFT+G key for this, make it a polled key
 			bool bClickedShift = QtUtil::IsModifierKeyDown(Qt::ShiftModifier);
@@ -479,7 +474,7 @@ void CTransformManipulator::Display(SDisplayContext& dc)
 		m_yzMovePlane.Display(dc);
 		m_zxMovePlane.Display(dc);
 
-		if (!(dc.flags & DISPLAY_2D))
+		if (!dc.display2D)
 		{
 			//TODO: Use SHIFT+G key for this, make it a polled key
 			bool bClickedShift = QtUtil::IsModifierKeyDown(Qt::ShiftModifier);
@@ -544,13 +539,11 @@ void CTransformManipulator::DisplayPivotPoint(SDisplayContext& dc)
 	dc.SetStateFlag(curflags);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTransformManipulator::SetWorldBounds(const AABB& bbox)
 {
 	m_bbox = bbox;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTransformManipulator::GetWorldBounds(AABB& bbox)
 {
 	// TODO: substitute with scaled bounding box (will need very careful evaluation order)
@@ -560,13 +553,11 @@ void CTransformManipulator::GetWorldBounds(AABB& bbox)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CTransformManipulator::SetMatrix(const Matrix34& m)
 {
 	m_matrix = m;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CTransformManipulator::HitTest(HitContext& hc, EManipulatorMode& manipulatorMode)
 {
 	CLevelEditorSharedState::EditMode editMode = GetIEditor()->GetLevelEditorSharedState()->GetEditMode();
@@ -740,7 +731,6 @@ bool CTransformManipulator::HitTest(HitContext& hc)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 Matrix34 CTransformManipulator::GetTransform() const
 {
 	return m_matrix;
@@ -759,7 +749,6 @@ bool CTransformManipulator::NeedsSnappingGrid() const
 	return m_bDragging && GetIEditor()->GetLevelEditorSharedState()->GetEditMode() == CLevelEditorSharedState::EditMode::Move;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CTransformManipulator::MouseCallback(IDisplayViewport* view, EMouseEvent event, CPoint& point, int nFlags)
 {
 	if (m_highlightedGizmo)
@@ -769,13 +758,11 @@ bool CTransformManipulator::MouseCallback(IDisplayViewport* view, EMouseEvent ev
 	else if (event == eMouseMove)
 	{
 		// Hit test current transform manipulator, to highlight when mouse over.
-		HitContext hc;
-		hc.view = view;
+		HitContext hc(view);
 		hc.point2d = point;
 		view->ViewToWorldRay(point, hc.raySrc, hc.rayDir);
-		bool bHit = false;
-		EManipulatorMode manipulatorMode;
 
+		EManipulatorMode manipulatorMode;
 		HitTest(hc, manipulatorMode);
 	}
 

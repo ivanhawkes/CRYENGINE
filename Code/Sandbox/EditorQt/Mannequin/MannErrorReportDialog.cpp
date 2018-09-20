@@ -3,9 +3,9 @@
 #include "stdafx.h"
 #include "MannErrorReportDialog.h"
 #include "Util/Clipboard.h"
-#include "Util/CryMemFile.h"          // CCryMemFile
+#include "Util/CryMemFile.h"
 #include "Util/MFCUtil.h"
-#include "Util\Mailer.h"
+#include "Util/Mailer.h"
 #include "GameEngine.h"
 
 #include "MannequinDialog.h"
@@ -1033,4 +1033,3 @@ void CMannErrorReportDialog::OnReportHyperlink(NMHDR* pNotifyStruct, LRESULT* re
    }
    }
  */
-

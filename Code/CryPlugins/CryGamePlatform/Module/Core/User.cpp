@@ -35,9 +35,12 @@ namespace Cry
 			}
 		}
 
-		const char* CUser::GetStatus() const
+		void CUser::SetPresence(const SRichPresence& presence)
 		{
-			return m_accounts.empty() ? "?Account?" : m_accounts[0]->GetStatus();
+			for (IAccount* pAccount : m_accounts)
+			{
+				pAccount->SetPresence(presence);
+			}
 		}
 
 		ITexture* CUser::GetAvatar(EAvatarSize size) const
@@ -64,6 +67,11 @@ namespace Cry
 		void CUser::SetAccounts(DynArray<IAccount*> accounts)
 		{
 			m_accounts.swap(accounts);
+		}
+
+		const DynArray<IAccount*>& CUser::GetAccounts() const
+		{
+			return m_accounts;
 		}
 
 		void CUser::RemoveAccount(const IAccount& account)

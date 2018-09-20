@@ -49,6 +49,7 @@
 #include <CrySystem/ICmdLine.h>
 #include <CrySystem/IProcess.h>
 #include <CryReflection/Framework.h>
+#include <CryUDR/InterfaceIncludes.h>
 
 #include "CryPak.h"
 #include "XConsole.h"
@@ -175,6 +176,7 @@ extern AAssetManager* androidGetAssetManager();
 #define DLL_RENDERER_GNM  "CryRenderGNM"
 #define DLL_LIVECREATE    "CryLiveCreate"
 #define DLL_MONO_BRIDGE   "CryMonoBridge"
+#define DLL_UDR           "CryUDR"
 #define DLL_SCALEFORM     "CryScaleformHelper"
 
 //////////////////////////////////////////////////////////////////////////
@@ -1234,6 +1236,20 @@ bool CSystem::InitMonoBridge(const SSystemInitParams& startupParams)
 }
 
 //////////////////////////////////////////////////////////////////////////
+bool CSystem::InitUDR(const SSystemInitParams& startupParams)
+{
+	LOADING_TIME_PROFILE_SECTION(GetISystem());
+
+	if (!InitializeEngineModule(startupParams, DLL_UDR, cryiidof<Cry::UDR::IUDR>(), false))
+	{
+		gEnv->pLog->LogWarning("UDR not created.");
+		return false;
+	}
+
+	return true;
+}																		  
+
+//////////////////////////////////////////////////////////////////////////
 void CSystem::InitGameFramework(SSystemInitParams& startupParams)
 {
 	LOADING_TIME_PROFILE_SECTION(GetISystem());
@@ -2199,12 +2215,9 @@ bool CSystem::InitFileSystem_LoadEngineFolders()
 			m_env.pCryPak->AddMod(modPath.c_str());
 		}
 	}
-
-	// Resource cache folder is used to store locally compiled resources.
-	// Its content is managed by Sandbox. For consistent testing we need it in game.
-	m_env.pCryPak->AddMod(m_sys_resource_cache_folder->GetString());
-
 #endif // !defined(_RELEASE)
+
+	InitResourceCacheFolder();
 
 	// simply open all paks if fast load pak can't be found
 	if (!g_cvars.sys_intromoviesduringinit || !m_pResourceManager->LoadFastLoadPaks(true))
@@ -2214,7 +2227,7 @@ bool CSystem::InitFileSystem_LoadEngineFolders()
 
 	// Load cvar groups first from game folder then from engine folder.
 	{
-		string gameFolder = (!PathUtil::GetGameFolder().empty()) ? (PathUtil::GetGameFolder() + "/") : "";
+		string gameFolder = (!PathUtil::GetGameFolder().empty()) ? (PathUtil::GetGameFolder() + "/") : string("");
 		AddCVarGroupDirectory(gameFolder + "Config/CVarGroups");
 	}
 	AddCVarGroupDirectory("%ENGINE%/Config/CVarGroups");
@@ -2224,6 +2237,44 @@ bool CSystem::InitFileSystem_LoadEngineFolders()
 #endif
 	return (true);
 }
+
+/////////////////////////////////////////////////////////////////////////////////
+void CSystem::InitResourceCacheFolder()
+{
+	// Resource Cache folder is not enabled in the release configuration
+#if !defined(_RELEASE)
+	const char* szResourceCacheFolder = m_sys_resource_cache_folder->GetString();
+
+	if (0 == strlen(szResourceCacheFolder))
+		return;
+
+	CryPathString cacheFolder(szResourceCacheFolder);
+	//////////////////////////////////////////////////////////////////////////
+	// Open Paks from Engine folder
+	//////////////////////////////////////////////////////////////////////////
+	// After game paks to have same search order as with files on disk
+	{
+		CryPathString cacheFolderParentFolder;
+		auto slashPos = cacheFolder.rfind('/');
+		if (slashPos != string::npos)
+		{
+			cacheFolderParentFolder = cacheFolder.substr(0,slashPos);
+		}
+		if (!cacheFolderParentFolder.empty())
+		{
+			const char* szBindRoot = m_env.pCryPak->GetAlias("%ENGINE%", false);
+			CryPathString paksFolder = cacheFolderParentFolder + "/Engine/*.pak";
+			// Will open engine specific paks in the parent of the resource ccache folder /engine folder.
+			m_env.pCryPak->OpenPacks(szBindRoot, paksFolder.c_str());
+		}
+	}
+
+	// Resource cache folder is used to store locally compiled resources (or precompiled asset cache folder).
+	m_env.pCryPak->AddMod(szResourceCacheFolder, ICryPak::EModAccessPriority::AfterSource);
+
+#endif // !defined(_RELEASE)
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 bool CSystem::InitStreamEngine()
@@ -2402,7 +2453,7 @@ void CSystem::OpenBasicPaks(bool bLoadGamePaks)
 		// After game paks to have same search order as with files on disk
 		{
 			const char* szBindRoot = m_env.pCryPak->GetAlias("%ENGINE%", false);
-			string paksFolder = PathUtil::Make(buildFolder.empty() ? "%ENGINEROOT%" : buildFolder, "Engine");
+			string paksFolder = PathUtil::Make(buildFolder.empty() ? string("%ENGINEROOT%") : buildFolder, "Engine");
 
 			const unsigned int numOpenPacksBeforeEngine = m_env.pCryPak->GetPakInfo()->numOpenPaks;
 			m_env.pCryPak->OpenPacks(szBindRoot, PathUtil::Make(paksFolder, "*.pak"));
@@ -2955,7 +3006,16 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 		}
 
 		Cry::Reflection::CTypeRegistrationChain::Execute(g_cvars.sys_reflection_natvis != 0);
+		// Init UDR
 
+		if (!startupParams.bPreview && !startupParams.bShaderCacheGen)
+		{
+			CryLogAlways("UDR initialization");
+			if (!InitUDR(startupParams))
+			{
+				return false;
+			}
+		}
 		m_pResourceManager->Init();
 
 		m_env.pProfileLogSystem = new CProfileLogSystem();
@@ -3211,23 +3271,25 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 		// Note: IME manager needs to be created before Scaleform is initialized
 		m_pImeManager = new CImeManager();
 
+#if defined(USE_MONO) && USE_MONO == 1
 		// Initialize CryMono / C# integration
-		// Notet that this has to occur before plug-ins are loaded as this is a prerequisite for C# plug-ins!
+		// Note that this has to occur before plug-ins are loaded as this is a prerequisite for C# plug-ins!
 		{
-			CryLogAlways("C# Backend initialization");
-			INDENT_LOG_DURING_SCOPE();
-
-			if (m_pUserCallback)
-			{
-				m_pUserCallback->OnInitProgress("Initializing C#...");
-			}
-
-			ICVar* pCVar = m_env.pConsole->GetCVar("sys_use_mono");
+			const ICVar* pCVar = m_env.pConsole->GetCVar("sys_use_mono");
 			if (pCVar && pCVar->GetIVal())
 			{
+				CryLogAlways("C# Backend initialization");
+				INDENT_LOG_DURING_SCOPE();
+
+				if (m_pUserCallback)
+				{
+					m_pUserCallback->OnInitProgress("Initializing C#...");
+				}
+
 				InitMonoBridge(startupParams);
 			}
 		}
+#endif
 
 		InlineInitializationProcessing("CSystem::Init LoadProjectPlugins");
 		m_pPluginManager->LoadProjectPlugins();
@@ -5239,7 +5301,10 @@ void CSystem::CreateSystemVars()
 	REGISTER_CVAR2("sys_force_installtohdd_mode", &g_cvars.sys_force_installtohdd_mode, 0, VF_NULL, "Forces install to HDD mode even when doing DVD emulation");
 
 	m_sys_preload = REGISTER_INT("sys_preload", 0, 0, "Preload Game Resources");
-	m_sys_use_Mono = REGISTER_INT("sys_use_mono", 1, 0, "Use Mono Framework");
+	m_sys_use_Mono = REGISTER_INT("sys_use_mono", 1, 0, 
+								  "Use Mono Framework\n"
+								  "0 = off\n"
+								  "1 = on");
 
 #define CRASH_CMD_HELP                      \
   " 0=off\n"                                \

@@ -744,7 +744,7 @@ void QPropertyTree::pasteRow(PropertyRow* row)
 
 	model()->rowAboutToBeChanged(row);
 
-	SharedPtr<PropertyRow> source;
+	SharedPtr<PropertyRow> source{ row };
 	if (!propertyRowFromClipboard(source, model()->constStrings()))
 		return;
 
@@ -1658,4 +1658,3 @@ FORCE_SEGMENT(PropertyRowIconXPM)
 FORCE_SEGMENT(PropertyRowFileSave)
 
 // vim:ts=4 sw=4:
-

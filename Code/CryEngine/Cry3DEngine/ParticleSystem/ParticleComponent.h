@@ -22,7 +22,7 @@ SERIALIZATION_ENUM_DECLARE(EAnimationCycle, : uint8,
 struct STextureAnimation
 {
 	UFloat                              m_frameRate;     //!< Anim framerate; 0 = 1 cycle / particle life.
-	TValue<uint16, THardLimits<1, 256>> m_frameCount;    //!< Number of tiles (frames) of animation
+	TValue<THardLimits<uint16, 1, 256>> m_frameCount;    //!< Number of tiles (frames) of animation
 	EAnimationCycle                     m_cycleMode;     //!< How animation cycles.
 	bool                                m_frameBlending; //!< Blend textures between frames.
 
@@ -180,6 +180,7 @@ public:
 	// ~IParticleComponent
 
 	void                                  ClearFeatures()                       { m_features.clear(); }
+	void                                  AddFeature(uint placeIdx, CParticleFeature* pFeature);
 	void                                  AddFeature(CParticleFeature* pFeature);
 	void                                  PreCompile();
 	void                                  ResolveDependencies();
@@ -194,14 +195,15 @@ public:
 	template<typename T> TDataOffset<T>   AddInstanceData()                     { return AddInstanceData(sizeof(T)); }
 	void                                  AddParticleData(EParticleDataType type);
 
-	bool                                  UsesGPU() const                       { return m_Params.m_usesGPU; }
+	bool                                  UsesGPU() const                       { return m_params.m_usesGPU; }
 	gpu_pfx2::SComponentParams&           GPUComponentParams()                  { return m_GPUParams; };
 	void                                  AddGPUFeature(gpu_pfx2::IParticleFeature* gpuInterface) { if (gpuInterface) m_gpuFeatures.push_back(gpuInterface); }
-	TConstArray<gpu_pfx2::IParticleFeature*> GetGpuFeatures() const             { return { &*m_gpuFeatures.begin(), &*m_gpuFeatures.end() }; }
+	TConstArray<gpu_pfx2::IParticleFeature*> GetGpuFeatures() const             { return TConstArray<gpu_pfx2::IParticleFeature*>(m_gpuFeatures.data(), m_gpuFeatures.size()); }
 
-	const SComponentParams& GetComponentParams() const                          { return m_Params; }
-	SComponentParams&       ComponentParams()                                   { return m_Params; }
-	bool                    UseParticleData(EParticleDataType type) const       { return m_useParticleData[type]; }
+	const SComponentParams& GetComponentParams() const                          { return m_params; }
+	SComponentParams&       ComponentParams()                                   { return m_params; }
+	bool                    UseParticleData(EParticleDataType type) const       { return m_pUseData->Used(type); }
+	const PUseData&         GetUseData() const                                  { return m_pUseData; }
 
 	CParticleComponent*     GetParentComponent() const                          { return m_parent; }
 	const TComponents&      GetChildComponents() const                          { return m_children; }
@@ -223,10 +225,10 @@ private:
 	CParticleComponent*                      m_parent;
 	TComponents                              m_children;
 	Vec2                                     m_nodePosition;
-	SComponentParams                         m_Params;
+	SComponentParams                         m_params;
 	TSmartArray<CParticleFeature>            m_features;
 	TSmartArray<CParticleFeature>            m_defaultFeatures;
-	StaticEnumArray<bool, EParticleDataType> m_useParticleData;
+	PUseData                                 m_pUseData;
 	SEnable                                  m_enabled;
 	SEnable                                  m_visible;
 	bool                                     m_dirty;

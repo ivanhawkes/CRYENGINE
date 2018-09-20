@@ -36,6 +36,8 @@ public:
 	CLayer* FindLayer(const char* sLayerName) const;
 	CLayer* FindLayerByLayerId(const uint32 dwLayerId) const;
 	void    SwapLayers(int layer1, int layer2);
+	void    MoveLayerToTop(int index);
+	void    MoveLayerToBottom(int index);
 	void    AddLayer(CLayer* layer);
 	void    RemoveLayer(CLayer* layer);
 	void    InvalidateLayers();
@@ -55,12 +57,12 @@ public:
 
 	//////////////////////////////////////////////////////////////////////////
 	// Heightmap
-	CHeightmap* GetHeightmap() { return &m_heightmap; }
-	CRGBLayer*  GetRGBLayer();
+	CHeightmap*       GetHeightmap() { return &m_heightmap; }
+	CRGBLayer*        GetRGBLayer();
+	const CRGBLayer*  GetRGBLayer() const { return const_cast<CTerrainManager*>(this)->GetRGBLayer(); }
 
 	void        SetTerrainSize(int resolution, float unitSize);
 	void        ResetHeightMap();
-	bool        WouldHeightmapSaveSucceed();
 
 	void        Save(bool bBackup = false);
 	bool        Load();
@@ -83,6 +85,7 @@ public:
 	const char* GetDataFilename(int i) const;
 
 	CCrySignal<void(void)>    signalLayersChanged;
+	CCrySignal<void(void)>    signalTerrainChanged;
 	CCrySignal<void(CLayer*)> signalSelectedLayerChanged;
 
 private:

@@ -313,6 +313,8 @@ struct CVars : public Cry3DEngineBase
 	DeclareConstIntCVar(e_ObjStats, 0);
 	DeclareConstIntCVar(e_TerrainDeformations, 0);
 	int e_TerrainDetailMaterials;
+	int e_TerrainDetailMaterialsWeightedBlending;
+	int e_TerrainBlendingDebug;
 	DeclareConstIntCVar(e_ShadowsFrustums, 0);
 	DeclareConstIntCVar(e_OcclusionVolumes, e_OcclusionVolumesDefault);
 	int   e_TerrainEditPostponeTexturesUpdate;
@@ -443,6 +445,7 @@ struct CVars : public Cry3DEngineBase
 	int   e_Lods;
 	DeclareConstIntCVar(e_LodFaceArea, 1);
 	float e_ShadowsConstBias;
+	int   e_ParticlesCollisions;
 	int   e_ParticlesObjectCollisions;
 	int   e_ParticlesMinPhysicsDynamicBounds;
 	int   e_ParticlesSortQuality;
@@ -506,10 +509,9 @@ struct CVars : public Cry3DEngineBase
 	// ProcVegetation cvars
 	int    e_ProcVegetation;
 	int    e_ProcVegetationMaxSectorsInCache;
-	int    e_ProcVegetationMaxChunksInCache;
 	int    e_ProcVegetationMaxCacheLevels;
 	int    e_ProcVegetationMaxViewDistance;
-	int    e_ProcVegetationMaxObjectsInChunk;
+	int    e_ProcVegetationMaxObjectsPerSector;
 	int    e_AutoPrecacheTerrainAndProcVeget;
 
 	int    e_DebugGeomPrep;

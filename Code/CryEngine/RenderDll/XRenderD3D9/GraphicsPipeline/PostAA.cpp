@@ -176,11 +176,9 @@ void CPostAAStage::ApplySMAA(CTexture*& pCurrRT)
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 
 	CTexture* pEdgesRT = CRendererResources::s_ptexSceneNormalsMap;   // Reusing ESRAM resident target
-	CTexture* pBlendWeightsRT = CRendererResources::s_ptexHDRTarget;  // Reusing ESRAM resident target (FP16 RT accessed using point filtering which gives full rate on GCN)
+	CTexture* pBlendWeightsRT = CRendererResources::s_ptexHDRTargetMasked;  // Reusing ESRAM resident target (FP16 RT accessed using point filtering which gives full rate on GCN)
 	CTexture* pDestRT = CRendererResources::s_ptexSceneNormalsMap;
 	CTexture* pZTexture = RenderView()->GetDepthTarget();
-
-	assert(pBlendWeightsRT->GetDstFormat() != eTF_R11G11B10F);  // Alpha channel required
 
 	if (!pEdgesRT || !pBlendWeightsRT)
 		return;
@@ -283,6 +281,13 @@ void CPostAAStage::ApplySMAA(CTexture*& pCurrRT)
 		m_passSMAANeighborhoodBlending.Execute();
 	}
 
+	pCurrRT = pDestRT;
+}
+
+void CPostAAStage::ApplySRGB(CTexture*& pCurrRT)
+{
+	CTexture* pDestRT = CRendererResources::s_ptexSceneNormalsMap;
+	m_passCopySRGB.Execute(pCurrRT, pDestRT);
 	pCurrRT = pDestRT;
 }
 
@@ -408,7 +413,7 @@ void CPostAAStage::DoFinalComposition(CTexture*& pCurrRT, CTexture* pDestRT, uin
 	CEffectParam* pParamGrainAmount = PostEffectMgr()->GetByName("FilterGrain_Amount");
 	CEffectParam* pParamArtifactsGrain = PostEffectMgr()->GetByName("FilterArtifacts_Grain");
 	const float paramGrainAmount = max(pParamGrainAmount->GetParam(), pParamArtifactsGrain->GetParam());
-	const float environmentGrainAmount = max(hdrSetupParams[1].w, CRenderer::CV_r_HDRGrainAmount);
+	const float environmentGrainAmount = hdrSetupParams[1].w * CRenderer::CV_r_HDRGrainAmount;
 	const float grainAmount = max(paramGrainAmount, environmentGrainAmount);
 
 	uint64 rtMask = 0;
@@ -437,7 +442,7 @@ void CPostAAStage::DoFinalComposition(CTexture*& pCurrRT, CTexture* pDestRT, uin
 		}
 	}
 
-	if (m_passComposition.IsDirty(pCurrRT->GetID(), pDestRT->GetID(), pColorChartTex->GetID(), rtMask))
+	if (m_passComposition.IsDirty(pCurrRT->GetID(), pDestRT->GetID(), pColorChartTex->GetID(), CRendererResources::s_ptexCurLumTexture->GetTextureID(), rtMask))
 	{
 		static CCryNameTSCRC techComposition("PostAAComposites");
 
@@ -491,7 +496,8 @@ void CPostAAStage::Execute()
 
 	PROFILE_LABEL_SCOPE("POST_AA");
 
-	CTexture* pCurrRT = CRendererResources::s_ptexSceneDiffuse;
+	// TODO: CPostEffectContext::GetDstBackBufferTexture() pre-EnableAltBackBuffer()
+	CTexture* pCurrRT = CRendererResources::s_ptexDisplayTargetDst;
 	CTexture* pMgpuRT = NULL;
 
 	// TODO: Support temporal AA in the editor
@@ -502,12 +508,16 @@ void CPostAAStage::Execute()
 
 	if (aaMode & eAT_SMAA_MASK)
 		ApplySMAA(pCurrRT);
+	else if (aaMode & eAT_REQUIRES_PREVIOUSFRAME_MASK)
+		ApplySRGB(pCurrRT);
+
 	if (aaMode & eAT_REQUIRES_PREVIOUSFRAME_MASK)
 		ApplyTemporalAA(pCurrRT, pMgpuRT, aaMode);
 
 	// TODO: Un-jitter depth buffer for AuxGeom depth tests (alternative: jitter aux)
 	// TODO: Don't do anything and throw away depth when no depth-test/aux is used
 	{
+		// TODO: CPostEffectContext::GetDstBackBufferTexture() post-EnableAltBackBuffer()
 		CTexture* pDestRT = RenderView()->GetColorTarget();
 		DoFinalComposition(pCurrRT, pDestRT, aaMode);
 	}
@@ -523,12 +533,25 @@ void CPostAAStage::Resize(int renderWidth, int renderHeight)
 	if (CRenderer::CV_r_AntialiasingMode)
 	{
 		const uint32 renderTargetFlags = FT_NOMIPS | FT_DONT_STREAM | FT_USAGE_RENDERTARGET;
-		m_pPrevBackBuffersLeftEye[0] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer0", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, eTF_R16G16B16A16);
-		m_pPrevBackBuffersLeftEye[1] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer1", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, eTF_R16G16B16A16);
+		ETEX_Format accumulatorFormat = eTF_R16G16B16A16;
+		if (CRenderer::CV_r_AntialiasingMode == eAT_SMAA_2TX && CRendererCVars::CV_r_HDRTexFormat == 0)
+			accumulatorFormat = eTF_R10G10B10A2;
+
+		if (m_pPrevBackBuffersLeftEye[0] && m_pPrevBackBuffersLeftEye[0]->GetDstFormat() != accumulatorFormat)
+		{
+			SAFE_RELEASE(m_pPrevBackBuffersLeftEye[0]);
+			SAFE_RELEASE(m_pPrevBackBuffersLeftEye[1]);
+			SAFE_RELEASE(m_pPrevBackBuffersRightEye[0]);
+			SAFE_RELEASE(m_pPrevBackBuffersRightEye[1]);
+		}
+
+		m_pPrevBackBuffersLeftEye[0] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer0", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, accumulatorFormat);
+		m_pPrevBackBuffersLeftEye[1] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer1", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, accumulatorFormat);
+
 		if (gRenDev->IsStereoEnabled())
 		{
-			m_pPrevBackBuffersRightEye[0] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer0_R", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, eTF_R16G16B16A16);
-			m_pPrevBackBuffersRightEye[1] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer1_R", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, eTF_R16G16B16A16);
+			m_pPrevBackBuffersRightEye[0] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer0_R", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, accumulatorFormat);
+			m_pPrevBackBuffersRightEye[1] = CTexture::GetOrCreateRenderTarget("$PrevBackBuffer1_R", renderWidth, renderHeight, Clr_Unknown, eTT_2D, renderTargetFlags, accumulatorFormat);
 		}
 		else
 		{

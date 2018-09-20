@@ -2,17 +2,17 @@
 
 #include "StdAfx.h"
 #include "CloneTool.h"
-#include "SurfaceInfoPicker.h"
-#include "Prefabs/PrefabItem.h"
-#include "Prefabs/PrefabManager.h"
-#include "Objects/PrefabObject.h"
-#include "Objects/DisplayContext.h"
-#include "ViewManager.h"
+
 #include "DesignerEditor.h"
-#include "ToolFactory.h"
-#include <CrySerialization/Enum.h>
-#include <AssetSystem\Browser\AssetBrowserDialog.h>
-#include "Serialization/Decorators/EditorActionButton.h"
+
+#include <Objects/PrefabObject.h>
+#include <Prefabs/PrefabItem.h>
+#include <Prefabs/PrefabManager.h>
+#include <SurfaceInfoPicker.h>
+#include <ViewManager.h>
+
+#include <Serialization/Decorators/EditorActionButton.h>
+
 
 namespace Designer
 {
@@ -331,4 +331,3 @@ REGISTER_DESIGNER_TOOL_WITH_PROPERTYTREE_PANEL_AND_COMMAND(eDesigner_CircleClone
                                                            circleclone, "runs Circle Clone Tool", "designer.circleclone")
 REGISTER_DESIGNER_TOOL_WITH_PROPERTYTREE_PANEL_AND_COMMAND(eDesigner_ArrayClone, eToolGroup_Modify, "Array Clone", ArrayCloneTool,
                                                            arrayclone, "runs Array Clone Tool", "designer.arrayclone")
-

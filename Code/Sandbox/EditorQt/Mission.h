@@ -21,8 +21,8 @@ struct SMinimapInfo
 };
 
 /*!
-    CMission represent single Game Mission on same map.
-    Multiple Missions share same map, and stored in one .cry file.
+	CMission represent single Game Mission on same map.
+	Multiple Missions share same map, and stored in one .cry file.
 
  */
 class SANDBOX_API CMission
@@ -33,6 +33,10 @@ public:
 	//! Dtor of mission.
 	virtual ~CMission();
 
+	static const char* GetObjectivesFileName() { return "Objectives.xml"; }
+	static int GetDataFilesCount();
+	static const char* GetDataFilename(int i);
+
 	void           SetName(const CString& name)       { m_name = name; }
 	const CString& GetName() const                    { return m_name; }
 
@@ -42,7 +46,7 @@ public:
 	XmlNodeRef     GetEnvironemnt()                   { return m_environment; }
 
 	//! Return weapons ammo definitions for this mission.
-	XmlNodeRef GetWeaponsAmmo() { return m_weaponsAmmo; };
+	XmlNodeRef GetWeaponsAmmo() { return m_weaponsAmmo; }
 
 	//! Return lighting used for this mission.
 	LightingSettings* GetLighting() const { return m_lighting; }
@@ -147,4 +151,3 @@ private:
 
 	SMinimapInfo    m_minimap;
 };
-

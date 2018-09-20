@@ -210,6 +210,9 @@ void CScene::OnViewportRender(const SRenderContext& rc)
 
 	if (m_showGizmo && hasSelection)
 	{
+		SAuxGeomRenderFlags prevFlags = IRenderAuxGeom::GetAux()->GetRenderFlags();
+		IRenderAuxGeom::GetAux()->SetRenderFlags(e_Mode3D | e_AlphaBlended | e_FillModeSolid | e_CullModeBack | e_DepthTestOn | e_DepthWriteOn);
+
 		int selectionCaps = GetSelectionCaps();
 		Matrix34 m = Matrix34(GetGizmoOrientation(GetSelectionTransform(SPACE_WORLD), rc.viewport->Camera(), m_transformationSpace));
 		SDisplayContext dc;
@@ -223,6 +226,8 @@ void CScene::OnViewportRender(const SRenderContext& rc)
 		{
 			m_axisHelper->DrawAxis(m, dc);
 		}
+
+		IRenderAuxGeom::GetAux()->SetRenderFlags(prevFlags);
 	}
 }
 
@@ -1006,10 +1011,9 @@ void CScene::OnMouseMove(const SMouseEvent& ev)
 
 		if (gizmoEnabled)
 		{
-			HitContext hc;
+			HitContext hc(&displayView);
 			hc.point2d.x = ev.x;
 			hc.point2d.y = ev.y;
-			hc.view = &displayView;
 			m_axisHelper->HitTest(Matrix34(axesTransform), hc);
 			m_axisHelper->SetHighlightAxis(hc.axis);
 		}
@@ -1051,7 +1055,7 @@ void CScene::OnViewportMouse(const SMouseEvent& ev)
 				Vec3 hitPoint = selectionTransform.t;
 				if (m_showGizmo)
 				{
-					HitContext hc;
+					HitContext hc(&displayView);
 					hc.point2d.x = ev.x;
 					hc.point2d.y = ev.y;
 					hc.view = &displayView;
@@ -1415,7 +1419,6 @@ int CScene::GetSelectionCaps() const
 
 		caps |= selectedElements[i].caps;
 	}
-	;
 
 	return caps;
 }
@@ -1552,4 +1555,3 @@ void CScene::SetVisibleLayerMask(unsigned int layerMask)
 }
 
 }
-

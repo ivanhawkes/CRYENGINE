@@ -33,7 +33,6 @@
 #include <CryAISystem/IOffMeshNavigationManager.h>
 #include <CryAISystem/MovementRequest.h>
 #include <CryAISystem/MovementRequestID.h>
-#include <CryAISystem/IMNM.h>
 
 #include <CryAISystem/BehaviorTree/IBehaviorTree.h>
 #include <CryAISystem/BehaviorTree/Node.h>
@@ -127,11 +126,11 @@ public:
 %include "../../../../CryEngine/CryCommon/CryAISystem/MovementStyle.h"
 %include "../../../../CryEngine/CryCommon/CryAISystem/IMovementSystem.h"
 %include "../../../../CryEngine/CryCommon/CryAISystem/IOffMeshNavigationManager.h"
-%include "../../../../CryEngine/CryCommon/CryAISystem/IMNM.h"
 
 %ignore BehaviorTree::BehaviorVariablesContext;
 %ignore BehaviorTree::UpdateContext::variables;
 %feature("director") INode;
+%include "../../../../CryEngine/CryCommon/CryAISystem/BehaviorTree/BehaviorTreeDefines.h"
 %include "../../../../CryEngine/CryCommon/CryAISystem/BehaviorTree/IBehaviorTree.h"
 %include <typemaps.i>
 %apply stack_string *OUTPUT { stack_string& debugText };

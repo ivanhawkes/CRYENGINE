@@ -1,25 +1,18 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include "VegetationMap.h"
 #include "VegetationObject.h"
-#include "VegetationSelectTool.h"
+
 #include "Material/MaterialManager.h"
-
 #include "Terrain/Heightmap.h"
-#include "Terrain/SurfaceType.h"
 #include "Terrain/TerrainManager.h"
-
-#include <Cry3DEngine/I3DEngine.h>
-
 #include "Util/BoostPythonHelpers.h"
+#include "Vegetation/VegetationMap.h"
+#include "Vegetation/VegetationSelectTool.h"
 
-#include <EditorFramework/Editor.h>
-#include <EditorFramework/Preferences.h>
-#include <Preferences/GeneralPreferences.h>
 #include <Preferences/ViewportPreferences.h>
 
-#include "CryEditDoc.h"
+#include <Cry3DEngine/I3DEngine.h>
 
 CVegetationObject::CVegetationObject(int id)
 	: m_id(id)
@@ -61,6 +54,7 @@ CVegetationObject::CVegetationObject(int id)
 	mv_castShadows = false;
 	mv_castShadowMinSpec = CONFIG_LOW_SPEC;
 	mv_giMode = true;
+	mv_offlineProcedural = false;
 	mv_instancing = false;
 	mv_DynamicDistanceShadows = false;
 	mv_hideable = 0;
@@ -77,6 +71,7 @@ CVegetationObject::CVegetationObject(int id)
 	mv_minSpec = 0;
 	mv_allowIndoor = false;
 	mv_autoMerged = false;
+	mv_ignoreTerrainLayerBlend = true;
 
 	mv_hideable.AddEnumItem("None", 0);
 	mv_hideable.AddEnumItem("Hideable", 1);
@@ -139,6 +134,7 @@ CVegetationObject::CVegetationObject(int id)
 	m_pVarObject->AddVariable(mv_castShadowMinSpec, "CastShadowMinSpec", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_DynamicDistanceShadows, "DynamicDistanceShadows", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_giMode, "GlobalIllumination", "Global Illumination", functor(*this, &CVegetationObject::OnVarChange));
+	m_pVarObject->AddVariable(mv_offlineProcedural, "OfflineProcedural", "Offline Procedural", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_instancing, "Instancing", "UseInstancing", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_SpriteDistRatio, "SpriteDistRatio", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_LodDistRatio, "LodDistRatio", functor(*this, &CVegetationObject::OnVarChange));
@@ -146,6 +142,7 @@ CVegetationObject::CVegetationObject(int id)
 	m_pVarObject->AddVariable(mv_material, "Material", functor(*this, &CVegetationObject::OnMaterialChange), IVariable::DT_MATERIAL);
 	m_pVarObject->AddVariable(mv_UseSprites, "UseSprites", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_minSpec, "MinSpec", functor(*this, &CVegetationObject::OnVarChange));
+	m_pVarObject->AddVariable(mv_ignoreTerrainLayerBlend, "IgnoreTerrainLayerBlend", functor(*this, &CVegetationObject::OnVarChange));
 
 	m_pVarObject->AddVariable(mv_layerFrozen, "Frozen", "Layer_Frozen", functor(*this, &CVegetationObject::OnVarChange));
 	m_pVarObject->AddVariable(mv_layerWet, "Layer_Wet", "Layer_Wet", functor(*this, &CVegetationObject::OnVarChange));
@@ -378,10 +375,12 @@ void CVegetationObject::SetEngineParams()
 	grp.fBending = mv_bending;
 	grp.nCastShadowMinSpec = mv_castShadowMinSpec;
 	grp.bGIMode = mv_giMode;
+	grp.offlineProcedural = mv_offlineProcedural;
 	grp.bInstancing = mv_instancing;
 	grp.bDynamicDistanceShadows = mv_DynamicDistanceShadows;
 	grp.fSpriteDistRatio = mv_SpriteDistRatio;
 	grp.fLodDistRatio = mv_LodDistRatio;
+	grp.bIgnoreTerrainLayerBlend = mv_ignoreTerrainLayerBlend;
 	grp.fShadowDistRatio = mv_ShadowDistRatio;
 	grp.fMaxViewDistRatio = mv_MaxViewDistRatio;
 	grp.fBrightness = 1.f; // not used
@@ -706,4 +705,3 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(pyGetVegetationOverload, PyGetVegetation, 0, 2);
 REGISTER_PYTHON_OVERLOAD_COMMAND(PyGetVegetation, vegetation, get_vegetation, pyGetVegetationOverload,
                                  "Get all, selected, specific name, loaded vegetation objects in the current level.",
                                  "general.get_vegetation(str vegetationName=\'\', bool loadedOnly=False)");
-

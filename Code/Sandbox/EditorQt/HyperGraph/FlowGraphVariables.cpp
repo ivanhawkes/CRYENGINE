@@ -121,7 +121,6 @@ bool GetParamMap(CFlowNodeGetCustomItemsBase* pGetCustomItems, TParamMap& outMap
 		outMap[str] = value;
 		resToken = TokenizeString(values, " ,", pos);
 	}
-	;
 	return outMap.empty() == false;
 }
 
@@ -1238,6 +1237,7 @@ static const FlowGraphVariables::MapEntry prefix_dataType_table[] =
 	{ "audioRTPC_",             IVariable::DT_AUDIO_RTPC,              0                                                                      },
 	{ "audioEnvironment_",      IVariable::DT_AUDIO_ENVIRONMENT,       0                                                                      },
 	{ "audioPreloadRequest_",   IVariable::DT_AUDIO_PRELOAD_REQUEST,   0                                                                      },
+	{ "audioSetting_",          IVariable::DT_AUDIO_SETTING,           0                                                                      },
 	{ "dynamicResponseSignal_", IVariable::DT_DYNAMIC_RESPONSE_SIGNAL, 0                                                                      },
 	{ "fgmodules_",             IVariable::DT_USERITEMCB,              &FlowGraphVariables::CreateIt<CChooseFGModules>                        },
 };
@@ -1356,4 +1356,3 @@ string CVariableFlowNodeCustomEnumBase::CDynamicEnumList::ValueToName(const stri
 		return "";
 	return pEnum->ValueToName(name);
 }
-

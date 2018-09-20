@@ -247,6 +247,7 @@ Property
   Precache = CustomRenderDS
   Precache = CustomRenderVS
   Precache = CustomRenderPS
+  Precache = GlassPS
   Precache = SkinPS
   Precache = HDRPostProcessPS
   Precache = PostMotionBlurVS
@@ -365,8 +366,14 @@ Property
   Precache = WaterFogVolume_PS
 	
 	Precache = TiledShadingCS
-	Precache = CloudShadowGenCS
+	Precache = VolumeLightInjectionCS
+	Precache = RaymarchVolumetricFogCS
+	Precache = ReprojectVolumetricFogCS
+	Precache = BlurHorizontalInscatteringVolumeCS
+	Precache = BlurVerticalInscatteringVolumeCS
 	Precache = VolumetricCloudsPS
+	Precache = ReprojectCloudsPS
+	Precache = CloudShadowGenCS
 
 	Precache = WaterSurfaceVS
 	Precache = WaterSurfacePS
@@ -548,6 +555,16 @@ Property
 	Precache = SSGI_PS
 
 	Precache = DeferredLightPassPS
+}
+
+Property
+{
+  Name = %_RT_SHADOW_DEPTH_OUTPUT_LINEAR
+  Mask = 0x100000
+
+  Precache = ShadowGenVS
+  Precache = ShadowGenPS
+  Precache = DeferredLightPassPS
 }
 
 Property
@@ -949,19 +966,6 @@ Property
   Precache = RenderDownscaledShadowMapPS
   Precache = ConeTraceDiffusePS
   Precache = DemosaicPS
-}
-
-Property
-{
-  Name = %_RT_SHADOW_MIXED_MAP_G16R16
-  Mask = 0x20000000000
-  Precache = ShadowPS
-  Precache = FogPassVolShadowsInterleavePassPS
-  Precache = ShadowVS
-  Precache = WaterFogVolume_PS
-
-  Precache = ShadowMaskGenVS
-  Precache = ShadowMaskGenPS
 }
 
 Property

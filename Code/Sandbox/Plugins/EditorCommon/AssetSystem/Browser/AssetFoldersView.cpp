@@ -43,6 +43,18 @@ public:
 
 		return QDeepFilterProxyModel::rowMatchesFilter(sourceRow, sourceParent);
 	}
+
+	virtual bool canDropMimeData(const QMimeData* pMimeData, Qt::DropAction action, int row, int column, const QModelIndex& parent) const override
+	{
+		if (QDeepFilterProxyModel::canDropMimeData(pMimeData, action, row, column, parent))
+		{
+			return true;
+		}
+
+		CDragDropData::ClearDragTooltip(qApp->widgetAt(QCursor::pos()));
+		return false;
+	}
+
 private:
 	bool m_bHideEngineFolder;
 
@@ -70,8 +82,8 @@ CAssetFoldersView::CAssetFoldersView(bool bHideEngineFolder /*= false*/, QWidget
 	m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
 	m_treeView->setHeaderHidden(true);
 	m_treeView->sortByColumn(0, Qt::AscendingOrder);
+	m_treeView->setDragDropMode(QAbstractItemView::DragDrop);
 
-	connect(m_treeView, &QTreeView::customContextMenuRequested, this, &CAssetFoldersView::OnContextMenu);
 	connect(m_treeView->selectionModel(), &QItemSelectionModel::selectionChanged, [this]() { OnSelectionChanged(); });
 	connect(deepFilterProxy, &QAbstractItemModel::dataChanged, this, &CAssetFoldersView::OnDataChanged);
 
@@ -197,43 +209,6 @@ QString CAssetFoldersView::ToFolder(const QModelIndex& index)
 		return QString();
 }
 
-void CAssetFoldersView::OnContextMenu(const QPoint &pos)
-{
-	QString folder = ToFolder(m_treeView->indexAt(pos));
-
-	if (CAssetFoldersModel::GetInstance()->IsReadOnlyFolder(folder))
-		return;
-
-	QMenu* menu = new QMenu();
-	auto action = menu->addAction(CryIcon("icons:General/Element_Add.ico"), tr("Create folder"));
-	connect(action, &QAction::triggered, [this, folder]() { OnCreateFolder(folder); });
-
-	if (CAssetFoldersModel::GetInstance()->IsEmptyFolder(folder))
-	{
-		menu->addSeparator();
-
-		action = menu->addAction(CryIcon("icons:General/Element_Remove.ico"), tr("Delete"));
-		connect(action, &QAction::triggered, [this, folder]() { OnDeleteFolder(folder); });
-
-		action = menu->addAction(tr("Rename"));
-		connect(action, &QAction::triggered, [this, folder]() { OnRenameFolder(folder); });
-	}
-
-	menu->addSeparator();
-
-	action = menu->addAction(tr("Open in Explorer"));
-	connect(action, &QAction::triggered, [this, folder]() { OnOpenInExplorer(folder); });
-
-	action = menu->addAction(tr("Generate Thumbnails"));
-	connect(action, &QAction::triggered, [folder]()
-	{
-		AsseThumbnailsGenerator::GenerateThumbnailsAsync(QtUtil::ToString(folder));
-	});
-
-
-	menu->exec(QCursor::pos());
-}
-
 void CAssetFoldersView::OnCreateFolder(const QString& parentFolder)
 {
 	QString newFolderPath = CAssetFoldersModel::GetInstance()->CreateFolder(parentFolder);
@@ -295,4 +270,3 @@ void CAssetFoldersView::OnSelectionChanged()
 
 	signalSelectionChanged(m_selectedFolders);
 }
-

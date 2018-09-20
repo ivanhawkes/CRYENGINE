@@ -33,7 +33,7 @@ public:
 		{
 			m_cameraObjectGUID = CryGUID::Null();
 		}
-	};
+	}
 
 	void ResetCamera()
 	{
@@ -713,4 +713,3 @@ void CAnimationContext::OnMovieEvent(EMovieEvent movieEvent, IAnimSequence* pAni
 		break;
 	}
 }
-

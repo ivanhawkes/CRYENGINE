@@ -6,41 +6,32 @@
 namespace pfx2
 {
 
-ILINE void IModifier::Serialize(Serialization::IArchive& ar)
-{
-	ar(m_enabled);
-}
-
 template<EDataDomain Domain, typename T>
-CParamMod<Domain, T>::CParamMod(TType defaultValue)
-	: m_baseValue(defaultValue)
+void CParamMod<Domain, T>::AddToComponent(CParticleComponent* pComponent, CParticleFeature* pFeature)
 {
-}
-
-template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::AddToComponent(CParticleComponent* pComponent, CParticleFeature* pFeature)
-{
-	m_modInit.clear();
-	m_modUpdate.clear();
-	stl::find_and_erase_all(m_modifiers, nullptr);
-
 	if (Domain & EDD_PerParticle)
 		pComponent->InitParticles.add(pFeature);
 
 	for (auto& pModifier : m_modifiers)
 	{
 		if (pModifier && pModifier->IsEnabled())
-			pModifier->AddToParam(pComponent, this);
+			pModifier->AddToParam(pComponent);
 	}
 }
 
 template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::AddToComponent(CParticleComponent* pComponent, CParticleFeature* pFeature, TDataType<TType> dataType)
+void CParamMod<Domain, T>::AddToComponent(CParticleComponent* pComponent, CParticleFeature* pFeature, ThisDataType dataType)
 {
 	AddToComponent(pComponent, pFeature);
 	pComponent->AddParticleData(dataType);
 
-	if (dataType.info().domain & EDD_HasUpdate && !m_modUpdate.empty())
+	for (auto& pModifier : m_modifiers)
+	{
+		if (pModifier && pModifier->IsEnabled())
+			pModifier->SetDataType(dataType);
+	}
+
+	if (Domain & EDD_HasUpdate && !m_modUpdate.empty())
 	{
 		pComponent->AddParticleData(dataType.InitType());
 		if (Domain & EDD_PerParticle)
@@ -49,29 +40,37 @@ void CParamMod<Domain, T >::AddToComponent(CParticleComponent* pComponent, CPart
 }
 
 template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::Serialize(Serialization::IArchive& ar)
+void CParamMod<Domain, T>::Serialize(Serialization::IArchive& ar)
 {
 	EDataDomain domain = Domain;
 	Serialization::SContext _modContext(ar, static_cast<EDataDomain*>(&domain));
-	ar(m_baseValue, "value", "^");
-	ar(SkipEmpty(m_modifiers), "modifiers", "^");
+	ar(m_baseValue, T::ValueName(), "^");
+	ar(SkipEmpty(m_modifiers), T::ModsName(), "^");
 
 	if (ar.isInput())
 	{
+		m_modInit.clear();
+		m_modUpdate.clear();
+		stl::find_and_erase_all(m_modifiers, nullptr);
 		for (auto& pMod : m_modifiers)
 		{
-			if (!pMod)
-				continue;
 			if (TModifier* pNewMod = pMod->VersionFixReplace())
 			{
 				pMod.reset(pNewMod);
+			}
+			if (pMod->IsEnabled())
+			{
+				if (pMod->GetDomain() & Domain & EDD_HasUpdate)
+					m_modUpdate.push_back(pMod);
+				else
+					m_modInit.push_back(pMod);
 			}
 		}
 	}
 }
 
 template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::InitParticles(CParticleComponentRuntime& runtime, TDataType<TType> dataType) const
+void CParamMod<Domain, T>::Init(CParticleComponentRuntime& runtime, ThisDataType dataType) const
 {
 	CRY_PFX2_PROFILE_DETAIL;
 
@@ -80,14 +79,14 @@ void CParamMod<Domain, T >::InitParticles(CParticleComponentRuntime& runtime, TD
 		return;
 
 	TIOStream<TType> stream = container.IOStream(dataType);
-	ModifyInit(runtime, stream, runtime.SpawnedRange(), dataType);
+	ModifyInit(runtime, stream, runtime.SpawnedRange());
 
-	if (dataType.info().domain & EDD_HasUpdate)
+	if (Domain & EDD_HasUpdate)
 		container.CopyData(dataType.InitType(), dataType, runtime.SpawnedRange());
 }
 
 template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::Update(CParticleComponentRuntime& runtime, TDataType<TType> dataType) const
+void CParamMod<Domain, T>::Update(CParticleComponentRuntime& runtime, ThisDataType dataType) const
 {
 	CParticleContainer& container = runtime.GetContainer();
 	if (container.GetMaxParticles() == 0 || !container.HasData(dataType))
@@ -95,46 +94,40 @@ void CParamMod<Domain, T >::Update(CParticleComponentRuntime& runtime, TDataType
 
 	CRY_PFX2_ASSERT(runtime.FullRange().m_end <= container.GetNumParticles());
 	TIOStream<TType> stream = container.IOStream(dataType);
-	ModifyUpdate(runtime, stream, runtime.FullRange(), dataType);
+	ModifyUpdate(runtime, stream, runtime.FullRange());
 }
 
 template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::ModifyInit(CParticleComponentRuntime& runtime, TIOStream<TType>& stream, SUpdateRange range, TDataType<TType> dataType) const
+void CParamMod<Domain, T>::ModifyInit(const CParticleComponentRuntime& runtime, TIOStream<TType>& stream, SUpdateRange range) const
 {
 	CRY_PFX2_PROFILE_DETAIL;
 	stream.Fill(range, m_baseValue);
 
 	for (auto& pModifier : m_modInit)
-		pModifier->Modify(runtime, range, stream, dataType, Domain);
+		pModifier->Modify(runtime, range, stream, Domain);
 }
 
 template<EDataDomain Domain, typename T>
-void CParamMod<Domain, T >::ModifyUpdate(CParticleComponentRuntime& runtime, TIOStream<TType>& stream, SUpdateRange range, TDataType<TType> dataType) const
+void CParamMod<Domain, T>::ModifyUpdate(const CParticleComponentRuntime& runtime, TIOStream<TType>& stream, SUpdateRange range) const
 {
 	CRY_PFX2_PROFILE_DETAIL;
 	for (auto& pModifier : m_modUpdate)
-		pModifier->Modify(runtime, range, stream, dataType, Domain);
+		pModifier->Modify(runtime, range, stream, Domain);
 }
 
 template<EDataDomain Domain, typename T>
-TRange<typename T::TType> CParamMod<Domain, T >::GetValues(const CParticleComponentRuntime& runtime, TType* data, SUpdateRange range, EDataDomain domain, bool updating) const
+auto CParamMod<Domain, T>::GetValues(const CParticleComponentRuntime& runtime, TVarArray<TType> data, EDataDomain domain) const -> TRange<TFrom>
 {
 	TRange<TType> minmax(1);
-	TIOStream<TType> stream(data);
+	TIOStream<TType> stream(data.data());
+	SUpdateRange range(0, data.size());
 
-	stream.Fill(range, m_baseValue);
+	data.fill(m_baseValue);
 
-	for (auto & pMod : m_modInit)
+	for (auto& pMod : m_modifiers)
 	{
-		if (pMod->GetDomain() & domain)
-			pMod->Modify(non_const(runtime), range, stream, TDataType<TType>(), domain);
-		else
-			minmax = minmax * pMod->GetMinMax();
-	}
-	for (auto& pMod : m_modUpdate)
-	{
-		if (updating && pMod->GetDomain() & domain)
-			pMod->Modify(non_const(runtime), range, stream, TDataType<TType>(), domain);
+		if (domain >= (max(pMod->GetDomain(), Domain) & ~EDD_HasUpdate))
+			pMod->Modify(runtime, range, stream, domain);
 		else
 			minmax = minmax * pMod->GetMinMax();
 	}
@@ -142,40 +135,31 @@ TRange<typename T::TType> CParamMod<Domain, T >::GetValues(const CParticleCompon
 }
 
 template<EDataDomain Domain, typename T>
-TRange<typename T::TType> CParamMod<Domain, T >::GetValues(const CParticleComponentRuntime& runtime, TVarArray<TType> data, EDataDomain domain, bool updating) const
+auto CParamMod<Domain, T>::GetValueRange(const CParticleComponentRuntime& runtime) const -> TRange<TFrom>
 {
-	return GetValues(runtime, data.data(), SUpdateRange(0, data.size()), domain, updating);
+	floatv curValueV = convert<floatv>(0.0f);
+	float& curValue = (float&)curValueV;
+	auto minmax = GetValues(runtime, TVarArray<float>(&curValue, 1), EDD_None);
+	return minmax * curValue;
 }
 
 template<EDataDomain Domain, typename T>
-TRange<typename T::TType> CParamMod<Domain, T >::GetValueRange(const CParticleComponentRuntime& runtime) const
-{
-	floatv curValue;
-	auto minmax = GetValues(runtime, (float*)&curValue, SUpdateRange(0, 1), EDD_None, true);
-	return minmax * (*(float*)&curValue);
-}
-
-template<EDataDomain Domain, typename T>
-TRange<typename T::TType> CParamMod<Domain, T >::GetValueRange() const
+auto CParamMod<Domain, T>::GetValueRange() const -> TRange<TFrom>
 {
 	TRange<TType> minmax(m_baseValue);
-	for (auto& pMod : m_modInit)
-		minmax = minmax * pMod->GetMinMax();
-	for (auto& pMod : m_modUpdate)
+	for (auto& pMod : m_modifiers)
 		minmax = minmax * pMod->GetMinMax();
 	return minmax;
 }
 
 template<EDataDomain Domain, typename T>
-void pfx2::CParamMod<Domain, T >::Sample(TType* samples, int numSamples) const
+void pfx2::CParamMod<Domain, T>::Sample(TVarArray<TFrom> samples) const
 {
-	TIOStream<TType> stream(samples);
-	stream.Fill(SUpdateRange(0, numSamples), m_baseValue);
-
+	samples.fill(T::From(m_baseValue));
 	for (auto& pModifier : m_modifiers)
 	{
 		if (pModifier->IsEnabled())
-			pModifier->Sample(samples, numSamples);
+			pModifier->Sample(samples);
 	}
 }
 

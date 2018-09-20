@@ -1,22 +1,21 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
+#include "TerrainLayerView.h"
 
-#include <QPixmap>
-#include <QIcon>
-#include <QImage>
-#include <QEvent>
-#include <QMouseEvent>
-#include <QMenu>
-#include <QItemDelegate>
-
-#include "Terrain/TerrainLayerView.h"
 #include "Terrain/TerrainManager.h"
 #include "TerrainTexture.h"
 #include "Terrain/Layer.h"
 #include "RecursionLoopGuard.h"
-#include "EditorFramework/Events.h"
-#include "QAdvancedItemDelegate.h"
+
+#include <QAdvancedItemDelegate.h>
+
+#include <QEvent>
+#include <QIcon>
+#include <QImage>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QPixmap>
 
 #define LAYER_PREVIEW_SIZE 32
 
@@ -380,20 +379,22 @@ void QTerrainLayerView::mousePressEvent(QMouseEvent* event)
 		ICommandManager* pManager = GetIEditorImpl()->GetICommandManager();
 		if (pManager && m_pTerrainManager)
 		{
-			QMenu* pLayerMenu = new QMenu();
-			QList<QAction*> actions;
-			actions.push_back(pManager->GetAction("terrain.create_layer"));
+			QMenu* pLayerMenu = new QMenu;
+			pLayerMenu->addAction(pManager->GetAction("terrain.create_layer"));
 
 			if (m_pTerrainManager->GetSelectedLayer())
 			{
-				actions.push_back(pManager->GetAction("terrain.delete_layer"));
-				actions.push_back(pManager->GetAction("terrain.duplicate_layer"));
-				actions.push_back(pManager->GetAction("terrain.move_layer_up"));
-				actions.push_back(pManager->GetAction("terrain.move_layer_down"));
-				actions.push_back(pManager->GetAction("terrain.flood_layer"));
+				pLayerMenu->addAction(pManager->GetAction("terrain.delete_layer"));
+				pLayerMenu->addAction(pManager->GetAction("terrain.duplicate_layer"));
+				pLayerMenu->addSeparator();
+				pLayerMenu->addAction(pManager->GetAction("terrain.move_layer_to_top"));
+				pLayerMenu->addAction(pManager->GetAction("terrain.move_layer_up"));
+				pLayerMenu->addAction(pManager->GetAction("terrain.move_layer_down"));
+				pLayerMenu->addAction(pManager->GetAction("terrain.move_layer_to_bottom"));
+				pLayerMenu->addSeparator();
+				pLayerMenu->addAction(pManager->GetAction("terrain.flood_layer"));
 			}
 
-			pLayerMenu->addActions(actions);
 			pLayerMenu->popup(QCursor::pos());
 		}
 	}

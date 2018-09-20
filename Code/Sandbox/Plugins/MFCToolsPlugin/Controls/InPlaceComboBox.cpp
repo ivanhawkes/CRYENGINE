@@ -44,7 +44,6 @@ BOOL CInPlaceCBEdit::PreTranslateMessage(MSG* pMsg)
 		default:
 			pOwner->SendMessage(WM_USER_ON_EDITKEYDOWN, nChar);
 			return TRUE;
-			;
 		}
 	}
 	else if (pMsg->message == WM_LBUTTONDOWN)
@@ -1035,4 +1034,3 @@ void CInPlaceComboBox::RefreshMetrics()
 {
 	RefreshXtremeColors();
 }
-

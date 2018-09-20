@@ -61,7 +61,7 @@ public:
 public:
 	virtual void AddToComponent(CParticleComponent* pComponent, SComponentParams* pParams) override
 	{
-		pComponent->MainPreUpdate.add(this);
+		pComponent->CullSubInstances.add(this);
 	}
 
 	virtual void Serialize(Serialization::IArchive& ar) override
@@ -70,11 +70,10 @@ public:
 		ar(m_attribute, "Attribute", "Attribute");
 	}
 
-	virtual void MainPreUpdate(CParticleComponentRuntime& runtime) override
+	virtual void CullSubInstances(CParticleComponentRuntime& runtime, TDynArray<SInstance>& instances) override
 	{
-		CRY_PFX2_PROFILE_DETAIL;
 		if (!m_attribute.GetValueAs(runtime.GetEmitter()->GetAttributeInstance(), true))
-			runtime.RemoveAllSubInstances();
+			instances.resize(0);
 	}
 
 private:
@@ -107,7 +106,7 @@ public:
 			SERIALIZE_VAR(ar, m_selectionStart);
 	}
 
-	virtual void CullSubInstances(CParticleComponentRuntime& runtime, TVarArray<SInstance>& instances) override
+	virtual void CullSubInstances(CParticleComponentRuntime& runtime, TDynArray<SInstance>& instances) override
 	{
 		if (m_probability == 1.0f)
 			return;
@@ -136,9 +135,9 @@ public:
 
 private:
 
-	UUnitFloat                   m_probability      = 1.0f;
-	TValue<uint, TDefaultZero<>> m_group;
-	UUnitFloat                   m_selectionStart   = 0.0f;
+	UUnitFloat                 m_probability    = 1.0f;
+	TValue<THideDefault<uint>> m_group;
+	UUnitFloat                 m_selectionStart = 0.0f;
 };
 
 CRY_PFX2_IMPLEMENT_FEATURE(CParticleFeature, CFeatureComponentActivateRandom, "Component", "ActivateRandom", colorComponent);

@@ -377,10 +377,6 @@ public:
 	//! <description>Gets the amount of the memory for the system.</description>
 	int GetSystemMem(IFunctionHandler* pH);
 
-	//! <code>System.IsPS20Supported()</code>
-	//! <description>Checks if the PS20 is supported.</description>
-	int IsPS20Supported(IFunctionHandler* pH);
-
 	//! <code>System.IsHDRSupported()</code>
 	//! <description>Checks if the HDR is supported.</description>
 	int IsHDRSupported(IFunctionHandler* pH);
@@ -694,8 +690,6 @@ private:
 	IConsole*  m_pConsole;
 	ITimer*    m_pTimer;
 	I3DEngine* m_p3DEngine;
-
-	//	ICVar *r_hdrrendering;						// the Cvar is created in cry3dengine, this is just a pointer
 
 	//Vlad is too lazy to add this to 3DEngine">so I have to put it here. It should
 	//not be here, but I have to put it somewhere.....

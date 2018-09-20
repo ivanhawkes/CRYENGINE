@@ -67,7 +67,7 @@ CLayer::CLayer() : m_cLayerFilterColor(1, 1, 1), m_fLayerTiling(1), m_fSpecularA
 	AllocateMaskGrid();
 }
 
-uint32 CLayer::GetCurrentLayerId()
+uint32 CLayer::GetCurrentLayerId() const
 {
 	return m_dwLayerId;
 }
@@ -400,17 +400,19 @@ void CLayer::Serialize(Serialization::IArchive& ar)
 		if (texturePath.GetBuffer())
 			textureName = texturePath.GetBuffer();
 
-		ar(filterColor, "filtercolor", "Filter Color");
-		ar(minHeight, "minheight", "Min Height");
-		ar(maxHeight, "maxheight", "Max Height");
+		ar(filterColor, "filtercolor", "Color");
+
+		ar(Serialization::TextureFilename(textureName), "texture", "Texture");
+		ar(Serialization::MaterialPicker(materialName), "material", "Material");
+
+		ar(minHeight, "minheight", "Height (min)");
+		ar(maxHeight, "maxheight", "Height (max)");
 
 		// Limit the slope values from 0.0 to slightly less than 90. We later calculate the slope as
 		// tan(angle) and tan(90) will result in disaster
 		const float slopeLimitDeg = 90.f - 0.01;
-		ar(yasli::Range(minAngle, 0.0f, slopeLimitDeg), "minangle", "Min Angle");
-		ar(yasli::Range(maxAngle, 0.0f, slopeLimitDeg), "maxangle", "Max Angle");
-		ar(Serialization::TextureFilename(textureName), "texture", "Texture");
-		ar(Serialization::MaterialPicker(materialName), "material", "Material");
+		ar(yasli::Range(minAngle, 0.0f, slopeLimitDeg), "minangle", "Angle (min)");
+		ar(yasli::Range(maxAngle, 0.0f, slopeLimitDeg), "maxangle", "Angle (max)");
 
 		if (ar.isInput())
 		{
@@ -1458,6 +1460,8 @@ void CLayer::ImportBlock(CXmlArchive& xmlAr, const CPoint& offset, int nRot)
 			subImageRot.RotateOrt(subImage, nRot);
 
 		m_layerMask.SetSubImage(dstMin.x, dstMin.y, nRot ? subImageRot : subImage);
+
+		GetIEditorImpl()->GetTerrainManager()->signalLayersChanged();
 	}
 }
 
@@ -1479,7 +1483,7 @@ CImageEx& CLayer::GetTexturePreviewImage()
 	return m_previewImage;
 }
 
-void CLayer::GetMemoryUsage(ICrySizer* pSizer)
+void CLayer::GetMemoryUsage(ICrySizer* pSizer) const
 {
 	pSizer->Add(*this);
 

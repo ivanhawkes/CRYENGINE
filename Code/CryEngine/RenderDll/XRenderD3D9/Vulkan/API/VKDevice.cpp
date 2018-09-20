@@ -180,10 +180,22 @@ void CDevice::DeferDestruction(VkRenderPass renderPass, VkFramebuffer frameBuffe
 	m_deferredRenderPasses->emplace_back(std::move(helper));
 }
 
+void CDevice::DeferDestruction(VkPipeline pipeline)
+{
+	SPipeline helper = { GetVkDevice(), pipeline };
+	CryAutoCriticalSection lock(m_deferredLock);
+	m_deferredPipelines->emplace_back(std::move(helper));
+}
+
 CDevice::SRenderPass::~SRenderPass()
 {
 	renderPass.Destroy(vkDestroyRenderPass, self);
 	frameBuffer.Destroy(vkDestroyFramebuffer, self);
+}
+
+CDevice::SPipeline::~SPipeline()
+{
+	pipeline.Destroy(vkDestroyPipeline, self);
 }
 
 template<typename T, size_t N>
@@ -218,6 +230,7 @@ void CDevice::TickDestruction()
 	auto imageViews = TickDestructionHelper(m_deferredImageViews);
 	auto samplers = TickDestructionHelper(m_deferredSamplers);
 	auto renderPasses = TickDestructionHelper(m_deferredRenderPasses);
+	auto pipelines = TickDestructionHelper(m_deferredPipelines);
 	m_deferredLock.Unlock();
 
 	// Automatic cleanup happens here.
@@ -315,7 +328,11 @@ VkResult CDevice::CreateCommittedResource(EHeapType heapHint, const VkCreateInfo
 template<class CResource>
 VkResult CDevice::DuplicateCommittedResource(CResource* pInputResource, CResource** ppOutputResource) threadsafe
 {
-	return CreateOrReuseCommittedResource<CResource, typename CResource::VkCreateInfo>(pInputResource->GetHeapType(), pInputResource->GetCreateInfo(), ppOutputResource);
+
+	VkResult result = CreateOrReuseCommittedResource<CResource, typename CResource::VkCreateInfo>(pInputResource->GetHeapType(), pInputResource->GetCreateInfo(), ppOutputResource);
+	if (result == VK_SUCCESS)
+		SetDebugName(pInputResource, GetDebugName(*ppOutputResource).c_str());
+	return result;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -441,7 +458,8 @@ VkResult CDevice::CreateOrReuseCommittedResource(EHeapType HeapHint, const VkCre
 			{
 				// Guaranteed O(1) lookup
 				(*ppOutputResource = result->second.front().pObject)->AddRef();
-				VK_ASSERT(result->second.front().pObject->IsUniquelyOwned(), "Ref-Counter of VK resource is not 1, implementation will crash!");
+				VK_ASSERT(result->second.front().pObject->IsUniquelyOwned() && "Ref-Counter of VK resource is not 1, implementation will crash!");
+				ClearDebugName(result->second.front().pObject);
 
 				result->second.pop_front();
 				if (!result->second.size())
@@ -511,7 +529,7 @@ void CDevice::FlushReleaseHeap(const UINT64 (&completedFenceValues)[CMDQUEUE_NUM
 				else
 				{
 				//	it->first->Release();
-					VK_ASSERT(it->first->IsDeletable(), "Ref-Counter of VK resource is not 0, implementation will crash!");
+					VK_ASSERT(it->first->IsDeletable() && "Ref-Counter of VK resource is not 0, implementation will crash!");
 					delete it->first;
 				}
 
@@ -535,7 +553,7 @@ void CDevice::FlushReleaseHeap(const UINT64 (&completedFenceValues)[CMDQUEUE_NUM
 			       ((it->second.back().fenceValues[CMDQUEUE_COPY    ]) <= pruneFenceValues[CMDQUEUE_COPY    ])*/)
 			{
 			//	ULONG counter = it->second.back().pObject->Release();
-				VK_ASSERT(it->second.back().pObject->IsDeletable(), "Ref-Counter of VK resource is not 0, implementation will crash!");
+				VK_ASSERT(it->second.back().pObject->IsDeletable() && "Ref-Counter of VK resource is not 0, implementation will crash!");
 				delete it->second.back().pObject;
 
 				it->second.pop_back();
@@ -568,8 +586,15 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], CResource*
 		pObject->GetHeapType() == kHeapTargets ||
 		pObject->GetHeapType() == kHeapSources;
 
-	// GPU-only resources can't race each other when they are managed by ref-counts/pools
-	if (isGPUOnly && bReusable)
+	UINT64 fenceValuesWithPrunningDelay[CMDQUEUE_NUM];
+	const FVAL64(&completedFenceValues)[CMDQUEUE_NUM] = m_Scheduler.GetFenceManager().GetLastCompletedFenceValues();
+	MaxFenceValues(fenceValuesWithPrunningDelay, fenceValues, completedFenceValues);
+	const bool isUnused =
+		SmallerEqualFenceValues(fenceValuesWithPrunningDelay, completedFenceValues);
+
+	// GPU-only resources can't race with itself when they are managed by ref-counts/pools
+	// CPU-write resources can be recycled immediately if they have been used up already
+	if ((isGPUOnly | isUnused) & bReusable)
 	{
 		TRecycleHeap<CResource>& RecycleHeap = GetRecycleHeap<CResource>();
 		CryAutoLock<CryCriticalSectionNonRecursive> lThreadSafeScope(GetRecycleHeapCriticalSection<CResource>());
@@ -594,7 +619,7 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], CResource*
 #endif
 			sorted.push_front(std::move(recycleInfo));
 	}
-	else
+	else if (!isUnused)
 	{
 		TReleaseHeap<CResource>& ReleaseHeap = GetReleaseHeap<CResource>();
 		CryAutoLock<CryCriticalSectionNonRecursive> lThreadSafeScope(GetReleaseHeapCriticalSection<CResource>());
@@ -609,6 +634,11 @@ void CDevice::ReleaseLater(const FVAL64 (&fenceValues)[CMDQUEUE_NUM], CResource*
 
 		std::pair<typename TReleaseHeap<CResource>::iterator, bool> result = ReleaseHeap.emplace(pObject, std::move(releaseInfo));
 	}
+
+#if 0	// NOTE: Use the code-fragment to detect resources without names
+	if (GetDebugName(pObject).empty())
+		__debugbreak();
+#endif
 }
 
 //---------------------------------------------------------------------------------------------------------------------

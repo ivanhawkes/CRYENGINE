@@ -159,6 +159,7 @@ CImpl::CImpl()
 	: m_pDataPanel(nullptr)
 	, m_projectPath(AUDIO_SYSTEM_DATA_ROOT "/wwise_project")
 	, m_assetsPath(AUDIO_SYSTEM_DATA_ROOT "/" + string(CryAudio::Impl::Wwise::s_szImplFolderName) + "/" + string(CryAudio::s_szAssetsFolderName))
+	, m_localizedAssetsPath(m_assetsPath)
 	, m_szUserSettingsFile("%USER%/audiocontrolseditor_wwise.user")
 {
 	gEnv->pAudioSystem->GetImplInfo(m_implInfo);
@@ -196,8 +197,9 @@ void CImpl::DestroyDataPanel()
 void CImpl::Reload(bool const preserveConnectionStatus)
 {
 	Clear();
+	SetLocalizedAssetsPath();
 
-	CProjectLoader(m_projectPath, m_assetsPath, m_rootItem, m_itemCache);
+	CProjectLoader(m_projectPath, m_assetsPath, m_localizedAssetsPath, m_rootItem, m_itemCache);
 
 	if (preserveConnectionStatus)
 	{
@@ -259,6 +261,31 @@ void CImpl::SetProjectPath(char const* const szPath)
 {
 	m_projectPath = szPath;
 	Serialization::SaveJsonFile(m_szUserSettingsFile, *this);
+}
+
+//////////////////////////////////////////////////////////////////////////
+bool CImpl::IsSystemTypeSupported(EAssetType const assetType) const
+{
+	bool isSupported = false;
+
+	switch (assetType)
+	{
+	case EAssetType::Trigger:
+	case EAssetType::Parameter:
+	case EAssetType::Switch:
+	case EAssetType::State:
+	case EAssetType::Environment:
+	case EAssetType::Preload:
+	case EAssetType::Folder:
+	case EAssetType::Library:
+		isSupported = true;
+		break;
+	default:
+		isSupported = false;
+		break;
+	}
+
+	return isSupported;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -718,6 +745,28 @@ void CImpl::Clear()
 
 	m_itemCache.clear();
 	m_rootItem.Clear();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetLocalizedAssetsPath()
+{
+	if (ICVar const* const pCVar = gEnv->pConsole->GetCVar("g_languageAudio"))
+	{
+		char const* const szLanguage = pCVar->GetString();
+
+		if (szLanguage != nullptr)
+		{
+			m_localizedAssetsPath = PathUtil::GetLocalizationFolder().c_str();
+			m_localizedAssetsPath += "/";
+			m_localizedAssetsPath += szLanguage;
+			m_localizedAssetsPath += "/";
+			m_localizedAssetsPath += AUDIO_SYSTEM_DATA_ROOT;
+			m_localizedAssetsPath += "/";
+			m_localizedAssetsPath += CryAudio::Impl::Wwise::s_szImplFolderName;
+			m_localizedAssetsPath += "/";
+			m_localizedAssetsPath += CryAudio::s_szAssetsFolderName;
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

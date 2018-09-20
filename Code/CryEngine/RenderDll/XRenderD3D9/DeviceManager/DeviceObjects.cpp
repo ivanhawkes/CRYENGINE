@@ -8,11 +8,11 @@
 #include "../GraphicsPipeline/Common/GraphicsPipelineStateSet.h"
 
 
-uint8_t SInputLayoutCompositionDescriptor::GenerateShaderMask(const InputLayoutHandle VertexFormat, ID3D11ShaderReflection* pShaderReflection)
+uint8_t SInputLayoutCompositionDescriptor::GenerateShaderMask(const InputLayoutHandle VertexFormat, D3DShaderReflection* pShaderReflection)
 {
 	uint8_t shaderMask = 0;
 
-	D3D11_SHADER_DESC Desc;
+	D3D_SHADER_DESC Desc;
 	pShaderReflection->GetDesc(&Desc);
 
 	// layoutDescriptor's names will be ordered in lexicographical ascending order
@@ -25,7 +25,7 @@ uint8_t SInputLayoutCompositionDescriptor::GenerateShaderMask(const InputLayoutH
 	reflectedNames.reserve(Desc.InputParameters);
 	for (uint32 i=0; i<Desc.InputParameters; i++)
 	{
-		D3D11_SIGNATURE_PARAMETER_DESC Sig;
+		D3D_SIGNATURE_PARAMETER_DESC Sig;
 		pShaderReflection->GetInputParameterDesc(i, &Sig);
 		if (!Sig.SemanticName)
 			continue;
@@ -358,11 +358,11 @@ const CDeviceObjectFactory::SInputLayoutPair* CDeviceObjectFactory::GetOrCreateI
 
 	{
 		CRY_PROFILE_SECTION(PROFILE_RENDERER, "D3DReflect");
-		HRESULT hr = D3DReflect(pVertexShader->m_pShaderData, pVertexShader->m_nDataSize, IID_ID3D11ShaderReflection, &pShaderReflBuf);
+		HRESULT hr = D3DReflection(pVertexShader->m_pShaderData, pVertexShader->m_nDataSize, IID_D3DShaderReflection, &pShaderReflBuf);
 		CRY_ASSERT(SUCCEEDED(hr) && pShaderReflBuf);
 	}
 
-	ID3D11ShaderReflection* pShaderReflection = (ID3D11ShaderReflection*)pShaderReflBuf;
+	D3DShaderReflection* pShaderReflection = (D3DShaderReflection*)pShaderReflBuf;
 
 	// Create the composition descriptor
 	SInputLayoutCompositionDescriptor compositionDescriptor(VertexFormat, StreamMask, pShaderReflection);
@@ -524,7 +524,7 @@ void CDeviceObjectFactory::TrimResources()
 {
 	CRY_ASSERT(gRenDev->m_pRT->IsRenderThread());
 
-	TrimPipelineStates();
+	TrimPipelineStates(gRenDev->GetRenderFrameID());
 	TrimResourceLayouts();
 	TrimRenderPasses();
 
@@ -586,8 +586,11 @@ void CDeviceObjectFactory::ReleaseResources()
 	ReleaseResourcesImpl();
 }
 
-void CDeviceObjectFactory::ReloadPipelineStates()
+void CDeviceObjectFactory::ReloadPipelineStates(int currentFrameID)
 {
+	// Throw out expired PSOs before trying to recompile them (saves some time)
+	TrimPipelineStates(currentFrameID);
+
 	for (auto it = m_GraphicsPsoCache.begin(), itEnd = m_GraphicsPsoCache.end(); it != itEnd; )
 	{
 		auto itCurrentPSO = it++;
@@ -609,10 +612,13 @@ void CDeviceObjectFactory::ReloadPipelineStates()
 		}
 	}
 
-	for (auto& it : m_ComputePsoCache)
+	for (auto it = m_ComputePsoCache.begin(), itEnd = m_ComputePsoCache.end(); it != itEnd; )
 	{
-		if (!it.second->Init(it.first))
-			m_InvalidComputePsos.emplace(it.first, it.second);
+		auto itCurrentPSO = it++;
+		const bool success = itCurrentPSO->second->Init(itCurrentPSO->first);
+
+		if (!success)
+			m_InvalidComputePsos.emplace(itCurrentPSO->first, itCurrentPSO->second);
 	}
 }
 
@@ -656,10 +662,10 @@ void CDeviceObjectFactory::UpdatePipelineStates()
 	}
 }
 
-void CDeviceObjectFactory::TrimPipelineStates()
+void CDeviceObjectFactory::TrimPipelineStates(int currentFrameID, int trimBeforeFrameID)
 {
-	EraseUnusedEntriesFromCache(m_GraphicsPsoCache);
-	EraseUnusedEntriesFromCache(m_ComputePsoCache);
+	EraseExpiredEntriesFromCache(m_GraphicsPsoCache, currentFrameID, trimBeforeFrameID);
+	EraseExpiredEntriesFromCache(m_ComputePsoCache,  currentFrameID, trimBeforeFrameID);
 
 	EraseExpiredEntriesFromCache(m_InvalidGraphicsPsos);
 	EraseExpiredEntriesFromCache(m_InvalidComputePsos);

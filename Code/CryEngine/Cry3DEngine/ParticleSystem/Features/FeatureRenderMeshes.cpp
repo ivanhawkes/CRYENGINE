@@ -7,7 +7,7 @@
 namespace pfx2
 {
 
-MakeDataType(EPDT_MeshGeometry, IMeshObj*, EDataDomain(EDD_PerParticle | EDD_NeedsClear)); // Submesh pointers must be cleared on edit to avoid referencing freed parent mesh
+MakeDataType(EPDT_MeshGeometry, IMeshObj*);
 
 extern TDataType<float> EPDT_Alpha;
 extern TDataType<UCol>  EPDT_Color;
@@ -84,7 +84,7 @@ public:
 				for (int i = 0; i < subObjectCount; ++i)
 				{
 					if (IStatObj::SSubObject* pSub = m_pStaticObject->GetSubObject(i))
-						if (pSub->nType == STATIC_SUB_OBJECT_MESH && pSub->pStatObj && pSub->pStatObj->GetRenderMesh())
+						if (pSub->nType == STATIC_SUB_OBJECT_MESH && pSub->pStatObj)
 						{
 							if (string(pSub->name).Right(5) == "_main")
 								continue;
@@ -98,6 +98,7 @@ public:
 			{
 				// Require per-particle sub-objects
 				assert(m_aSubObjects.size() < 256);
+				pComponent->OnEdit.add(this);
 				pComponent->InitParticles.add(this);
 				pComponent->AddParticleData(EPDT_MeshGeometry);
 				if (m_piecesMode == EPiecesMode::AllPieces)
@@ -111,7 +112,7 @@ public:
 				maxRadiusSqr = MeshRadiusSqr(m_pStaticObject);
 			}
 			if (m_sizeMode == ESizeMode::Scale)
-				SetMax(pParams->m_physicalSizeSlope.scale, sqrt(maxRadiusSqr));
+				pParams->m_physicalSizeSlope.scale *= sqrt(maxRadiusSqr);
 		}
 	}
 
@@ -121,6 +122,12 @@ public:
 		return m_originMode == EOriginMode::Center ? 
 			bb.GetRadiusSqr() :
 			max(bb.min.GetLengthSquared(), bb.max.GetLengthSquared());
+	}
+
+	virtual void OnEdit(CParticleComponentRuntime& runtime) override
+	{
+		// Submesh pointers must be cleared on edit to avoid referencing freed parent mesh
+		runtime.GetContainer().FillData(EPDT_MeshGeometry, (IMeshObj*)nullptr, runtime.FullRange());
 	}
 
 	virtual void InitParticles(CParticleComponentRuntime& runtime) override
@@ -212,6 +219,8 @@ public:
 			{
 				pMeshObj = meshes.SafeLoad(particleId);
 				if (!pMeshObj)
+					continue;
+				if (!pMeshObj->GetRenderMesh())
 					continue;
 				bBox = pMeshObj->GetAABB();
 				sizeScale = m_sizeMode == ESizeMode::Size ? rsqrt_fast(MeshRadiusSqr(pMeshObj)) : 1.0f;

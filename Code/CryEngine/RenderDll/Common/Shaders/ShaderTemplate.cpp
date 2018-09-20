@@ -316,25 +316,19 @@ CTexture* CShaderMan::mfCheckTemplateTexName(const char* mapname, ETEX_Type eTT)
 		TexPic = CRendererResources::s_ptexRT_2D;
 	}
 	else if (!stricmp(mapname, "$PrevFrameScaled"))
-		TexPic = CRendererResources::s_ptexPrevFrameScaled;
-	else if (!stricmp(mapname, "$BackBuffer"))
-		TexPic = CRendererResources::s_ptexBackBuffer;
+		TexPic = CRendererResources::s_ptexDisplayTargetScaledPrev;
+	else if (!stricmp(mapname, "$DisplayTarget"))
+		TexPic = CRendererResources::s_ptexDisplayTargetSrc;
 	else if (!stricmp(mapname, "$ModelHUD"))
 		TexPic = CRendererResources::s_ptexModelHudBuffer;
-	else if (!stricmp(mapname, "$BackBufferScaled_d2"))
-		TexPic = CRendererResources::s_ptexBackBufferScaled[0];
-	else if (!stricmp(mapname, "$BackBufferScaled_d4"))
-		TexPic = CRendererResources::s_ptexBackBufferScaled[1];
-	else if (!stricmp(mapname, "$BackBufferScaled_d8"))
-		TexPic = CRendererResources::s_ptexBackBufferScaled[2];
+	else if (!stricmp(mapname, "$DisplayTargetScaled_d2"))
+		TexPic = CRendererResources::s_ptexDisplayTargetScaled[0];
+	else if (!stricmp(mapname, "$DisplayTargetScaled_d4"))
+		TexPic = CRendererResources::s_ptexDisplayTargetScaled[1];
+	else if (!stricmp(mapname, "$DisplayTargetScaled_d8"))
+		TexPic = CRendererResources::s_ptexDisplayTargetScaled[2];
 	else if (!stricmp(mapname, "$HDR_BackBuffer"))
 		TexPic = CRendererResources::s_ptexSceneTarget;
-	else if (!stricmp(mapname, "$HDR_BackBufferScaled_d2"))
-		TexPic = CRendererResources::s_ptexHDRTargetScaled[0];
-	else if (!stricmp(mapname, "$HDR_BackBufferScaled_d4"))
-		TexPic = CRendererResources::s_ptexHDRTargetScaled[1];
-	else if (!stricmp(mapname, "$HDR_BackBufferScaled_d8"))
-		TexPic = CRendererResources::s_ptexHDRTargetScaled[2];
 	else if (!stricmp(mapname, "$HDR_FinalBloom"))
 		TexPic = CRendererResources::s_ptexHDRFinalBloom;
 	else if (!stricmp(mapname, "$HDR_TargetPrev"))
@@ -822,10 +816,9 @@ void CShaderMan::mfRefreshResources(CShaderResources* Res, const IRenderer::SLoa
 
 					Tex->m_Sampler.m_pTarget->m_refSamplerID = i;
 					Tex->m_Sampler.m_pTarget->m_bTempDepth = true;
-					Tex->m_Sampler.m_pTarget->m_eOrder = eRO_PreProcess;
+					Tex->m_Sampler.m_pTarget->m_eOrder = eRO_Managed;
 					Tex->m_Sampler.m_pTarget->m_eTF = eTF_R8G8B8A8;
 					Tex->m_Sampler.m_pTarget->m_nIDInPool = -1;
-					Tex->m_Sampler.m_pTarget->m_nFlags |= FRT_RENDTYPE_RECURSIVECURSCENE | FRT_CAMERA_CURRENT;
 					Tex->m_Sampler.m_pTarget->m_nFlags |= FRT_CLEAR_DEPTH | FRT_CLEAR_STENCIL | FRT_CLEAR_COLOR;
 				}
 				else
@@ -849,7 +842,7 @@ void CShaderMan::mfRefreshResources(CShaderResources* Res, const IRenderer::SLoa
 
 						Tex->m_Sampler.m_pTarget->m_bTempDepth = true;
 						Tex->m_Sampler.m_pTarget->m_eOrder = eRO_PreProcess;
-						Tex->m_Sampler.m_pTarget->m_eTF = eTF_R8G8B8A8;
+						Tex->m_Sampler.m_pTarget->m_eTF = CRendererResources::GetHDRFormat(false, true);
 						Tex->m_Sampler.m_pTarget->m_nIDInPool = -1;
 						Tex->m_Sampler.m_pTarget->m_nFlags |= FRT_RENDTYPE_RECURSIVECURSCENE | FRT_CAMERA_CURRENT;
 						Tex->m_Sampler.m_pTarget->m_nFlags |= FRT_CLEAR_DEPTH | FRT_CLEAR_STENCIL | FRT_CLEAR_COLOR;

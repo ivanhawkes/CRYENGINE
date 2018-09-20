@@ -43,8 +43,6 @@ void CTrackViewSequenceManager::OnEditorNotifyEvent(EEditorNotifyEvent event)
 	case eNotify_OnEndNewScene:
 	// Fall through
 	case eNotify_OnEndSceneOpen:
-	// Fall through
-	case eNotify_OnLayerImportEnd:
 		m_bUnloadingLevel = false;
 		SortSequences();
 		break;
@@ -462,4 +460,3 @@ void CTrackViewSequenceManager::HandleObjectDelete(const CBaseObject* pObject)
 		}
 	}
 }
-

@@ -5,10 +5,10 @@
 class CBaseObject;
 class CObjectArchive;
 class CObjectClassDesc;
-struct SDisplayContext;
 class CObjectLayer;
 class CObjectLayerManager;
 class CObjectPhysicsManager;
+class CObjectRenderHelper;
 class CRect;
 class CSelectionGroup;
 class CTrackViewAnimNode;
@@ -19,7 +19,7 @@ struct CObjectEvent;
 struct HitContext;
 struct IGizmoManager;
 struct IObjectLayerManager;
-class CObjectRenderHelper;
+struct SDisplayContext;
 
 enum EObjectListenerEvent;
 
@@ -34,8 +34,8 @@ enum SerializeFlags
 };
 
 //////////////////////////////////////////////////////////////////////////
-typedef std::vector<CBaseObject*>                                    CBaseObjectsArray;
-typedef std::pair<bool(CALLBACK*)(CBaseObject const&, void*), void*> BaseObjectFilterFunctor;
+typedef std::vector<CBaseObject*>                                     CBaseObjectsArray;
+typedef std::pair<bool (CALLBACK*)(CBaseObject const&, void*), void*> BaseObjectFilterFunctor;
 
 class CBatchProcessDispatcher
 {
@@ -69,7 +69,6 @@ public:
 //////////////////////////////////////////////////////////////////////////
 struct IObjectManager
 {
-public:
 	enum class ESelectOp
 	{
 		eSelect,
@@ -131,10 +130,6 @@ public:
 	//! Display objects on specified display context.
 	virtual void Display(CObjectRenderHelper& objRenderHelper) = 0;
 
-	//! Called when selecting without selection helpers - this is needed since
-	//! the visible object cache is normally not updated when not displaying helpers.
-	virtual void ForceUpdateVisibleObjectCache(SDisplayContext& dc) = 0;
-
 	//! Check intersection with objects.
 	//! Find intersection with nearest to ray origin object hit by ray.
 	//! If distance tolerance is specified certain relaxation applied on collision test.
@@ -191,12 +186,21 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 	// Object Selection.
 	//////////////////////////////////////////////////////////////////////////
-	virtual void SelectObject(CBaseObject* obj) = 0;
-	virtual void UnselectObject(CBaseObject* obj) = 0;
-
+	//! Clear selection and select
+	virtual void SelectObject(CBaseObject* pObject) = 0;
 	virtual void SelectObjects(const std::vector<CBaseObject*>& objects) = 0;
+
+	//! Add objects to current selection
+	virtual void AddObjectToSelection(CBaseObject* pObject) = 0;
+	virtual void AddObjectsToSelection(const std::vector<CBaseObject*>& objects) = 0;
+
+	//! Remove objects from current selection
+	virtual void UnselectObject(CBaseObject* pObject) = 0;
 	virtual void UnselectObjects(const std::vector<CBaseObject*>& objects) = 0;
+
+	//! Toggle selected state
 	virtual void ToggleSelectObjects(const std::vector<CBaseObject*>& objects) = 0;
+	//! Add and remove objects from selection
 	virtual void SelectAndUnselectObjects(const std::vector<CBaseObject*>& selectObjects, const std::vector<CBaseObject*>& unselectObjects) = 0;
 	virtual void SelectAll() = 0;
 

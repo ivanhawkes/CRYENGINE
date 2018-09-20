@@ -3,30 +3,10 @@
 #include "StdAfx.h"
 #include "ModelViewport.h"
 
-#include <CryMath/Cry_Vector3.h>
-#include <CryGame/IGameFramework.h>
-#include <CryRenderer/IRenderer.h>
-#include <CryRenderer/IShader.h>
-#include <CryAudio/IListener.h>
-
-#include <CryAnimation/ICryAnimation.h>
-#include <CryAnimation/IAttachment.h>
-#include <CryAnimation/CryCharMorphParams.h>
-
-#include <CryAnimation/CryCharAnimationParams.h>
-#include <CryAnimation/IFacialAnimation.h>
-
-#include "Objects/DisplayContext.h"
-
-#include <Cry3DEngine/I3DEngine.h>
-#include <CryPhysics/IPhysics.h>
-#include <CrySystem/ITimer.h>
-#include <CryRenderer/IRenderAuxGeom.h>
-#include "Controls/QuestionDialog.h"
-#include "FilePathUtil.h"
-
-#include "RenderLock.h"
 #include "IDataBaseItem.h"
+#include "RenderLock.h"
+
+#include <CryAudio/IListener.h>
 
 //uint32 g_ypos = 0;
 
@@ -49,13 +29,9 @@ static const char* szSupportedExt[] =
 	"cga",
 	"cga(c)",
 	"cid",
-	"caf"
-};
+	"caf" };
 
 }
-
-/////////////////////////////////////////////////////////////////////////////
-// CModelViewport
 
 CModelViewport::CModelViewport(const char* settingsPath)
 {
@@ -204,7 +180,7 @@ CModelViewport::CModelViewport(const char* settingsPath)
 		uint32 test = gEnv->pInput->HasInputDeviceOfType(eIDT_Gamepad);
 	}
 
-	m_pIAudioListener = gEnv->pAudioSystem->CreateListener();
+	m_pIAudioListener = gEnv->pAudioSystem->CreateListener(m_viewTM);
 	m_AABB.Reset();
 }
 
@@ -223,7 +199,6 @@ bool CModelViewport::IsPreviewableFileType(const char* szPath)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::SaveDebugOptions() const
 {
 	//TODO save this in personalization
@@ -322,7 +297,6 @@ void CModelViewport::SaveDebugOptions() const
 	   }*/
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::RestoreDebugOptions()
 {
 	/*
@@ -412,7 +386,6 @@ void CModelViewport::RestoreDebugOptions()
 	   }*/
 }
 
-//////////////////////////////////////////////////////////////////////////
 CModelViewport::~CModelViewport()
 {
 	OnDestroy();
@@ -435,7 +408,6 @@ CModelViewport::~CModelViewport()
 	GetIEditor()->SetConsoleVar("ca_UsePhysics", 1);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::ReleaseObject()
 {
 	if (m_object)
@@ -457,7 +429,6 @@ void CModelViewport::ReleaseObject()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CModelViewport::OnInputEvent(const SInputEvent& rInputEvent)
 {
 	if (rInputEvent.deviceType == eIDT_Gamepad)
@@ -480,7 +451,6 @@ bool CModelViewport::OnInputEvent(const SInputEvent& rInputEvent)
 	return 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::LoadObject(const string& fileName, float scale)
 {
 	m_bPaused = false;
@@ -541,7 +511,6 @@ void CModelViewport::LoadObject(const string& fileName, float scale)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::LoadStaticObject(const string& file)
 {
 	if (m_object)
@@ -561,7 +530,6 @@ void CModelViewport::LoadStaticObject(const string& file)
 	m_AABB.max = m_object->GetBoxMax();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnRender(SDisplayContext& context)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
@@ -603,7 +571,6 @@ void CModelViewport::OnRender(SDisplayContext& context)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::DrawSkyBox(const SRenderingPassInfo& passInfo)
 {
 	CRenderObject* pObj = passInfo.GetIRenderView()->AllocateTemporaryRenderObject();
@@ -615,7 +582,6 @@ void CModelViewport::DrawSkyBox(const SRenderingPassInfo& passInfo)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
 	// TODO: Add your message handler code here and/or call default
@@ -625,7 +591,6 @@ void CModelViewport::OnLButtonDblClk(UINT nFlags, CPoint point)
 	SetViewTM(tm);
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CModelViewport::OnKeyDown(uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 {
 	if (GetCharacterBase())
@@ -661,33 +626,28 @@ bool CModelViewport::OnKeyDown(uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnLightColor(IVariable* var)
 {
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnShowNormals(IVariable* var)
 {
 	bool enable = mv_showNormals;
 	GetIEditor()->SetConsoleVar("r_ShowNormals", (enable) ? 1 : 0);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnShowTangents(IVariable* var)
 {
 	bool enable = mv_showTangents;
 	GetIEditor()->SetConsoleVar("r_ShowTangents", (enable) ? 1 : 0);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnCharPhysics(IVariable* var)
 {
 	bool enable = mv_useCharPhysics;
 	GetIEditor()->SetConsoleVar("ca_UsePhysics", enable);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::AttachObjectToBone(const string& model, const string& bone)
 {
 	if (!GetCharacterBase())
@@ -728,7 +688,6 @@ void CModelViewport::AttachObjectToBone(const string& model, const string& bone)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::AttachObjectToFace(const string& model)
 {
 	if (!GetCharacterBase())
@@ -755,7 +714,6 @@ void CModelViewport::AttachObjectToFace(const string& model)
 
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnShowShaders(IVariable* var)
 {
 	bool bEnable = mv_showShaders;
@@ -769,7 +727,6 @@ void CModelViewport::OnDestroy()
 		m_pRESky->Release(false);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::Update()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
@@ -803,13 +760,11 @@ void CModelViewport::Update()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::SetCustomMaterial(IEditorMaterial* pMaterial)
 {
 	m_pCurrentMaterial = pMaterial;
 }
 
-//////////////////////////////////////////////////////////////////////////
 IEditorMaterial* CModelViewport::GetMaterial()
 {
 	if (m_pCurrentMaterial)
@@ -831,7 +786,6 @@ IEditorMaterial* CModelViewport::GetMaterial()
 	return nullptr;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CModelViewport::CanDrop(CPoint point, IDataBaseItem* pItem)
 {
 	if (!pItem)
@@ -844,7 +798,6 @@ bool CModelViewport::CanDrop(CPoint point, IDataBaseItem* pItem)
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::Drop(CPoint point, IDataBaseItem* pItem)
 {
 	if (!pItem)
@@ -859,7 +812,6 @@ void CModelViewport::Drop(CPoint point, IDataBaseItem* pItem)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::Physicalize()
 {
 	IPhysicalWorld* pPhysWorld = gEnv->pPhysicalWorld;
@@ -948,14 +900,12 @@ void CModelViewport::Physicalize()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::RePhysicalize()
 {
 	m_pPhysicalEntity = NULL;
 	Physicalize();
 }
 
-//////////////////////////////////////////////////////////////////////////
 namespace
 {
 void AllowAnimEventsToTriggerAgain(ICharacterInstance& characterInstance)
@@ -973,7 +923,6 @@ void AllowAnimEventsToTriggerAgain(ICharacterInstance& characterInstance)
 }
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::SetPaused(bool bPaused)
 {
 	//return;
@@ -998,7 +947,6 @@ void CModelViewport::SetPaused(bool bPaused)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::DrawModel(const SRenderingPassInfo& passInfo)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
@@ -1008,9 +956,7 @@ void CModelViewport::DrawModel(const SRenderingPassInfo& passInfo)
 	passInfo.GetIRenderView()->SetShaderRenderingFlags(SHDF_ALLOWHDR | SHDF_SECONDARY_VIEWPORT);
 	m_renderer->EF_StartEf(passInfo);
 
-	//////////////////////////////////////////////////////////////////////////
-	// Draw lights.
-	//////////////////////////////////////////////////////////////////////////
+	// Draw lights
 	if (mv_lighting == true)
 	{
 		uint32 numLights = m_VPLights.size();
@@ -1189,13 +1135,10 @@ void CModelViewport::DrawLights(const SRenderingPassInfo& passInfo)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::PlayAnimation(const char* szName)
 {
-
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::DrawFloorGrid(const Quat& m33, const Vec3& vPhysicalLocation, const Matrix33& rGridRot, bool bInstantSubmit)
 {
 	if (!m_renderer)
@@ -1312,15 +1255,11 @@ void CModelViewport::DrawCoordSystem(const QuatT& location, f32 length)
 	pAuxGeom->DrawCone(location.t + absAxisZ * length * scale, absAxisZ, 0.03f * scale, 0.15f * scale, RGBA8(0x00, 0x00, 0xff, 0xff));
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CModelViewport::OnLightMultiplier(IVariable* var)
 {
-
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CModelViewport::UseAnimationDrivenMotion() const
 {
 	return false;
 }
-

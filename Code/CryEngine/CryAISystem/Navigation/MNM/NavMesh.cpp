@@ -576,11 +576,12 @@ TriangleID CNavMesh::GetClosestTriangle(const vector3_t& localPosition, real_t v
 }
 
 TriangleID CNavMesh::GetClosestTriangle(const vector3_t& localPosition, const aabb_t& aroundPositionAABB, const INavMeshQueryFilter* pFilter,
-	real_t* distance /*= nullptr*/, vector3_t* closest /*= nullptr*/, float minIslandArea /*= 0.0f*/) const
+	real_t* distance /*= nullptr*/, vector3_t* closest /*= nullptr*/,
+	const real_t maxDistance /*= real_t::max()*/, const float minIslandArea /*= 0.0f*/) const
 {
-	const MNM::aabb_t aabb(localPosition + aroundPositionAABB.min , localPosition + aroundPositionAABB.max);
+	const MNM::aabb_t aabb(localPosition + aroundPositionAABB.min, localPosition + aroundPositionAABB.max);
 
-	CNearestTriangleQuery query(this, localPosition);
+	CNearestTriangleQuery query(this, localPosition, maxDistance);
 	QueryTrianglesWithProcessing(aabb, pFilter, query);
 
 	const MNM::TriangleID closestTriangleId = query.GetClosestTriangleId();
@@ -719,41 +720,114 @@ bool CNavMesh::CanTrianglePassFilter(const TriangleID triangleID, const INavMesh
 }
 
 bool CNavMesh::SnapPosition(
-	const vector3_t& localPosition, const SSnapToNavMeshRulesInfo& snappingRules, const INavMeshQueryFilter* pFilter,
-	vector3_t& snappedLocalPosition, MNM::TriangleID* pTriangleId) const
+	const vector3_t& localPosition, const SOrderedSnappingMetrics& snappingMetrics, const INavMeshQueryFilter* pFilter,
+	vector3_t* pSnappedLocalPosition, MNM::TriangleID* pTriangleId) const
 {
-	const MNM::real_t verticalDefaultRange = MNMUtils::CalculateMinVerticalRange(m_agentSettings.height, m_params.voxelSize.z);
-	const MNM::real_t verticalDownRange = snappingRules.verticalDownRange == FLT_MAX ? verticalDefaultRange : MNM::real_t(snappingRules.verticalDownRange);
-	const MNM::real_t horizontalRange = snappingRules.horizontalRange == -FLT_MAX ? MNMUtils::CalculateMinHorizontalRange(m_agentSettings.radius, m_params.voxelSize.x) : MNM::real_t(snappingRules.horizontalRange);
-	
-	if (snappingRules.bVerticalSearch)
+	const MNM::real_t verticalDefaultDownRange = MNMUtils::CalculateMinVerticalRange(m_agentSettings.height, m_params.voxelSize.z);
+	const MNM::real_t verticalDefaultUpRange = MNM::real_t(min(2u, m_agentSettings.height) * m_params.voxelSize.z);
+	const MNM::real_t horizontalDefaultRange = MNMUtils::CalculateMinHorizontalRange(m_agentSettings.radius, m_params.voxelSize.x);
+
+	for (const SSnappingMetric& snappingMetric : snappingMetrics.metricsArray)
 	{
-		const MNM::real_t verticalUpRange = snappingRules.verticalUpRange == -FLT_MAX
-			? MNM::real_t(min(2u, m_agentSettings.height) * m_params.voxelSize.z) // This value computation was used for a long time when snapping points in Pathfinder
-			: MNM::real_t(snappingRules.verticalUpRange);
+		const MNM::real_t verticalDownRange = snappingMetric.verticalDownRange == -FLT_MAX ? verticalDefaultDownRange : MNM::real_t(snappingMetric.verticalDownRange);
+		const MNM::real_t verticalUpRange = snappingMetric.verticalUpRange == -FLT_MAX ? verticalDefaultUpRange : MNM::real_t(snappingMetric.verticalUpRange);
 
-		if (TriangleID triangleId = GetTriangleAt(localPosition, verticalDownRange, verticalUpRange, pFilter, 0.0f))
+		switch (snappingMetric.type)
 		{
-			// TODO: get the position projected down on the triangle
-			// Using input position for now
-			snappedLocalPosition = localPosition;
-
-			if (pTriangleId)
-				*pTriangleId = triangleId;
-			return true;
+		case SSnappingMetric::EType::Vertical:
+		{
+			if (const TriangleID closestId = GetTriangleAt(localPosition, verticalDownRange, verticalUpRange, pFilter))
+			{
+				if (pTriangleId)
+					*pTriangleId = closestId;
+				
+				if (pSnappedLocalPosition)
+				{
+					MNM::vector3_t vertices[3];
+					GetVertices(closestId, vertices);
+					if (!ProjectPointOnTriangleVertical(localPosition, vertices[0], vertices[1], vertices[2], *pSnappedLocalPosition))
+					{
+						CRY_ASSERT_MESSAGE(false, "Triangle to snap on was found but failed to project point on it");
+						return false;
+					}
+				}
+				return true;
+			}
+			break;
+		}
+		case SSnappingMetric::EType::Box:
+		case SSnappingMetric::EType::Circular:
+		{
+			const MNM::real_t horizontalRange = snappingMetric.horizontalRange == -FLT_MAX ? horizontalDefaultRange : MNM::real_t(snappingMetric.horizontalRange);
+			const MNM::aabb_t aroundPositionAABB(MNM::vector3_t(-horizontalRange, -horizontalRange, -verticalDownRange), MNM::vector3_t(horizontalRange, horizontalRange, verticalUpRange));
+			const MNM::real_t maxDistance = snappingMetric.type == SSnappingMetric::EType::Circular ? horizontalRange : real_t::max();
+			if (const TriangleID closestId = GetClosestTriangle(localPosition, aroundPositionAABB, pFilter, nullptr, pSnappedLocalPosition, maxDistance))
+			{
+				if (pTriangleId)
+					*pTriangleId = closestId;
+				return true;
+			}
+			break;
+		}
+		default:
+			CRY_ASSERT_MESSAGE(false, "CNavMesh::SnapPosition: Unhandled snap metric type!");
+			break;
 		}
 	}
-	if (snappingRules.bBoxSearch)
+	return false;
+}
+
+bool CNavMesh::SnapPosition(
+	const vector3_t& localPosition, const SSnappingMetric& snappingMetric, const INavMeshQueryFilter* pFilter,
+	vector3_t* pSnappedLocalPosition, MNM::TriangleID* pTriangleId) const
+{
+	const MNM::real_t verticalDefaultDownRange = MNMUtils::CalculateMinVerticalRange(m_agentSettings.height, m_params.voxelSize.z);
+	const MNM::real_t verticalDefaultUpRange = MNM::real_t(min(2u, m_agentSettings.height) * m_params.voxelSize.z);
+	const MNM::real_t horizontalDefaultRange = MNMUtils::CalculateMinHorizontalRange(m_agentSettings.radius, m_params.voxelSize.x);
+
+	const MNM::real_t verticalDownRange = snappingMetric.verticalDownRange == -FLT_MAX ? verticalDefaultDownRange : MNM::real_t(snappingMetric.verticalDownRange);
+	const MNM::real_t verticalUpRange = snappingMetric.verticalUpRange == -FLT_MAX ? verticalDefaultUpRange : MNM::real_t(snappingMetric.verticalUpRange);
+
+	switch (snappingMetric.type)
 	{
-		// In bBoxSearch, default verticalUpRange is using the same value as verticalDownRange
-		const MNM::real_t verticalUpRange = snappingRules.verticalUpRange == -FLT_MAX ? verticalDefaultRange : MNM::real_t(snappingRules.verticalUpRange);
-		const MNM::aabb_t aroundPositionAABB(MNM::vector3_t(-horizontalRange, -horizontalRange, -verticalDownRange), MNM::vector3_t(horizontalRange, horizontalRange, verticalUpRange));
-		if (TriangleID triangleId = GetClosestTriangle(localPosition, aroundPositionAABB, pFilter, nullptr, &snappedLocalPosition))
+	case SSnappingMetric::EType::Vertical:
+	{
+		if (const TriangleID closestId = GetTriangleAt(localPosition, verticalDownRange, verticalUpRange, pFilter))
 		{
 			if (pTriangleId)
-				*pTriangleId = triangleId;
+				*pTriangleId = closestId;
+			
+			if (pSnappedLocalPosition)
+			{
+				MNM::vector3_t vertices[3];
+				GetVertices(closestId, vertices);
+				if (!ProjectPointOnTriangleVertical(localPosition, vertices[0], vertices[1], vertices[2], *pSnappedLocalPosition))
+				{
+					CRY_ASSERT_MESSAGE(false, "Triangle to snap on was found but failed to project point on it");
+					return false;
+				}
+			}
 			return true;
 		}
+		break;
+	}
+	case SSnappingMetric::EType::Box:
+	case SSnappingMetric::EType::Circular:
+	{
+		const MNM::real_t horizontalRange = snappingMetric.horizontalRange == -FLT_MAX ? horizontalDefaultRange : MNM::real_t(snappingMetric.horizontalRange);
+		const MNM::aabb_t aroundPositionAABB(MNM::vector3_t(-horizontalRange, -horizontalRange, -verticalDownRange), MNM::vector3_t(horizontalRange, horizontalRange, verticalUpRange));
+		const MNM::real_t maxDistance = snappingMetric.type == SSnappingMetric::EType::Circular ? horizontalRange : real_t::max();
+		if (const TriangleID closestId = GetClosestTriangle(localPosition, aroundPositionAABB, pFilter, nullptr, pSnappedLocalPosition, maxDistance))
+		{
+			if (pTriangleId)
+				*pTriangleId = closestId;
+			return true;
+		}
+		break;
+	}
+	default:
+		CRY_ASSERT_MESSAGE(false, "CNavMesh::SnapPosition: Unhandled snap metric type!");
+		break;
 	}
 	return false;
 }
@@ -1359,7 +1433,7 @@ inline size_t OppositeSide(size_t side)
 	return (side + 7) % 14;
 }
 
-CNavMesh::ERayCastResult CNavMesh::RayCast(const vector3_t& fromLocalPosition, TriangleID fromTri, const vector3_t& toLocalPosition, TriangleID toTri,
+MNM::ERayCastResult CNavMesh::RayCast(const vector3_t& fromLocalPosition, TriangleID fromTri, const vector3_t& toLocalPosition, TriangleID toTri,
                                            RaycastRequestBase& raycastRequest, const INavMeshQueryFilter* pFilter) const
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
@@ -1373,15 +1447,14 @@ CNavMesh::ERayCastResult CNavMesh::RayCast(const vector3_t& fromLocalPosition, T
 	case 2:
 	default:
 	{
-		// toTri parameter not used in this version
 		if (pFilter)
 		{
-			return RayCast_v3(fromLocalPosition, fromTri, toLocalPosition, *pFilter, raycastRequest);
+			return RayCast_v3(fromLocalPosition, fromTri, toLocalPosition, toTri, *pFilter, raycastRequest);
 		}
 		else
 		{
 			const SAcceptAllQueryTrianglesFilter filter;
-			return RayCast_v3(fromLocalPosition, fromTri, toLocalPosition, filter, raycastRequest);
+			return RayCast_v3(fromLocalPosition, fromTri, toLocalPosition, toTri, filter, raycastRequest);
 		}
 	}
 	}
@@ -1432,17 +1505,17 @@ struct IsNodeCloserToEndPredicate
 typedef OpenList<RaycastNode, IsNodeCloserToEndPredicate> RaycastOpenList;
 typedef VectorSet<TriangleID>                             RaycastClosedList;
 
-CNavMesh::ERayCastResult CNavMesh::RayCast_v2(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, TriangleID toTriangleID,
+MNM::ERayCastResult CNavMesh::RayCast_v2(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, TriangleID toTriangleID,
 	RaycastRequestBase& raycastRequest) const
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
 	if (!IsLocationInTriangle(fromLocalPosition, fromTriangleID))
-		return eRayCastResult_InvalidStart;
+		return ERayCastResult::InvalidStart;
 
 #ifdef RAYCAST_DO_NOT_ACCEPT_INVALID_END
 	if (!IsLocationInTriangle(toLocalPosition, toTriangleID))
-		return eRayCastResult_InvalidEnd;
+		return ERayCastResult::InvalidEnd;
 #endif
 
 	RaycastClosedList closedList;
@@ -1463,7 +1536,7 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v2(const vector3_t& fromLocalPosition
 	{
 		if (currentNode.triangleID == toTriangleID)
 		{
-			return ConstructRaycastResult(eRayCastResult_NoHit, rayHit, toTriangleID, cameFrom, raycastRequest);
+			return ConstructRaycastResult(ERayCastResult::NoHit, rayHit, toTriangleID, cameFrom, raycastRequest);
 		}
 
 		if (currentNode.percentageOfTotalDistance > furtherNodeVisited.percentageOfTotalDistance)
@@ -1617,18 +1690,21 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v2(const vector3_t& fromLocalPosition
 
 	}
 
-	return ConstructRaycastResult(eRayCastResult_Hit, rayHit, furtherNodeVisited.triangleID, cameFrom, raycastRequest);
+	return ConstructRaycastResult(ERayCastResult::Hit, rayHit, furtherNodeVisited.triangleID, cameFrom, raycastRequest);
 }
 
 template<typename TFilter>
-CNavMesh::ERayCastResult CNavMesh::RayCast_v3(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, const TFilter& filter, RaycastRequestBase& raycastRequest) const
+MNM::ERayCastResult CNavMesh::RayCast_v3(const vector3_t& fromLocalPosition, TriangleID fromTriangleID, const vector3_t& toLocalPosition, TriangleID toTriangleID, const TFilter& filter, RaycastRequestBase& raycastRequest) const
 {
 	//TODO: take area costs into account and return total cost to traverse the ray
 	
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
 	if (!IsLocationInTriangle(fromLocalPosition, fromTriangleID))
-		return eRayCastResult_InvalidStart;
+		return ERayCastResult::InvalidStart;
+
+	if (!IsLocationInTriangle(toLocalPosition, toTriangleID))
+		return ERayCastResult::InvalidEnd;
 
 	RaycastCameFromMap cameFrom;
 	cameFrom.reserve(raycastRequest.maxWayTriCount);
@@ -1670,16 +1746,24 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v3(const vector3_t& fromLocalPosition
 		{
 			if (bEndingInside)
 			{
-				// Ray segment is ending in current triangle, return no hit
 				rayHit.triangleID = currentTriangleID;
 				rayHit.edge = intersectionEdgeIndex;
 				rayHit.distance = 1.0f;
-				return ConstructRaycastResult(eRayCastResult_NoHit, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
+				if (currentTriangleID == toTriangleID)
+				{
+					// Ray segment is ending in end triangle, return no hit
+					return ConstructRaycastResult(ERayCastResult::NoHit, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
+				}
+				else
+				{
+					// Ray segment not is ending in end triangle, end triangle is probably in different layer
+					return ConstructRaycastResult(ERayCastResult::DisconnectedLocations, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
+				}				
 			}
 			else
 			{
 				// Ray segment missed the triangle, return the last hit
-				return ConstructRaycastResult(eRayCastResult_Hit, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
+				return ConstructRaycastResult(ERayCastResult::Hit, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
 			}
 		}
 
@@ -1704,7 +1788,7 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v3(const vector3_t& fromLocalPosition
 		currentTriangleID = neighbourTriangleID;
 	}
 
-	return ConstructRaycastResult(eRayCastResult_Hit, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
+	return ConstructRaycastResult(ERayCastResult::Hit, rayHit, rayHit.triangleID, cameFrom, raycastRequest);
 }
 
 template<typename TFilter>
@@ -1777,7 +1861,7 @@ MNM::TriangleID CNavMesh::StepOverEdgeToNeighbourTriangle(const vector3_t& raySt
 	return MNM::Constants::InvalidTriangleID;
 }
 
-CNavMesh::ERayCastResult CNavMesh::ConstructRaycastResult(const ERayCastResult returnResult, const RayHit& rayHit, const TriangleID lastTriangleID, const RaycastCameFromMap& cameFromMap,
+MNM::ERayCastResult CNavMesh::ConstructRaycastResult(const ERayCastResult returnResult, const RayHit& rayHit, const TriangleID lastTriangleID, const RaycastCameFromMap& cameFromMap,
 	RaycastRequestBase& raycastRequest) const
 {
 	raycastRequest.hit = rayHit;
@@ -1789,8 +1873,8 @@ CNavMesh::ERayCastResult CNavMesh::ConstructRaycastResult(const ERayCastResult r
 	{
 		if (elementIndex >= raycastRequest.maxWayTriCount)
 		{
-			raycastRequest.result = eRayCastResult_RayTooLong;
-			return eRayCastResult_RayTooLong;
+			raycastRequest.result = ERayCastResult::RayTooLong;
+			return ERayCastResult::RayTooLong;
 		}
 
 		raycastRequest.way[elementIndex++] = currentTriangleID;
@@ -1800,7 +1884,7 @@ CNavMesh::ERayCastResult CNavMesh::ConstructRaycastResult(const ERayCastResult r
 
 	raycastRequest.way[elementIndex++] = currentTriangleID;
 	raycastRequest.wayTriCount = elementIndex;
-	raycastRequest.result = elementIndex < raycastRequest.maxWayTriCount ? returnResult : eRayCastResult_RayTooLong;
+	raycastRequest.result = elementIndex < raycastRequest.maxWayTriCount ? returnResult : ERayCastResult::RayTooLong;
 
 	return returnResult;
 }
@@ -1833,7 +1917,7 @@ bool CNavMesh::IsLocationInTriangle(const vector3_t& localPosition, const Triang
 	return false;
 }
 
-CNavMesh::ERayCastResult CNavMesh::RayCast_v1(const vector3_t& fromLocalPosition, TriangleID fromTri, const vector3_t& toLocalPosition, TriangleID toTri, RaycastRequestBase& raycastRequest) const
+MNM::ERayCastResult CNavMesh::RayCast_v1(const vector3_t& fromLocalPosition, TriangleID fromTri, const vector3_t& toLocalPosition, TriangleID toTri, RaycastRequestBase& raycastRequest) const
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
@@ -1863,7 +1947,7 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v1(const vector3_t& fromLocalPosition
 			hit.triangleID = 0;
 			hit.edge = 0;
 
-			return eRayCastResult_Hit;
+			return ERayCastResult::Hit;
 		}
 
 		real_t distance = -1;
@@ -1880,13 +1964,13 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v1(const vector3_t& fromLocalPosition
 			else
 			{
 				// We don't allow rays that pass through more than maxWayTriCount triangles
-				return eRayCastResult_RayTooLong;
+				return ERayCastResult::RayTooLong;
 			}
 
 			if (toTri && currentID == toTri)
 			{
 				raycastRequest.wayTriCount = triCount;
-				return eRayCastResult_NoHit;
+				return ERayCastResult::NoHit;
 			}
 
 			const Tile::STriangle& triangle = tile->triangles[ComputeTriangleIndex(currentID)];
@@ -2024,7 +2108,7 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v1(const vector3_t& fromLocalPosition
 
 							raycastRequest.wayTriCount = triCount;
 
-							return eRayCastResult_Hit;
+							return ERayCastResult::Hit;
 						}
 					}
 				}
@@ -2041,10 +2125,10 @@ CNavMesh::ERayCastResult CNavMesh::RayCast_v1(const vector3_t& fromLocalPosition
 		raycastRequest.wayTriCount = triCount;
 
 		bool isEndingTriangleAcceptable = IsTriangleAcceptableForLocation(toLocalPosition, raycastRequest.way[triCount - 1]);
-		return isEndingTriangleAcceptable ? eRayCastResult_NoHit : eRayCastResult_Unacceptable;
+		return isEndingTriangleAcceptable ? ERayCastResult::NoHit : ERayCastResult::DisconnectedLocations;
 	}
 
-	return eRayCastResult_InvalidStart;
+	return ERayCastResult::InvalidStart;
 }
 
 #pragma warning(push)

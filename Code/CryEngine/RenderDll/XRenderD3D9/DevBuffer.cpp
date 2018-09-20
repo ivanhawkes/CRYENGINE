@@ -612,6 +612,10 @@ public:
 			return false;
 		}
 
+		// Assign name to Buffer for enhanced debugging
+		m_resources.m_staging_buffers[SStagingResources::WRITE]->SetDebugName("Transient Staging Buffer [Upload]");
+		m_resources.m_staging_buffers[SStagingResources::READ ]->SetDebugName("Transient Staging Buffer [Dnload]");
+
 		return true;
 	}
 
@@ -849,6 +853,9 @@ public:
 			FreeResources();
 			return false;
 		}
+
+		m_resources.m_staging_buffers[SStagingResources::WRITE]->SetDebugName("Non-Transient Staging Buffer [Upload]");
+		m_resources.m_staging_buffers[SStagingResources::READ ]->SetDebugName("Non-Transient Staging Buffer [Dnload]");
 
 		return true;
 	}
@@ -1505,6 +1512,8 @@ retry:
 				return false;
 			}
 
+			buffer->SetDebugName("Pooled Constant Buffer");
+
 #ifdef CRY_RENDERER_VULKAN
 			auto setLayout = GetDeviceObjectFactory().GetInlineConstantBufferLayout();
 			buffer->GetBaseBuffer()->AsDynamicOffsetBuffer()->CreateDynamicDescriptorSet(setLayout, nsize);
@@ -1742,6 +1751,8 @@ struct CBufferPoolImpl final
 				CryLogAlways("SBufferPoolImpl::Allocate: could not allocate additional bank of size %" PRISIZE_T, s_PoolConfig.m_pool_bank_size);
 				return nullptr;
 			}
+
+			buffer->SetDebugName("Pooled Vertex/Index Buffer");
 		}
 		bank = &m_bank_table[bank_index = m_bank_table.Allocate()];
 		bank->m_buffer = buffer;
@@ -1797,6 +1808,8 @@ struct CBufferPoolImpl final
 				CryLogAlways("SBufferPoolImpl::Allocate: could not re-allocate freed bank of size %" PRISIZE_T, s_PoolConfig.m_pool_bank_size);
 				return false;
 			}
+
+			bank->m_buffer->SetDebugName("Pooled Vertex/Index Buffer");
 		}
 #if !BUFFER_USE_STAGED_UPDATES
 		CDeviceObjectFactory::ExtractBasePointer(bank->m_buffer->GetBuffer(), D3D11_MAP_WRITE_NO_OVERWRITE, bank->m_base_ptr);
@@ -2032,6 +2045,8 @@ freestanding:
 				gEnv->bIsOutOfVideoMemory = true;
 				return ~0u;
 			}
+
+			buffer->SetDebugName("Pooled Vertex/Index Buffer");
 
 			item = &m_item_table[handle = m_item_table.Allocate()];
 			item->m_buffer = buffer;
@@ -2660,6 +2675,8 @@ public:
 			return false;
 		}
 
+		m_backing_buffer.m_buffer->SetDebugName("Pooled Transient Buffer");
+
 		m_backing_buffer.m_capacity = s_PoolConfig.m_transient_pool_size;
 		m_backing_buffer.m_free_space = 0;
 		m_backing_buffer.m_handle = ~0u;
@@ -2840,6 +2857,8 @@ public:
 			CryLogAlways("FreeStandingBuffer::CreateResources: could not allocate backing buffer of size %" PRISIZE_T, m_allocation_size);
 			return false;
 		}
+
+		m_backing_buffer.m_buffer->SetDebugName("Pooled Free-Standing Buffer");
 
 		m_backing_buffer.m_capacity = m_allocation_size;
 		m_backing_buffer.m_free_space = 0;
@@ -3259,9 +3278,13 @@ struct SPoolManager
 		m_pNullConstantBuffer->m_dynamic = false;
 		m_pNullConstantBuffer->m_lock = true;
 		m_pNullConstantBuffer->m_buffer = CDeviceBuffer::Create({ DXGI_FORMAT_UNKNOWN, 0, 256, CDeviceObjectFactory::BIND_CONSTANT_BUFFER }, nullptr);
+		m_pNullConstantBuffer->m_buffer->SetDebugName("Null CB (shouldn't bind)");
 
 		m_nullBufferTyped.Create(0, 0, DXGI_FORMAT_R32G32B32A32_FLOAT, CDeviceObjectFactory::BIND_UNORDERED_ACCESS | CDeviceObjectFactory::BIND_SHADER_RESOURCE, nullptr);
+		m_nullBufferTyped.SetDebugName("Null TypedB (shouldn't bind)");
+
 		m_nullBufferStructured.Create(0, sizeof(Vec4), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::BIND_SHADER_RESOURCE | CDeviceObjectFactory::USAGE_STRUCTURED, nullptr);
+		m_nullBufferStructured.SetDebugName("Null StructB (shouldn't bind)");
 
 		if (false)
 		{
@@ -3541,9 +3564,8 @@ void CDeviceBufferManager::ReleaseEmptyBanks(uint32 frameId)
 		s_PoolManager.m_constant_allocator[i].ReleaseEmptyBanks();
 #endif
 
-	// Note: Issue the current fence for retiring allocations. This is the same fence shelled out
-	// to the pools during the update stage for COW, now we are reusing it to ensure the gpu caught
-	// up to this point and therefore give out reclaimed memory again.
+	// Note: Issue the fence now for COPY_ON_WRITE. If the GPU has caught up to this point, no previous drawcall
+	// will be pending and therefore it is safe to just reuse the previous allocation.
 	GetDeviceObjectFactory().IssueFence(s_PoolManager.m_fences[frameId & SPoolConfig::POOL_FRAME_QUERY_MASK]);
 }
 
@@ -3592,10 +3614,6 @@ void CDeviceBufferManager::Update(uint32 frameId, bool called_during_loading)
 	s_PoolManager.m_ResourceDescriptorPool.Update(frameId,
 	                                              s_PoolManager.m_fences[frameId & SPoolConfig::POOL_FRAME_QUERY_MASK]);
 #endif
-
-	// Note: Issue the fence now for COPY_ON_WRITE. If the GPU has caught up to this point, no previous drawcall
-	// will be pending and therefore it is safe to just reuse the previous allocation.
-	GetDeviceObjectFactory().IssueFence(s_PoolManager.m_fences[frameId & SPoolConfig::POOL_FRAME_QUERY_MASK]);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

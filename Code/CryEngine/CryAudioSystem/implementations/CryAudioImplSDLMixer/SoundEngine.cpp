@@ -2,7 +2,12 @@
 
 #include "stdafx.h"
 #include "SoundEngine.h"
-#include "SoundEngineUtil.h"
+#include "Common.h"
+#include "Event.h"
+#include "Listener.h"
+#include "Object.h"
+#include "StandaloneFile.h"
+#include "Trigger.h"
 #include "GlobalData.h"
 #include <CryAudio/IAudioSystem.h>
 #include <Logger.h>
@@ -18,7 +23,7 @@ namespace Impl
 {
 namespace SDL_mixer
 {
-static string const s_projectPath = string(AUDIO_SYSTEM_DATA_ROOT) + "/" + s_szImplFolderName + "/" + s_szAssetsFolderName + "/";
+static string const s_regularAssetsPath = string(AUDIO_SYSTEM_DATA_ROOT) + "/" + s_szImplFolderName + "/" + s_szAssetsFolderName + "/";
 static constexpr int s_supportedFormats = MIX_INIT_OGG | MIX_INIT_MP3;
 static constexpr int s_numMixChannels = 512;
 static constexpr SampleId s_invalidSampleId = 0;
@@ -26,7 +31,6 @@ static constexpr int s_sampleRate = 48000;
 static constexpr int s_bufferSize = 4096;
 
 // Samples
-string g_sampleDataRootDir;
 using SampleDataMap = std::unordered_map<SampleId, Mix_Chunk*>;
 SampleDataMap g_sampleData;
 
@@ -59,17 +63,42 @@ using ChannelFinishedRequests = std::deque<int>;
 ChannelFinishedRequests g_channelFinishedRequests[IntegralValue(EChannelFinishedRequestQueueId::Count)];
 CryCriticalSection g_channelFinishedCriticalSection;
 
-// Audio Objects
+// Objects
 using Objects = std::vector<CObject*>;
 Objects g_objects;
 
-// Listeners
-CObjectTransformation g_listenerTransformation;
-bool g_bListenerPosChanged;
-bool g_bMuted;
-
 SoundEngine::FnEventCallback g_fnEventFinishedCallback;
 SoundEngine::FnStandaloneFileCallback g_fnStandaloneFileFinishedCallback;
+
+//////////////////////////////////////////////////////////////////////////
+inline const SampleId GetIDFromString(const string& name)
+{
+	return CCrc32::ComputeLowercase(name.c_str());
+}
+
+//////////////////////////////////////////////////////////////////////////
+inline const SampleId GetIDFromString(char const* const szName)
+{
+	return CCrc32::ComputeLowercase(szName);
+}
+
+//////////////////////////////////////////////////////////////////////////
+inline void GetDistanceAngleToObject(const CObjectTransformation& listener, const CObjectTransformation& object, float& out_distance, float& out_angle)
+{
+	const Vec3 listenerToObject = object.GetPosition() - listener.GetPosition();
+
+	// Distance
+	out_distance = listenerToObject.len();
+
+	// Angle
+	// Project point to plane formed by the listeners position/direction
+	Vec3 n = listener.GetUp().GetNormalized();
+	Vec3 objectDir = Vec3::CreateProjection(listenerToObject, n).normalized();
+
+	// Get angle between listener position and projected point
+	const Vec3 listenerDir = listener.GetForward().GetNormalizedFast();
+	out_angle = RAD2DEG(asin_tpl(objectDir.Cross(listenerDir).Dot(n)));
+}
 
 //////////////////////////////////////////////////////////////////////////
 void SoundEngine::RegisterEventFinishedCallback(FnEventCallback pCallbackFunction)
@@ -202,42 +231,54 @@ void ChannelFinishedPlaying(int nChannel)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void LoadMetadata(const string& path)
+void LoadMetadata(string const& path, bool const isLocalized)
 {
+	string const rootDir = isLocalized ? s_localizedAssetsPath : s_regularAssetsPath;
+
 	_finddata_t fd;
 	ICryPak* pCryPak = gEnv->pCryPak;
-	intptr_t handle = pCryPak->FindFirst(g_sampleDataRootDir + path + "*.*", &fd);
+	intptr_t handle = pCryPak->FindFirst(rootDir + path + "*.*", &fd);
+
 	if (handle != -1)
 	{
 		do
 		{
-			const string name = fd.name;
+			string const name = fd.name;
+
 			if (name != "." && name != ".." && !name.empty())
 			{
 				if (fd.attrib & _A_SUBDIR)
 				{
-					LoadMetadata(path + name + "/");
+					LoadMetadata(path + name + "/", isLocalized);
 				}
 				else
 				{
-					if (name.find(".wav") != string::npos ||
-					    name.find(".ogg") != string::npos ||
-					    name.find(".mp3") != string::npos)
+					string::size_type const posExtension = name.rfind('.');
+
+					if (posExtension != string::npos)
 					{
-						if (path.empty())
+						string const fileExtension = name.data() + posExtension;
+
+						if ((_stricmp(fileExtension, ".mp3") == 0) ||
+						    (_stricmp(fileExtension, ".ogg") == 0) ||
+						    (_stricmp(fileExtension, ".wav") == 0))
 						{
-							g_samplePaths[GetIDFromString(name)] = g_sampleDataRootDir + name;
-						}
-						else
-						{
-							string pathName = path + name;
-							g_samplePaths[GetIDFromString(pathName)] = g_sampleDataRootDir + pathName;
+							if (path.empty())
+							{
+								g_samplePaths[GetIDFromString(name)] = rootDir + name;
+							}
+							else
+							{
+								string const pathName = path + name;
+								g_samplePaths[GetIDFromString(pathName)] = rootDir + pathName;
+							}
 						}
 					}
 				}
 			}
 		}
 		while (pCryPak->FindNext(handle, &fd) >= 0);
+
 		pCryPak->FindClose(handle);
 	}
 }
@@ -275,12 +316,8 @@ bool SoundEngine::Init()
 
 	Mix_ChannelFinished(ChannelFinishedPlaying);
 
-	g_sampleDataRootDir = PathUtil::GetPathWithoutFilename(s_projectPath);
-	LoadMetadata("");
-	g_bListenerPosChanged = false;
-
-	// need to reinit as the global variable might have been initialized with wrong values
-	g_listenerTransformation = CObjectTransformation();
+	LoadMetadata("", false);
+	LoadMetadata("", true);
 
 	g_objects.reserve(128);
 
@@ -293,11 +330,14 @@ void FreeAllSampleData()
 	Mix_HaltChannel(-1);
 	SampleDataMap::const_iterator it = g_sampleData.begin();
 	SampleDataMap::const_iterator end = g_sampleData.end();
+
 	for (; it != end; ++it)
 	{
 		Mix_FreeChunk(it->second);
 	}
+
 	g_sampleData.clear();
+	g_samplePaths.clear();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -315,7 +355,8 @@ void SoundEngine::Release()
 void SoundEngine::Refresh()
 {
 	FreeAllSampleData();
-	LoadMetadata(s_projectPath);
+	LoadMetadata("", false);
+	LoadMetadata("", true);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -393,14 +434,15 @@ bool LoadSampleImpl(const SampleId id, const string& samplePath)
 }
 
 //////////////////////////////////////////////////////////////////////////
-const SampleId SoundEngine::LoadSample(const string& sampleFilePath, bool bOnlyMetadata)
+const SampleId SoundEngine::LoadSample(string const& sampleFilePath, bool const onlyMetadata, bool const isLoacalized)
 {
 	const SampleId id = GetIDFromString(sampleFilePath);
 	if (stl::find_in_map(g_sampleData, id, nullptr) == nullptr)
 	{
-		if (bOnlyMetadata)
+		if (onlyMetadata)
 		{
-			g_samplePaths[id] = g_sampleDataRootDir + sampleFilePath;
+			string const assetPath = isLoacalized ? s_localizedAssetsPath : s_regularAssetsPath;
+			g_samplePaths[id] = assetPath + sampleFilePath;
 		}
 		else if (!LoadSampleImpl(id, sampleFilePath))
 		{
@@ -527,72 +569,6 @@ void SetChannelPosition(const CTrigger* pStaticData, const int channelID, const 
 }
 
 //////////////////////////////////////////////////////////////////////////
-bool SoundEngine::StopEvent(CEvent const* const pEvent)
-{
-	if (pEvent != nullptr)
-	{
-		// need to make a copy because the callback
-		// registered with Mix_ChannelFinished can edit the list
-		ChannelList const channels = pEvent->m_channels;
-		int const fadeOutTime = pEvent->m_pTrigger->GetFadeOutTime();
-
-		for (int const channel : channels)
-		{
-			if (fadeOutTime == 0)
-			{
-				Mix_HaltChannel(channel);
-			}
-			else
-			{
-				Mix_FadeOutChannel(channel, fadeOutTime);
-			}
-		}
-
-		return true;
-	}
-
-	return false;
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool SoundEngine::PauseEvent(CEvent const* const pEvent)
-{
-	if (pEvent != nullptr)
-	{
-		// need to make a copy because the callback
-		// registered with Mix_ChannelFinished can edit the list
-		ChannelList const channels = pEvent->m_channels;
-
-		for (int const channel : channels)
-		{
-			Mix_Pause(channel);
-		}
-
-		return true;
-	}
-	return false;
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool SoundEngine::ResumeEvent(CEvent const* const pEvent)
-{
-	if (pEvent != nullptr)
-	{
-		// need to make a copy because the callback
-		// registered with Mix_ChannelFinished can edit the list
-		ChannelList channels = pEvent->m_channels;
-
-		for (int const channel : channels)
-		{
-			Mix_Resume(channel);
-		}
-
-		return true;
-	}
-	return false;
-}
-
-//////////////////////////////////////////////////////////////////////////
 ERequestStatus SoundEngine::ExecuteEvent(CObject* const pObject, CTrigger const* const pTrigger, CEvent* const pEvent)
 {
 	ERequestStatus requestStatus = ERequestStatus::Failure;
@@ -639,24 +615,32 @@ ERequestStatus SoundEngine::ExecuteEvent(CObject* const pObject, CTrigger const*
 
 					int const fadeInTime = pTrigger->GetFadeInTime();
 					int const loopCount = pTrigger->GetNumLoops();
+					int channel = -1;
 
 					if (fadeInTime > 0)
 					{
-						Mix_FadeInChannel(channelID, pSample, loopCount, fadeInTime);
+						channel = Mix_FadeInChannel(channelID, pSample, loopCount, fadeInTime);
 					}
 					else
 					{
-						Mix_PlayChannel(channelID, pSample, loopCount);
+						channel = Mix_PlayChannel(channelID, pSample, loopCount);
 					}
 
-					// Get distance and angle from the listener to the audio object
-					float distance = 0.0f;
-					float angle = 0.0f;
-					GetDistanceAngleToObject(g_listenerTransformation, pObject->m_transformation, distance, angle);
-					SetChannelPosition(pEvent->m_pTrigger, channelID, distance, angle);
+					if (channel != -1)
+					{
+						// Get distance and angle from the listener to the object
+						float distance = 0.0f;
+						float angle = 0.0f;
+						GetDistanceAngleToObject(g_pListener->GetTransformation(), pObject->m_transformation, distance, angle);
+						SetChannelPosition(pEvent->m_pTrigger, channelID, distance, angle);
 
-					g_channels[channelID].pObject = pObject;
-					pEvent->m_channels.push_back(channelID);
+						g_channels[channelID].pObject = pObject;
+						pEvent->m_channels.push_back(channelID);
+					}
+					else
+					{
+						Cry::Audio::Log(ELogType::Error, "Could not play sample. Error: %s", Mix_GetError());
+					}
 				}
 				else
 				{
@@ -670,7 +654,7 @@ ERequestStatus SoundEngine::ExecuteEvent(CObject* const pObject, CTrigger const*
 
 			if (!pEvent->m_channels.empty())
 			{
-				// If any sample was added then add the event to the audio object
+				// If any sample was added then add the event to the object
 				pObject->m_events.push_back(pEvent);
 				requestStatus = ERequestStatus::Success;
 			}
@@ -684,13 +668,13 @@ ERequestStatus SoundEngine::ExecuteEvent(CObject* const pObject, CTrigger const*
 					switch (type)
 					{
 					case EEventType::Stop:
-						SoundEngine::StopEvent(pEventToProcess);
+						pEventToProcess->Stop();
 						break;
 					case EEventType::Pause:
-						SoundEngine::PauseEvent(pEventToProcess);
+						pEventToProcess->Pause();
 						break;
 					case EEventType::Resume:
-						SoundEngine::ResumeEvent(pEventToProcess);
+						pEventToProcess->Resume();
 						break;
 					}
 				}
@@ -703,51 +687,6 @@ ERequestStatus SoundEngine::ExecuteEvent(CObject* const pObject, CTrigger const*
 	return requestStatus;
 }
 
-//////////////////////////////////////////////////////////////////////////
-void SoundEngine::SetVolume(CObject* const pObject, SampleId const sampleId)
-{
-	if (!g_bMuted)
-	{
-		float const volumeMultiplier = GetVolumeMultiplier(pObject, sampleId);
-
-		for (auto const pEvent : pObject->m_events)
-		{
-			auto const pTrigger = pEvent->m_pTrigger;
-
-			if ((pTrigger != nullptr) && (pTrigger->GetSampleId() == sampleId))
-			{
-				int const mixVolume = GetAbsoluteVolume(pTrigger->GetVolume(), volumeMultiplier);
-
-				for (auto const channel : pEvent->m_channels)
-				{
-					Mix_Volume(channel, mixVolume);
-				}
-			}
-		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-float SoundEngine::GetVolumeMultiplier(CObject* const pObject, SampleId const sampleId)
-{
-	float volumeMultiplier = 1.0f;
-	auto const volumeMultiplierPair = pObject->m_volumeMultipliers.find(sampleId);
-
-	if (volumeMultiplierPair != pObject->m_volumeMultipliers.end())
-	{
-		volumeMultiplier = volumeMultiplierPair->second;
-	}
-
-	return volumeMultiplier;
-}
-
-//////////////////////////////////////////////////////////////////////////
-int SoundEngine::GetAbsoluteVolume(int const triggerVolume, float const multiplier)
-{
-	int absoluteVolume = static_cast<int>(static_cast<float>(triggerVolume) * multiplier);
-	absoluteVolume = crymath::clamp(absoluteVolume, 0, 128);
-	return absoluteVolume;
-}
 //////////////////////////////////////////////////////////////////////////
 ERequestStatus SoundEngine::PlayFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile)
 {
@@ -785,10 +724,10 @@ ERequestStatus SoundEngine::PlayFile(CObject* const pObject, CStandaloneFile* co
 				g_freeChannels.pop();
 				Mix_Volume(channelId, g_bMuted ? 0 : 128);
 
-				// Get distance and angle from the listener to the audio object
+				// Get distance and angle from the listener to the object
 				float distance = 0.0f;
 				float angle = 0.0f;
-				GetDistanceAngleToObject(g_listenerTransformation, pObject->m_transformation, distance, angle);
+				GetDistanceAngleToObject(g_pListener->GetTransformation(), pObject->m_transformation, distance, angle);
 
 				// Assuming a max distance of 100.0
 				uint8 sldMixerDistance = static_cast<uint8>((std::min((distance / 100.0f), 1.0f) * 255) + 0.5f);
@@ -825,43 +764,6 @@ ERequestStatus SoundEngine::PlayFile(CObject* const pObject, CStandaloneFile* co
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus SoundEngine::StopFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile)
-{
-	ERequestStatus status = ERequestStatus::Failure;
-
-	if (pObject != nullptr)
-	{
-		for (auto const pTempStandaloneFile : pObject->m_standaloneFiles)
-		{
-			if (pTempStandaloneFile == pStandaloneFile)
-			{
-				// need to make a copy because the callback
-				// registered with Mix_ChannelFinished can edit the list
-				ChannelList const channels = pStandaloneFile->m_channels;
-
-				for (auto const channel : channels)
-				{
-					Mix_HaltChannel(channel);
-				}
-
-				status = ERequestStatus::Pending;
-				break;
-			}
-		}
-	}
-
-	return status;
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool SoundEngine::SetListenerTransformation(ListenerId const listenerId, CObjectTransformation const& transformation)
-{
-	g_listenerTransformation = transformation;
-	g_bListenerPosChanged = true;
-	return true;
-}
-
-//////////////////////////////////////////////////////////////////////////
 bool SoundEngine::RegisterObject(CObject* const pObject)
 {
 	if (pObject != nullptr)
@@ -884,18 +786,6 @@ bool SoundEngine::UnregisterObject(CObject const* const pObject)
 }
 
 //////////////////////////////////////////////////////////////////////////
-bool SoundEngine::SetObjectTransformation(CObject* const pObject, CObjectTransformation const& transformation)
-{
-	if (pObject != nullptr)
-	{
-		pObject->m_transformation = transformation;
-		pObject->m_bPositionChanged = true;
-		return true;
-	}
-	return false;
-}
-
-//////////////////////////////////////////////////////////////////////////
 bool SoundEngine::StopTrigger(CTrigger const* const pTrigger)
 {
 	bool bResult = false;
@@ -908,7 +798,7 @@ bool SoundEngine::StopTrigger(CTrigger const* const pTrigger)
 			{
 				if (pEvent != nullptr && pEvent->m_pTrigger == pTrigger)
 				{
-					SoundEngine::StopEvent(pEvent);
+					pEvent->Stop();
 					bResult = true;
 				}
 			}
@@ -932,10 +822,10 @@ void SoundEngine::Update()
 	{
 		if (pObject != nullptr)
 		{
-			// Get distance and angle from the listener to the audio object
+			// Get distance and angle from the listener to the object
 			float distance = 0.0f;
 			float angle = 0.0f;
-			GetDistanceAngleToObject(g_listenerTransformation, pObject->m_transformation, distance, angle);
+			GetDistanceAngleToObject(g_pListener->GetTransformation(), pObject->m_transformation, distance, angle);
 
 			for (auto const pEvent : pObject->m_events)
 			{
@@ -946,13 +836,9 @@ void SoundEngine::Update()
 						SetChannelPosition(pEvent->m_pTrigger, channelIndex, distance, angle);
 					}
 				}
-
-				pObject->m_bPositionChanged = false;
 			}
 		}
 	}
-
-	g_bListenerPosChanged = false;
 }
 } // namespace SDL_mixer
 } // namespace Impl

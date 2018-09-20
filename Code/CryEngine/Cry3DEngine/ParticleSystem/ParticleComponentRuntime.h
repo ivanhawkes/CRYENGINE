@@ -32,7 +32,6 @@ public:
 	const AABB&                   GetBounds() const      { return m_pGpuRuntime ? m_pGpuRuntime->GetBounds() : m_bounds; }
 	bool                          IsChild() const        { return m_pComponent->GetParentComponent() != nullptr; }
 	void                          ReparentParticles(TConstArray<TParticleId> swapIds);
-	void                          AddSubInstances(TVarArray<SInstance> instances);
 	void                          RemoveAllSubInstances();
 	void                          RenderAll(const SRenderContext& renderContext);
 
@@ -46,7 +45,6 @@ public:
 	const CParticleContainer& GetParentContainer() const;
 	CParticleContainer&       GetContainer()            { return m_container; }
 	const CParticleContainer& GetContainer() const      { return m_container; }
-	CParticleContainer&       GetContainer(EDataDomain domain) { return domain & EDD_PerInstance ? GetParentContainer() : GetContainer(); }
 
 	void                      UpdateAll();
 	void                      AddRemoveParticles();
@@ -67,14 +65,14 @@ public:
 		byte* addr = m_subInstanceData.data() + stride * idx + offset;
 		return *reinterpret_cast<T*>(addr);
 	}
-	void                      GetEmitLocations(TVarArray<QuatTS> locations) const;
+	void                      GetEmitLocations(TVarArray<QuatTS> locations, uint firstInstance) const;
 	void                      EmitParticle();
 
 	bool                      HasParticles() const;
 	void                      AccumStats();
 
-	SChaosKey&                Chaos()                 { return m_chaos; }
-	SChaosKeyV&               ChaosV()                { return m_chaosV; }
+	SChaosKey&                Chaos() const           { return m_chaos; }
+	SChaosKeyV&               ChaosV() const          { return m_chaosV; }
 
 	SUpdateRange              FullRange() const       { return m_container.GetFullRange(); }
 	SGroupRange               FullRangeV() const      { return SGroupRange(m_container.GetFullRange()); }
@@ -86,6 +84,7 @@ public:
 	float                     DeltaTime() const;
 
 private:
+	void AddInstances();
 	void AddParticles();
 	void RemoveParticles();
 	void UpdateNewBorns();
@@ -100,8 +99,8 @@ private:
 	TDynArray<byte>                m_subInstanceData;
 	AABB                           m_bounds;
 	bool                           m_alive;
-	SChaosKey                      m_chaos;
-	SChaosKeyV                     m_chaosV;
+	SChaosKey mutable              m_chaos;
+	SChaosKeyV mutable             m_chaosV;
 
 	_smart_ptr<gpu_pfx2::IParticleComponentRuntime> m_pGpuRuntime;
 };

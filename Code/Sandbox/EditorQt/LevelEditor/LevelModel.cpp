@@ -168,10 +168,10 @@ bool ProcessDragDropData(const QMimeData* data, std::vector<CBaseObject*>& outOb
 
 namespace LevelModelsAttributes
 {
-CItemModelAttribute s_ExportableAttribute("Exportable", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden);
-CItemModelAttribute s_ExportablePakAttribute("Exportable to Pak", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden);
-CItemModelAttribute s_LoadedByDefaultAttribute("Loaded in Game", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden);
-CItemModelAttribute s_HasPhysicsAttribute("Has Physics", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden);
+CItemModelAttribute s_ExportableAttribute("Exportable", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden, true, Qt::Unchecked, Qt::CheckStateRole);
+CItemModelAttribute s_ExportablePakAttribute("Exportable to Pak", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden, true, Qt::Unchecked, Qt::CheckStateRole);
+CItemModelAttribute s_LoadedByDefaultAttribute("Loaded in Game", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden, true, Qt::Unchecked, Qt::CheckStateRole);
+CItemModelAttribute s_HasPhysicsAttribute("Has Physics", &Attributes::s_booleanAttributeType, CItemModelAttribute::StartHidden, true, Qt::Unchecked, Qt::CheckStateRole);
 CItemModelAttribute s_PlatformAttribute("Platform", &Attributes::s_stringAttributeType, CItemModelAttribute::StartHidden);
 }
 
@@ -737,7 +737,7 @@ bool CLevelModel::dropMimeData(const QMimeData* pData, Qt::DropAction action, in
 				}
 			}
 			// Re-select all objects
-			pObjectManager->SelectObjects(objects);
+			pObjectManager->AddObjectsToSelection(objects);
 			return true;
 		}
 
@@ -1044,4 +1044,3 @@ void CLevelModel::OnLayerUpdate(const CLayerChangeEvent& event)
 		break;
 	}
 }
-

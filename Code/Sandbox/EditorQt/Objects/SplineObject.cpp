@@ -1,21 +1,20 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include "Viewport.h"
 #include "SplineObject.h"
-#include "Objects/ObjectLoader.h"
-#include "Objects/InspectorWidgetCreator.h"
-#include "Gizmos/IGizmoManager.h"
-#include "Util/MFCUtil.h"
 
-#include <Grid.h>
+#include <Controls/DynamicPopupMenu.h>
+#include <Objects/ObjectLoader.h>
+#include <Objects/InspectorWidgetCreator.h>
+#include <Gizmos/IGizmoManager.h>
+#include <Preferences/SnappingPreferences.h>
+#include <Serialization/Decorators/EditToolButton.h>
+#include <Viewport.h>
 
-#include "Serialization/Decorators/EditToolButton.h"
-#include "Controls/DynamicPopupMenu.h"
+#include <Util/MFCUtil.h>
 
 //////////////////////////////////////////////////////////////////////////
 // CEditSplineObjectTool
-
 class CEditSplineObjectTool : public CEditTool, public ITransformManipulatorOwner
 {
 public:
@@ -66,10 +65,8 @@ private:
 	ITransformManipulator* m_pManipulator;
 };
 
-//////////////////////////////////////////////////////////////////////////
 IMPLEMENT_DYNCREATE(CEditSplineObjectTool, CEditTool)
 
-//////////////////////////////////////////////////////////////////////////
 void CEditSplineObjectTool::SetUserData(const char* key, void* userData)
 {
 	m_pSpline = (CSplineObject*)userData;
@@ -116,7 +113,6 @@ bool CEditSplineObjectTool::IsManipulatorVisible()
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 CEditSplineObjectTool::~CEditSplineObjectTool()
 {
 	if (m_pSpline)
@@ -139,7 +135,6 @@ CEditSplineObjectTool::~CEditSplineObjectTool()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEditSplineObjectTool::OnKeyDown(CViewport* view, uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 {
 	if (nChar == Qt::Key_Escape)
@@ -172,7 +167,6 @@ void CEditSplineObjectTool::OnSplineEvent(const CBaseObject* pObject, const CObj
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditSplineObjectTool::SelectPoint(int index)
 {
 	if (index < 0)
@@ -189,7 +183,6 @@ void CEditSplineObjectTool::SelectPoint(int index)
 	m_pSpline->SelectPoint(index);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditSplineObjectTool::OnManipulatorDrag(IDisplayViewport* pView, ITransformManipulator* pManipulator, const Vec2i& point0, const Vec3& value, int flags)
 {
 	// get world/local coordinate system setting.
@@ -259,7 +252,6 @@ void CEditSplineObjectTool::OnManipulatorEnd(IDisplayViewport* view, ITransformM
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CEditSplineObjectTool::MouseCallback(CViewport* view, EMouseEvent event, CPoint& point, int flags)
 {
 	if (!m_pSpline)
@@ -366,7 +358,6 @@ bool CEditSplineObjectTool::MouseCallback(CViewport* view, EMouseEvent event, CP
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CEditSplineObjectTool::SetCursor(EStdCursor cursor, bool bForce)
 {
 	CViewport* pViewport = GetIEditorImpl()->GetActiveView();
@@ -379,7 +370,6 @@ void CEditSplineObjectTool::SetCursor(EStdCursor cursor, bool bForce)
 
 //////////////////////////////////////////////////////////////////////////
 // CSplitSplineObjectTool
-
 class CSplitSplineObjectTool : public CEditTool
 {
 public:
@@ -405,14 +395,12 @@ private:
 
 IMPLEMENT_DYNCREATE(CSplitSplineObjectTool, CEditTool)
 
-//////////////////////////////////////////////////////////////////////////
 CSplitSplineObjectTool::CSplitSplineObjectTool()
 {
 	m_pSpline = 0;
 	m_curPoint = -1;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplitSplineObjectTool::SetUserData(const char* key, void* userData)
 {
 	m_curPoint = -1;
@@ -427,7 +415,6 @@ void CSplitSplineObjectTool::SetUserData(const char* key, void* userData)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 CSplitSplineObjectTool::~CSplitSplineObjectTool()
 {
 	//if (m_pSpline)
@@ -436,7 +423,6 @@ CSplitSplineObjectTool::~CSplitSplineObjectTool()
 		GetIEditorImpl()->GetIUndoManager()->Cancel();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplitSplineObjectTool::OnKeyDown(CViewport* view, uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 {
 	if (nChar == Qt::Key_Escape)
@@ -446,7 +432,6 @@ bool CSplitSplineObjectTool::OnKeyDown(CViewport* view, uint32 nChar, uint32 nRe
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplitSplineObjectTool::MouseCallback(CViewport* view, EMouseEvent event, CPoint& point, int flags)
 {
 	if (!m_pSpline)
@@ -495,7 +480,6 @@ bool CSplitSplineObjectTool::MouseCallback(CViewport* view, EMouseEvent event, C
 
 //////////////////////////////////////////////////////////////////////////
 // CMergeSplineObjectsTool
-
 class CMergeSplineObjectsTool : public CEditTool
 {
 public:
@@ -516,20 +500,16 @@ protected:
 
 	int            m_curPoint;
 	CSplineObject* m_pSpline;
-
-private:
 };
 
 IMPLEMENT_DYNCREATE(CMergeSplineObjectsTool, CEditTool)
 
-//////////////////////////////////////////////////////////////////////////
 CMergeSplineObjectsTool::CMergeSplineObjectsTool()
 {
 	m_curPoint = -1;
 	m_pSpline = 0;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CMergeSplineObjectsTool::SetUserData(const char* key, void* userData)
 {
 	m_pSpline = (CSplineObject*)userData;
@@ -545,7 +525,6 @@ void CMergeSplineObjectsTool::SetUserData(const char* key, void* userData)
 	m_pSpline->SelectPoint(-1);
 }
 
-//////////////////////////////////////////////////////////////////////////
 CMergeSplineObjectsTool::~CMergeSplineObjectsTool()
 {
 	if (m_pSpline)
@@ -555,7 +534,6 @@ CMergeSplineObjectsTool::~CMergeSplineObjectsTool()
 		GetIEditorImpl()->GetIUndoManager()->Cancel();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CMergeSplineObjectsTool::OnKeyDown(CViewport* view, uint32 nChar, uint32 nRepCnt, uint32 nFlags)
 {
 	if (nChar == Qt::Key_Escape)
@@ -565,14 +543,11 @@ bool CMergeSplineObjectsTool::OnKeyDown(CViewport* view, uint32 nChar, uint32 nR
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CMergeSplineObjectsTool::MouseCallback(CViewport* view, EMouseEvent event, CPoint& point, int flags)
 {
-	//return true;
 	if (event == eMouseLDown || event == eMouseMove)
 	{
-		HitContext hc;
-		hc.view = view;
+		HitContext hc(view);
 		hc.point2d = point;
 		view->ViewToWorldRay(point, hc.raySrc, hc.rayDir);
 		if (!GetIEditorImpl()->GetObjectManager()->HitTest(hc))
@@ -660,7 +635,6 @@ CSplineObject::CSplineObject() :
 	m_bbox.min = m_bbox.max = Vec3(0, 0, 0);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::SelectPoint(int index)
 {
 	if (m_selectedPoint == index)
@@ -670,7 +644,6 @@ void CSplineObject::SelectPoint(int index)
 	OnUpdateUI();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::SetPoint(int index, const Vec3& pos)
 {
 	if (0 <= index && index < GetPointCount())
@@ -683,7 +656,6 @@ void CSplineObject::SetPoint(int index, const Vec3& pos)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 int CSplineObject::InsertPoint(int index, const Vec3& point)
 {
 	int newindex = GetPointCount();
@@ -722,7 +694,6 @@ int CSplineObject::InsertPoint(int index, const Vec3& point)
 	return newindex;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::RemovePoint(int index)
 {
 	if ((index >= 0 || index < GetPointCount()) && GetPointCount() > GetMinPoints())
@@ -735,7 +706,6 @@ void CSplineObject::RemovePoint(int index)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CSplineObject::GetBezierPos(int index, float t) const
 {
 	float invt = 1.0f - t;
@@ -745,7 +715,6 @@ Vec3 CSplineObject::GetBezierPos(int index, float t) const
 	       m_points[index + 1].pos * (t * t * t);
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CSplineObject::GetBezierTangent(int index, float t) const
 {
 	float invt = 1.0f - t;
@@ -760,7 +729,6 @@ Vec3 CSplineObject::GetBezierTangent(int index, float t) const
 	return tan;
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CSplineObject::GetBezierSegmentLength(int index, float t) const
 {
 	const int kSteps = 32;
@@ -777,7 +745,6 @@ float CSplineObject::GetBezierSegmentLength(int index, float t) const
 	return fRet;
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CSplineObject::GetSplineLength() const
 {
 	float fRet = 0.f;
@@ -788,7 +755,6 @@ float CSplineObject::GetSplineLength() const
 	return fRet;
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CSplineObject::GetPosByDistance(float distance, int& outIndex) const
 {
 	float lenPos = 0.0f;
@@ -806,7 +772,6 @@ float CSplineObject::GetPosByDistance(float distance, int& outIndex) const
 	return segmentLength > 0.0f ? (distance - lenPos) / segmentLength : 0.0f;
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CSplineObject::GetBezierNormal(int index, float t) const
 {
 	float kof = 0.0f;
@@ -832,7 +797,6 @@ Vec3 CSplineObject::GetBezierNormal(int index, float t) const
 	return n;
 }
 
-//////////////////////////////////////////////////////////////////////////
 Vec3 CSplineObject::GetLocalBezierNormal(int index, float t) const
 {
 	float kof = t;
@@ -879,7 +843,6 @@ Vec3 CSplineObject::GetLocalBezierNormal(int index, float t) const
 	return n;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::BezierCorrection(int index)
 {
 	BezierAnglesCorrection(index - 1);
@@ -889,7 +852,6 @@ void CSplineObject::BezierCorrection(int index)
 	BezierAnglesCorrection(index + 2);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::BezierAnglesCorrection(int index)
 {
 	int maxindex = GetPointCount() - 1;
@@ -954,7 +916,6 @@ void CSplineObject::BezierAnglesCorrection(int index)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CSplineObject::GetPointAngle() const
 {
 	int index = m_selectedPoint;
@@ -965,7 +926,6 @@ float CSplineObject::GetPointAngle() const
 	return 0.0f;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::SetPointAngle(float angle)
 {
 	int index = m_selectedPoint;
@@ -976,7 +936,6 @@ void CSplineObject::SetPointAngle(float angle)
 	OnUpdate();
 }
 
-//////////////////////////////////////////////////////////////////////////
 float CSplineObject::GetPointWidth() const
 {
 	int index = m_selectedPoint;
@@ -987,7 +946,6 @@ float CSplineObject::GetPointWidth() const
 	return 0.0f;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::SetPointWidth(float width)
 {
 	int index = m_selectedPoint;
@@ -998,7 +956,6 @@ void CSplineObject::SetPointWidth(float width)
 	OnUpdate();
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplineObject::IsPointDefaultWidth() const
 {
 	int index = m_selectedPoint;
@@ -1009,7 +966,6 @@ bool CSplineObject::IsPointDefaultWidth() const
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::PointDafaultWidthIs(bool isDefault)
 {
 	int index = m_selectedPoint;
@@ -1023,7 +979,6 @@ void CSplineObject::PointDafaultWidthIs(bool isDefault)
 	OnUpdate();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::ReverseShape()
 {
 	StoreUndo("Reverse Shape");
@@ -1031,7 +986,6 @@ void CSplineObject::ReverseShape()
 	OnUpdate();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::Split(int index, const Vec3& point)
 {
 	// do not change the order of things here
@@ -1050,7 +1004,6 @@ void CSplineObject::Split(int index, const Vec3& point)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::Merge(CSplineObject* pSpline)
 {
 	if (!pSpline || m_mergeIndex < 0 || pSpline->m_mergeIndex < 0)
@@ -1076,7 +1029,6 @@ void CSplineObject::Merge(CSplineObject* pSpline)
 	GetObjectManager()->DeleteObject(pSpline);
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplineObject::Init(CBaseObject* prev, const string& file)
 {
 	bool res = __super::Init(prev, file);
@@ -1091,7 +1043,6 @@ bool CSplineObject::Init(CBaseObject* prev, const string& file)
 	return res;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::Done()
 {
 	LOADING_TIME_PROFILE_SECTION_ARGS(GetName().c_str());
@@ -1194,7 +1145,6 @@ void CSplineObject::SerializeProperties(Serialization::IArchive& ar, bool bMulti
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::GetBoundBox(AABB& box)
 {
 	box.SetTransformedAABB(GetWorldTM(), m_bbox);
@@ -1203,13 +1153,11 @@ void CSplineObject::GetBoundBox(AABB& box)
 	box.max += Vec3(s, s, s);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::GetLocalBounds(AABB& box)
 {
 	box = m_bbox;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::CalcBBox()
 {
 	if (m_points.empty())
@@ -1243,7 +1191,6 @@ void CSplineObject::CalcBBox()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::Display(CObjectRenderHelper& objRenderHelper)
 {
 	SDisplayContext& dc = objRenderHelper.GetDisplayContextRef();
@@ -1326,7 +1273,6 @@ void CSplineObject::Display(CObjectRenderHelper& objRenderHelper)
 	DrawDefault(dc, CMFCUtils::ColorBToColorRef(GetColor()));
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::DrawJoints(SDisplayContext& dc)
 {
 	const Matrix34& wtm = GetWorldTM();
@@ -1362,7 +1308,6 @@ void CSplineObject::DrawJoints(SDisplayContext& dc)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 int CSplineObject::GetNearestPoint(const Vec3& raySrc, const Vec3& rayDir, float& distance)
 {
 	int index = -1;
@@ -1387,7 +1332,6 @@ int CSplineObject::GetNearestPoint(const Vec3& raySrc, const Vec3& rayDir, float
 	return index;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplineObject::HitTest(HitContext& hc)
 {
 	// First check if ray intersect our bounding box.
@@ -1445,7 +1389,6 @@ bool CSplineObject::HitTest(HitContext& hc)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplineObject::HitTestRect(HitContext& hc)
 {
 	AABB box;
@@ -1481,7 +1424,6 @@ bool CSplineObject::HitTestRect(HitContext& hc)
 	return false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 bool CSplineObject::RayToLineDistance(const Vec3& rayLineP1, const Vec3& rayLineP2, const Vec3& pi, const Vec3& pj, float& distance, Vec3& intPnt)
 {
 	Vec3 pa, pb;
@@ -1508,7 +1450,6 @@ bool CSplineObject::RayToLineDistance(const Vec3& rayLineP1, const Vec3& rayLine
 	return true;
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::GetNearestEdge(const Vec3& raySrc, const Vec3& rayDir, int& p1, int& p2, float& distance, Vec3& intersectPoint)
 {
 	p1 = -1;
@@ -1556,13 +1497,11 @@ void CSplineObject::OnContextMenu(CPopupMenuItem* menu)
 	CBaseObject::OnContextMenu(menu);
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::OnUpdateUI()
 {
 	UpdateUIVars();
 }
 
-//////////////////////////////////////////////////////////////////////////
 void CSplineObject::Serialize(CObjectArchive& ar)
 {
 	__super::Serialize(ar);
@@ -1611,7 +1550,6 @@ void CSplineObject::Serialize(CObjectArchive& ar)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 int CSplineObject::MouseCreateCallback(IDisplayViewport* pView, EMouseEvent event, CPoint& point, int flags)
 {
 	if (event == eMouseMove || event == eMouseLDown || event == eMouseLDblClick)
@@ -1677,7 +1615,6 @@ void CSplineObject::EditSpline()
 	{
 		CUndo undo("Select Object");
 		// Select just this object, so we need to clear selection
-		GetObjectManager()->ClearSelection();
 		GetObjectManager()->SelectObject(this);
 	}
 

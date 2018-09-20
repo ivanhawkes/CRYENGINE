@@ -33,44 +33,23 @@ public:
 
 		const string basePath = PathUtil::RemoveExtension(PathUtil::RemoveExtension(asset.GetMetadataFile()));
 		const string pfxFilePath = PathUtil::ReplaceExtension(basePath, "pfx"); // Relative to asset directory.
-
-		Serialization::SaveJsonFile(pfxFilePath.c_str(), *m_pEffect);
-
-		// Get effect dependency
+		
+		if (!GetISystem()->GetIPak()->MakeDir(asset.GetFolder(), true))
 		{
-			std::vector<SAssetDependencyInfo> dependencies;
-			for (size_t component = 0, componentsCount = m_pEffect->GetNumComponents(); component < componentsCount; ++component)
-			{
-				const pfx2::IParticleComponent* pComponent = m_pEffect->GetComponent(component);
-				for (size_t feature = 0, featuresCount = pComponent->GetNumFeatures(); feature < featuresCount; ++feature)
-				{
-					const pfx2::IParticleFeature* pFeature = pComponent->GetFeature(feature);
-					for (size_t resource = 0, resourcesCount = pFeature->GetNumResources(); resource < resourcesCount; ++resource)
-					{
-						const char* szResourceFilename = pFeature->GetResourceName(resource);
-						auto it = std::find_if(dependencies.begin(), dependencies.end(), [szResourceFilename](const auto& x)
-						{
-							return x.path.CompareNoCase(szResourceFilename);
-						});
-
-						if (it == dependencies.end())
-						{
-							dependencies.emplace_back(szResourceFilename, 1);
-						}
-						else // increment instance count
-						{
-							++(it->usageCount);
-						}
-					}
-				}
-			}
-			asset.SetDependencies(dependencies);
+			return false;
 		}
+
+		if (!Serialization::SaveJsonFile(pfxFilePath.c_str(), *m_pEffect))
+		{
+			return false;
+		}
+
+		// Get effect dependency and collect details information.
+		SetDetailsAndDependencies(asset);
 
 		asset.SetFiles({ pfxFilePath });
 		return true;
 	}
-
 
 	virtual void DiscardChanges(IEditableAsset& asset) override
 	{
@@ -132,11 +111,51 @@ private:
 		return m_pEffect.get();
 	}
 
+	void SetDetailsAndDependencies(IEditableAsset &asset) const
+	{
+		const size_t componentsCount = m_pEffect->GetNumComponents();
+		size_t totalFeaturesCount = 0;
+		std::vector<SAssetDependencyInfo> dependencies;
+		for (size_t component = 0; component < componentsCount; ++component)
+		{
+			const pfx2::IParticleComponent* pComponent = m_pEffect->GetComponent(component);
+			const size_t featuresCount = pComponent->GetNumFeatures();
+			totalFeaturesCount += featuresCount;
+			for (size_t feature = 0; feature < featuresCount; ++feature)
+			{
+				const pfx2::IParticleFeature* pFeature = pComponent->GetFeature(feature);
+				for (size_t resource = 0, resourcesCount = pFeature->GetNumResources(); resource < resourcesCount; ++resource)
+				{
+					const char* szResourceFilename = pFeature->GetResourceName(resource);
+					auto it = std::find_if(dependencies.begin(), dependencies.end(), [szResourceFilename](const auto& x)
+					{
+						return x.path.CompareNoCase(szResourceFilename);
+					});
+
+					if (it == dependencies.end())
+					{
+						dependencies.emplace_back(szResourceFilename, 1);
+					}
+					else // increment instance count
+					{
+						++(it->usageCount);
+					}
+				}
+			}
+		}
+		asset.SetDependencies(dependencies);
+
+		std::vector<std::pair<string, string>> details =
+		{
+			{ "componentsCount", string().Format("%d", componentsCount) },
+			{ "featuresCount",   string().Format("%d", totalFeaturesCount) },
+		};
+		asset.SetDetails(details);
+	}
+
 private:
 	_smart_ptr<pfx2::IParticleEffectPfx2> m_pEffect;
-
 };
-
 
 bool CEffectAssetModel::OpenAsset(CAsset* pAsset)
 {
@@ -147,8 +166,14 @@ bool CEffectAssetModel::OpenAsset(CAsset* pAsset)
 		return false;
 	}
 
+	CEffectAsset* const pEffectAsset = CSession::CreateEffectAsset(pAsset);
+	if (!pEffectAsset)
+	{
+		return false;
+	}
+
 	signalBeginEffectAssetChange();
-	m_pEffectAsset.reset(CSession::CreateEffectAsset(pAsset));
+	m_pEffectAsset.reset(pEffectAsset);
 	signalEndEffectAssetChange();
 	return true;
 }
@@ -171,4 +196,3 @@ std::unique_ptr<IAssetEditingSession> CEffectAssetModel::CreateEditingSession()
 }
 
 }
-

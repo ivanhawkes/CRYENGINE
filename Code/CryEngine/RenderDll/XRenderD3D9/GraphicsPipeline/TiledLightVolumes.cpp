@@ -73,7 +73,7 @@ void CTiledLightVolumesStage::Init()
 	// Cubemap Array(s) ==================================================================
 
 #if CRY_RENDERER_OPENGLES || CRY_PLATFORM_ANDROID
-	ETEX_Format textureAtlasFormatSpecDiff = eTF_R16G16B16A16F;
+	ETEX_Format textureAtlasFormatSpecDiff = eTF_R9G9B9E5;
 	ETEX_Format textureAtlasFormatSpot = eTF_EAC_R11;
 #else
 	ETEX_Format textureAtlasFormatSpecDiff = eTF_BC6UH;
@@ -128,11 +128,13 @@ void CTiledLightVolumesStage::Init()
 	if (!m_lightCullInfoBuf.IsAvailable())
 	{
 		m_lightCullInfoBuf.Create(MaxNumTileLights, sizeof(STiledLightCullInfo), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::USAGE_CPU_WRITE | CDeviceObjectFactory::USAGE_STRUCTURED | CDeviceObjectFactory::BIND_SHADER_RESOURCE, NULL);
+		m_lightCullInfoBuf.SetDebugName("LightCullInfoBuf");
 	}
 
 	if (!m_lightShadeInfoBuf.IsAvailable())
 	{
 		m_lightShadeInfoBuf.Create(MaxNumTileLights, sizeof(STiledLightShadeInfo), DXGI_FORMAT_UNKNOWN, CDeviceObjectFactory::USAGE_CPU_WRITE | CDeviceObjectFactory::USAGE_STRUCTURED | CDeviceObjectFactory::BIND_SHADER_RESOURCE, NULL);
+		m_lightShadeInfoBuf.SetDebugName("LightShadeInfoBuf");
 	}
 
 	// Tiled Light Volumes ===============================================================
@@ -219,13 +221,14 @@ void CTiledLightVolumesStage::Resize(int renderWidth, int renderHeight)
 	if (!m_tileOpaqueLightMaskBuf.IsAvailable())
 	{
 		m_tileOpaqueLightMaskBuf.Create(dispatchSizeX * dispatchSizeY * 8, 4, DXGI_FORMAT_R32_UINT, CDeviceObjectFactory::BIND_SHADER_RESOURCE | CDeviceObjectFactory::BIND_UNORDERED_ACCESS, NULL);
+		m_tileOpaqueLightMaskBuf.SetDebugName("TileOpaqueLightMaskBuf");
 	}
 
 	if (!m_tileTranspLightMaskBuf.IsAvailable())
 	{
 		m_tileTranspLightMaskBuf.Create(dispatchSizeX * dispatchSizeY * 8, 4, DXGI_FORMAT_R32_UINT, CDeviceObjectFactory::BIND_SHADER_RESOURCE | CDeviceObjectFactory::BIND_UNORDERED_ACCESS, NULL);
+		m_tileTranspLightMaskBuf.SetDebugName("TileTranspLightMaskBuf");
 	}
-
 }
 
 void CTiledLightVolumesStage::Clear()
@@ -256,9 +259,19 @@ void CTiledLightVolumesStage::Destroy(bool destroyResolutionIndependentResources
 		m_diffuseProbeAtlas.items.clear();
 		m_spotTexAtlas.items.clear();
 
-		SAFE_RELEASE_FORCE(m_specularProbeAtlas.texArray);
-		SAFE_RELEASE_FORCE(m_diffuseProbeAtlas.texArray);
-		SAFE_RELEASE_FORCE(m_spotTexAtlas.texArray);
+#if DEVRES_USE_PINNING
+		m_specularProbeAtlas.texArray->GetDevTexture()->Unpin();
+		m_diffuseProbeAtlas.texArray->GetDevTexture()->Unpin();
+		m_spotTexAtlas.texArray->GetDevTexture()->Unpin();
+#endif
+
+		ITexture* pSpec = m_specularProbeAtlas.texArray.ReleaseOwnership();
+		ITexture* pDiff = m_diffuseProbeAtlas.texArray.ReleaseOwnership();
+		ITexture* pSpot = m_spotTexAtlas.texArray.ReleaseOwnership();
+
+		SAFE_RELEASE_FORCE(pSpec);
+		SAFE_RELEASE_FORCE(pDiff);
+		SAFE_RELEASE_FORCE(pSpot);
 	}
 
 	// Tiled Light Lists =================================================================
@@ -493,6 +506,9 @@ int CTiledLightVolumesStage::InsertTexture(CTexture* pTexInput, float mipFactor,
 				minIndex = i;
 			}
 		}
+
+		if (minValue == frameID)
+			return -1;
 
 		arrayIndex = minIndex;
 	}
@@ -824,9 +840,11 @@ void CTiledLightVolumesStage::GenerateLightList()
 			lightInfo.depthBoundsVS = Vec2(posVS.z - volumeSize, posVS.z + volumeSize) * invCameraFar;
 			lightShadeInfo.posRad = Vec4(pos.x, pos.y, pos.z, volumeSize);
 			lightShadeInfo.attenuationParams = Vec2(areaLightRect ? (renderLight.m_fAreaWidth + renderLight.m_fAreaHeight) * 0.25f : renderLight.m_fAttenuationBulbSize, renderLight.m_fAreaHeight * 0.5f);
-			float itensityScale = rd->m_fAdaptedSceneScaleLBuffer;
-			lightShadeInfo.color = Vec4(renderLight.m_Color.r * itensityScale, renderLight.m_Color.g * itensityScale,
-				renderLight.m_Color.b * itensityScale, renderLight.m_SpecMult);
+			float intensityScale = rd->m_fAdaptedSceneScaleLBuffer;
+			lightShadeInfo.color = Vec4(renderLight.m_Color.r * intensityScale, 
+			                            renderLight.m_Color.g * intensityScale,
+			                            renderLight.m_Color.b * intensityScale, 
+			                            renderLight.m_SpecMult);
 			lightShadeInfo.resIndex = 0;
 			lightShadeInfo.resMipClamp0 = 0;
 			lightShadeInfo.resMipClamp1 = 0;
@@ -1206,7 +1224,7 @@ void CTiledLightVolumesStage::GenerateLightList()
 				isValid ? '!' : '?',
 				pName);
 
-			if (rowPos >= (rd->GetHeight() - rowHeightSmall))
+			if (rowPos >= (rd->GetOverlayHeight() - rowHeightSmall))
 			{
 				rowPos = rowReset;
 				colPos += 800;

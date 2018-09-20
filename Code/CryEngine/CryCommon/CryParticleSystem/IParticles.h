@@ -42,40 +42,44 @@ SERIALIZATION_DECLARE_ENUM(EParticleSpec,
 //! Some parameters override emitter params.
 struct SpawnParams
 {
-	bool                     bPrime          = false;                            //!< Advance emitter age to its equilibrium state.
+	bool                     bPrime                   = false;                            //!< Advance emitter age to its equilibrium state.
 
 	// Placement options
-	bool                     bIgnoreVisAreas = false;                            //!< Renders in all VisAreas.
-	bool                     bRegisterByBBox = false;                            //!< Registers in any overlapping portal VisArea.
-	bool                     bNowhere        = false;                            //!< Exists outside of level.
-	bool                     bPlaced         = false;                            //!< Loaded from placed entity.
+	bool                     bIgnoreVisAreas          = false;                            //!< Renders in all VisAreas.
+	bool                     bRegisterByBBox          = false;                            //!< Registers in any overlapping portal VisArea.
+	bool                     bNowhere                 = false;                            //!< Exists outside of level.
+	bool                     bPlaced                  = false;                            //!< Loaded from placed entity.
+	bool                     bIgnoreTerrainLayerBlend = true;                             //!< Controls blending with terrain layers
+	bool                     bIgnoreDecalBlend        = true;                             //!< Controls blending with decals
 
-	float                    fCountScale     = 1;                                //!< Multiple for particle count (on top of bCountPerUnit if set).
-	float                    fSizeScale      = 1;                                //!< Multiple for all effect sizes.
-	float                    fSpeedScale     = 1;                                //!< Multiple for particle emission speed.
-	float                    fTimeScale      = 1;                                //!< Multiple for emitter time evolution.
-	float                    fPulsePeriod    = 0;                                //!< How often to restart emitter.
-	float                    fStrength       = -1;                               //!< Controls parameter strength curves.
-	int                      nSeed           = -1;                               //!< Initial seed. Default is -1 which means random seed.
+	float                    fCountScale              = 1;                                //!< Multiple for particle count (on top of bCountPerUnit if set).
+	float                    fSizeScale               = 1;                                //!< Multiple for all effect sizes.
+	float                    fSpeedScale              = 1;                                //!< Multiple for particle emission speed.
+	float                    fTimeScale               = 1;                                //!< Multiple for emitter time evolution.
+	float                    fPulsePeriod             = 0;                                //!< How often to restart emitter.
+	float                    fStrength                = -1;                               //!< Controls parameter strength curves.
+	int                      nSeed                    = -1;                               //!< Initial seed. Default is -1 which means random seed.
 
-	EParticleSpec            eSpec           = EParticleSpec::Default;           //!< Overrides particle spec for this emitter
-	EGeomType                eAttachType     = GeomType_None;                    //!< What type of object particles emitted from.
-	EGeomForm                eAttachForm     = GeomForm_Surface;                 //!< What aspect of shape emitted from.
-	bool                     bCountPerUnit   = false;                            //!< Multiply particle count also by geometry extent (length/area/volume).
+	EParticleSpec            eSpec                    = EParticleSpec::Default;           //!< Overrides particle spec for this emitter
+	EGeomType                eAttachType              = GeomType_None;                    //!< What type of object particles emitted from.
+	EGeomForm                eAttachForm              = GeomForm_Surface;                 //!< What aspect of shape emitted from.
+	bool                     bCountPerUnit            = false;                            //!< Multiply particle count also by geometry extent (length/area/volume).
 
-	bool                     bEnableAudio    = true;                             //!< Used by particle effect instances to indicate whether audio should be updated or not.
-	CryAudio::EOcclusionType occlusionType   = CryAudio::EOcclusionType::Ignore; //!< Audio obstruction/occlusion calculation type.
+	bool                     bEnableAudio             = true;                             //!< Used by particle effect instances to indicate whether audio should be updated or not.
+	CryAudio::EOcclusionType occlusionType            = CryAudio::EOcclusionType::Ignore; //!< Audio obstruction/occlusion calculation type.
 	string                   audioRtpc;                                          //!< Indicates what audio RTPC this particle effect instance drives.
 
 	void Serialize(Serialization::IArchive& ar)
 	{
-		ar(bPrime, "prime", "Prime");                                  ar.doc("Advance emitter age to its equilibrium state");
-		ar(fSizeScale, "scale", "Uniform Scale");                      ar.doc("Emitter uniform scale");
-		ar(fCountScale, "countScale", "Count Scale");                  ar.doc("Particle count multiplier");
-		ar(fSpeedScale, "speedScale", "Speed Scale");                  ar.doc("Particle emission speed multiplier");
-		ar(fTimeScale, "timeScale", "Time Scale");                     ar.doc("Emitter time evolution multiplier");
-		ar(eSpec, "spec", "Particle Spec");                            ar.doc("Overrides System Spec for this emitter");
-		ar(bIgnoreVisAreas, "ignoreVvisAreas", "Ignore Vis Areas");    ar.doc("Renders in all VisAreas");
+		ar(bPrime, "prime", "Prime");                                                        ar.doc("Advance emitter age to its equilibrium state");
+		ar(fSizeScale, "scale", "Uniform Scale");                                            ar.doc("Emitter uniform scale");
+		ar(fCountScale, "countScale", "Count Scale");                                        ar.doc("Particle count multiplier");
+		ar(fSpeedScale, "speedScale", "Speed Scale");                                        ar.doc("Particle emission speed multiplier");
+		ar(fTimeScale, "timeScale", "Time Scale");                                           ar.doc("Emitter time evolution multiplier");
+		ar(eSpec, "spec", "Particle Spec");                                                  ar.doc("Overrides System Spec for this emitter");
+		ar(bIgnoreVisAreas, "ignoreVvisAreas", "Ignore Vis Areas");                          ar.doc("Renders in all VisAreas");
+		ar(bIgnoreTerrainLayerBlend, "ignoreTerrainBlend", "Ignore Terrain Layer Blend");    ar.doc("Controls blending with terrain layers");
+		ar(bIgnoreDecalBlend, "ignoreDecalBlend", "Ignore Decal Blend");    ar.doc("Controls blending with decals");
 
 		bool bOverrideSeed = true;
 		if (ar.isEdit())
@@ -614,14 +618,14 @@ struct TContainerCountsBase
 
 template<typename F>
 struct TContainerCounts
-	: INumberVector<float, 16, TContainerCounts<F>>
+	: INumberVector<float, 18, TContainerCounts<F>>
 	, TContainerCountsBase<F>
 {
 };
 
 template<typename F>
 struct TParticleCounts
-	: INumberVector<float, 23, TParticleCounts<F>>
+	: INumberVector<float, 25, TParticleCounts<F>>
 	, TContainerCountsBase<F>
 {
 	TElementCounts<F> emitters;
@@ -635,20 +639,6 @@ typedef TContainerCounts<float> SContainerCounts;
 typedef TParticleCounts<float> SParticleCounts;
 
 //////////////////////////////////////////////////////////////////////////
-struct IParticleEffectIterator
-{
-	virtual ~IParticleEffectIterator() {}
-
-	virtual void             AddRef() = 0;
-	virtual void             Release() = 0;
-
-	virtual IParticleEffect* Next() = 0;
-	virtual int              GetCount() const = 0;
-};
-
-TYPEDEF_AUTOPTR(IParticleEffectIterator);
-typedef IParticleEffectIterator_AutoPtr IParticleEffectIteratorPtr;
-
 //////////////////////////////////////////////////////////////////////////
 struct IParticleManager
 {
@@ -696,9 +686,6 @@ struct IParticleManager
 	virtual bool LoadLibrary(cstr sParticlesLibrary, XmlNodeRef& libNode, bool bLoadResources) = 0;
 	virtual bool LoadLibrary(cstr sParticlesLibrary, cstr sParticlesLibraryFile = NULL, bool bLoadResources = false) = 0;
 
-	//! Returns particle iterator.
-	virtual IParticleEffectIteratorPtr GetEffectIterator() = 0;
-
 	//////////////////////////////////////////////////////////////////////////
 	// ParticleEmitters
 	//////////////////////////////////////////////////////////////////////////
@@ -742,6 +729,7 @@ struct IParticleManager
 	//! Stats.
 	virtual void GetMemoryUsage(ICrySizer* pSizer) const = 0;
 	virtual void GetCounts(SParticleCounts& counts) = 0;
+	virtual void DisplayStats(Vec2& location, float lineHeight) = 0;
 
 	//! PerfHUD.
 	virtual void CreatePerfHUDWidget() = 0;

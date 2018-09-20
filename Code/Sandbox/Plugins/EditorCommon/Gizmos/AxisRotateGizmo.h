@@ -5,9 +5,6 @@
 #include "Gizmo.h"
 #include <memory>
 
-struct SDisplayContext;
-struct HitContext;
-struct IDisplayViewport;
 class CInteractionMode;
 
 //////////////////////////////////////////////////////////////////////////
@@ -68,4 +65,3 @@ private:
 
 	std::unique_ptr<CInteractionMode> m_interaction;
 };
-

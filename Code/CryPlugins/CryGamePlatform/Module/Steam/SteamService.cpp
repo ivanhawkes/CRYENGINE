@@ -44,8 +44,9 @@ namespace Cry
 				: m_callbackGameOverlayActivated(this, &CService::OnGameOverlayActivated)
 				, m_onAvatarImageLoadedCallback(this, &CService::OnAvatarImageLoaded)
 				, m_onFriendStateChangeCallback(this, &CService::OnFriendStateChange)
+				, m_callbackGetSteamAuthTicketResponse(this, &CService::OnGetSteamAuthTicketResponse)
+				, m_callbackOnPersonaChange(this, &CService::OnPersonaStateChange)
 				, m_pServer(nullptr)
-				, m_awaitingCallbacks(0)
 				, m_authTicketHandle(k_HAuthTicketInvalid)
 			{
 				// Map Steam API language codes to engine
@@ -70,14 +71,6 @@ namespace Cry
 				m_translationMappings["spanish"] = ILocalizationManager::ePILID_Spanish;
 				m_translationMappings["swedish"] = ILocalizationManager::ePILID_Swedish;
 				m_translationMappings["turkish"] = ILocalizationManager::ePILID_Turkish;
-			}
-
-			CService::~CService()
-			{
-				for (IListener* pListener : m_listeners)
-				{
-					pListener->OnShutdown(SteamServiceID);
-				}
 			}
 
 			bool CService::Initialize(SSystemGlobalEnvironment& env, const SSystemInitParams& initParams)
@@ -222,10 +215,33 @@ namespace Cry
 			{
 				CRY_PROFILE_FUNCTION(PROFILE_SYSTEM);
 
-				if (m_awaitingCallbacks > 0)
+				SteamAPI_RunCallbacks();
+			}
+
+			void CService::Shutdown()
+			{
+				m_pServer.reset();
+				m_pRemoteStorage.reset();
+				m_pNetworking.reset();
+				m_pMatchmaking.reset();
+				m_pSteamLeaderboards.reset();
+				m_pStatistics.reset();
+
+				m_friends.clear();
+
+				for (const std::unique_ptr<CAccount>& pRemovedAccount : m_accounts)
 				{
-					SteamAPI_RunCallbacks();
+					NotifyAccountRemoved(pRemovedAccount.get());
 				}
+
+				m_accounts.clear();
+
+				for (IListener* pListener : m_listeners)
+				{
+					pListener->OnShutdown(SteamServiceID);
+				}
+
+				SteamAPI_Shutdown();
 			}
 
 			ServiceIdentifier CService::GetServiceIdentifier() const
@@ -261,8 +277,6 @@ namespace Cry
 				{
 					pListener->OnOverlayActivated(SteamServiceID, pData->m_bActive != 0);
 				}
-
-				m_awaitingCallbacks -= 1;
 			}
 
 			void CService::OnAvatarImageLoaded(AvatarImageLoaded_t* pCallback)
@@ -278,21 +292,32 @@ namespace Cry
 			{
 				if (pCallback->m_nChangeFlags & k_EPersonaChangeComeOnline)
 				{
-					IAccount* pFriendAccount = TryGetAccount(pCallback->m_ulSteamID);
-					for (IListener* pListener : m_listeners)
-					{
-						pListener->OnAccountAdded(*pFriendAccount);
-					}
+					TryGetAccount(pCallback->m_ulSteamID);
 				}
 				else if (pCallback->m_nChangeFlags & k_EPersonaChangeGoneOffline)
 				{
 					if (auto pRemovedAccount = RemoveAccount(pCallback->m_ulSteamID))
 					{
-						for (IListener* pListener : m_listeners)
-						{
-							pListener->OnAccountRemoved(*pRemovedAccount);
-						}
+						NotifyAccountRemoved(pRemovedAccount.get());
 					}
+				}
+			}
+
+			void CService::OnGetSteamAuthTicketResponse(GetAuthSessionTicketResponse_t* pData)
+			{
+				const bool success = pData->m_eResult == EResult::k_EResultOK;
+				const uint32 authTicket = pData->m_hAuthTicket;
+				for (IListener* pListener : m_listeners)
+				{
+					pListener->OnGetSteamAuthTicketResponse(success, authTicket);
+				}
+			}
+
+			void CService::OnPersonaStateChange(PersonaStateChange_t* pData)
+			{
+				for (IListener* pListener : m_listeners)
+				{
+					pListener->OnPersonaStateChanged(CAccount(pData->m_ulSteamID), static_cast<IListener::EPersonaChangeFlags>(pData->m_nChangeFlags));
 				}
 			}
 
@@ -495,6 +520,8 @@ namespace Cry
 				}
 
 				m_accounts.emplace_back(stl::make_unique<CAccount>(id));
+				NotifyAccountAdded(m_accounts.back().get());
+
 				return m_accounts.back().get();
 			}
 
@@ -513,6 +540,8 @@ namespace Cry
 				{
 					removedAccount.swap(*accPos);
 					m_accounts.erase(accPos);
+
+					stl::find_and_erase(m_friends, removedAccount.get());
 				}
 
 				return removedAccount;
@@ -552,6 +581,36 @@ namespace Cry
 				}
 
 				return false;
+			}
+
+			bool CService::IsLoggedIn() const
+			{
+				if (ISteamUser* pSteamUser = SteamUser())
+					return pSteamUser->BLoggedOn();
+
+				return false;
+			}
+
+			void CService::NotifyAccountAdded(CAccount* pAccount) const
+			{
+				if (pAccount)
+				{
+					for (IListener* pListener : m_listeners)
+					{
+						pListener->OnAccountAdded(*pAccount);
+					}
+				}
+			}
+
+			void CService::NotifyAccountRemoved(CAccount* pAccount) const
+			{
+				if (pAccount)
+				{
+					for (IListener* pListener : m_listeners)
+					{
+						pListener->OnAccountRemoved(*pAccount);
+					}
+				}
 			}
 
 			CRYREGISTER_SINGLETON_CLASS(CService)

@@ -156,7 +156,5 @@ void CLensFlareLightEntityTree::OnTvnItemDoubleClicked(NMHDR* pNMHDR, LRESULT* p
 		}
 	}
 
-	GetIEditorImpl()->GetObjectManager()->ClearSelection();
 	GetIEditorImpl()->GetObjectManager()->SelectObject(pObject);
 }
-

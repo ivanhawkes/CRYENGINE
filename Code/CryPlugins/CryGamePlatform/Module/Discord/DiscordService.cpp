@@ -27,12 +27,7 @@ namespace Cry
 
 			CService::~CService()
 			{
-				for (IListener* pListener : m_listeners)
-				{
-					pListener->OnShutdown(DiscordServiceID);
-				}
-
-				Discord_Shutdown();
+				s_pInstance = nullptr;
 			}
 
 			bool CService::Initialize(SSystemGlobalEnvironment& env, const SSystemInitParams& initParams)
@@ -74,6 +69,8 @@ namespace Cry
 
 				EnableUpdate(Cry::IEnginePlugin::EUpdateStep::MainUpdate, true);
 
+				m_localAccount = stl::make_unique<CAccount>();
+
 				CryLogAlways("[Discord] Successfully initialized Discord Rich Presence API");
 
 				if (pGamePlatform)
@@ -89,6 +86,18 @@ namespace Cry
 				CRY_PROFILE_FUNCTION(PROFILE_SYSTEM);
 
 				Discord_RunCallbacks();
+			}
+
+			void CService::Shutdown()
+			{
+				SetLocalUser(nullptr);
+
+				for (IListener* pListener : m_listeners)
+				{
+					pListener->OnShutdown(DiscordServiceID);
+				}
+
+				Discord_Shutdown();
 			}
 
 			ServiceIdentifier CService::GetServiceIdentifier() const
@@ -186,26 +195,47 @@ namespace Cry
 				return false;
 			}
 
+			bool CService::IsLoggedIn() const
+			{
+				return true;
+			}
+
 			void CService::SetLocalUser(const DiscordUser* pUser)
 			{
-				if (pUser)
+				if (m_localAccount)
 				{
-					if (m_localAccount)
+					if (pUser)
 					{
 						m_localAccount->SetDiscordUser(*pUser);
+						NotifyAccountAdded(m_localAccount.get());
 					}
 					else
 					{
-						m_localAccount = stl::make_unique<CAccount>(*pUser);
+						NotifyAccountRemoved(m_localAccount.get());
+						m_localAccount.reset();
 					}
-
-					std::for_each(m_listeners.begin(), m_listeners.end(), [this](IListener* pListener) { pListener->OnAccountAdded(*m_localAccount); });
 				}
-				else if(m_localAccount)
-				{
-					std::for_each(m_listeners.begin(), m_listeners.end(), [this](IListener* pListener) { pListener->OnAccountRemoved(*m_localAccount); });
+			}
 
-					m_localAccount.reset();
+			void CService::NotifyAccountAdded(CAccount* pAccount) const
+			{
+				if (pAccount)
+				{
+					for (IListener* pListener : m_listeners)
+					{
+						pListener->OnAccountAdded(*pAccount);
+					}
+				}
+			}
+
+			void CService::NotifyAccountRemoved(CAccount* pAccount) const
+			{
+				if (pAccount)
+				{
+					for (IListener* pListener : m_listeners)
+					{
+						pListener->OnAccountRemoved(*pAccount);
+					}
 				}
 			}
 

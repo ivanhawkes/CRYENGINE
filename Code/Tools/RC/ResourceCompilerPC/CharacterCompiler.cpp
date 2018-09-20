@@ -210,13 +210,13 @@ void CharacterCompiler::ProcessVCloth(
 
 	// get preprocess data
 
-	std::vector<AttachmentVClothPreProcessLra> const& preLra = pre.GetLra();
-	for (int i = 0; i < preLra.size(); i++)
+	std::vector<AttachmentVClothPreProcessNndc> const& preNndc = pre.GetNndc();
+	for (int i = 0; i < preNndc.size(); i++)
 	{
 		SVClothVertex vertex;
-		vertex.attributes.lraIdx = preLra[i].lraIdx;
-		vertex.attributes.lraNextParent = preLra[i].lraNextParent;
-		vertex.attributes.lraDist = preLra[i].lraDist;
+		vertex.attributes.nndcIdx = preNndc[i].nndcIdx;
+		vertex.attributes.nndcNextParent = preNndc[i].nndcNextParent;
+		vertex.attributes.nndcDist = preNndc[i].nndcDist;
 
 		pVClothInfo->m_vertices.push_back(vertex);
 	}
@@ -247,13 +247,13 @@ void CharacterCompiler::ProcessVCloth(
 		pVClothInfo->m_trianglePairs.push_back(btp);
 	}
 
-	std::vector<int> const& preLraNotAttachedOrderedIdx = pre.GetLraNotAttachedOrderedIdx();
-	for (int i = 0; i < preLraNotAttachedOrderedIdx.size(); i++)
+	std::vector<int> const& preNndcNotAttachedOrderedIdx = pre.GetNndcNotAttachedOrderedIdx();
+	for (int i = 0; i < preNndcNotAttachedOrderedIdx.size(); i++)
 	{
-		SVClothLraNotAttachedOrderedIdx lra;
-		lra.lraNotAttachedOrderedIdx = preLraNotAttachedOrderedIdx[i];
+		SVClothNndcNotAttachedOrderedIdx nndc;
+		nndc.nndcNotAttachedOrderedIdx = preNndcNotAttachedOrderedIdx[i];
 
-		pVClothInfo->m_lraNotAttachedOrderedIdx.push_back(lra);
+		pVClothInfo->m_nndcNotAttachedOrderedIdx.push_back(nndc);
 	}
 
 	for (int e = 0; e < eVClothLink_COUNT; e++)
@@ -574,15 +574,15 @@ bool CharacterCompiler::ProcessInternal(CLoaderCGF* cgfLoader, CContentCGF* pCGF
 
 	if (pCContentCGF)
 	{
-		pCContentCGF->GetExportInfo()->rc_version[0] = fv.v[0];
-		pCContentCGF->GetExportInfo()->rc_version[1] = fv.v[1];
-		pCContentCGF->GetExportInfo()->rc_version[2] = fv.v[2];
-		pCContentCGF->GetExportInfo()->rc_version[3] = fv.v[3];
+		pCContentCGF->GetExportInfo()->rc_version[0] = fv[0];
+		pCContentCGF->GetExportInfo()->rc_version[1] = fv[1];
+		pCContentCGF->GetExportInfo()->rc_version[2] = fv[2];
+		pCContentCGF->GetExportInfo()->rc_version[3] = fv[3];
 
 		StringHelpers::SafeCopyPadZeros(
 			pCContentCGF->GetExportInfo()->rc_version_string,
 			sizeof(pCContentCGF->GetExportInfo()->rc_version_string),
-			StringHelpers::Format(" RCVer:%d.%d ", fv.v[2], fv.v[1]).c_str());
+			StringHelpers::Format(" RCVer:%d.%d ", fv[2], fv[1]).c_str());
 
 		cgfSaver.SetContent(pCContentCGF);
 	}

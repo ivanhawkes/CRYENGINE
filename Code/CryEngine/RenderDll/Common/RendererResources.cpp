@@ -156,6 +156,7 @@ CTexture* CRendererResources::s_ptexAOVOJitter;
 CTexture* CRendererResources::s_ptexFromRE[8];
 CTexture* CRendererResources::s_ptexShadowID[8];
 CTexture* CRendererResources::s_ptexShadowMask;
+CTexture* CRendererResources::s_ptexClipVolumes;
 CTexture* CRendererResources::s_ptexCachedShadowMap[MAX_GSM_LODS_NUM];
 CTexture* CRendererResources::s_ptexNearestShadowMap;
 CTexture* CRendererResources::s_ptexHeightMapAO[2];
@@ -181,13 +182,14 @@ CTexture* CRendererResources::s_ptexSceneSpecularESRAM;
 #endif
 
 // Post-process related textures
-CTexture* CRendererResources::s_ptexBackBuffer = NULL;
+CTexture* CRendererResources::s_ptexDisplayTargetSrc = nullptr;
+CTexture* CRendererResources::s_ptexDisplayTargetDst = nullptr;
+CTexture* CRendererResources::s_ptexDisplayTargetScaled[3];
+CTexture* CRendererResources::s_ptexDisplayTargetScaledTemp[2];
 CTexture* CRendererResources::s_ptexModelHudBuffer;
 CTexture* CRendererResources::s_ptexCached3DHud;
 CTexture* CRendererResources::s_ptexCached3DHudScaled;
-CTexture* CRendererResources::s_ptexBackBufferScaled[3];
-CTexture* CRendererResources::s_ptexBackBufferScaledTemp[2];
-CTexture* CRendererResources::s_ptexPrevFrameScaled;
+CTexture* CRendererResources::s_ptexDisplayTargetScaledPrev;
 
 CTexture* CRendererResources::s_ptexWaterOcean;
 CTexture* CRendererResources::s_ptexWaterVolumeTemp[2];
@@ -210,18 +212,18 @@ CTexture* CRendererResources::s_ptexLinearDepth;
 CTexture* CRendererResources::s_ptexLinearDepthReadBack[4];
 CTexture* CRendererResources::s_ptexLinearDepthDownSample[4];
 CTexture* CRendererResources::s_ptexLinearDepthScaled[3];
+CTexture* CRendererResources::s_ptexLinearDepthFixup;
+ResourceViewHandle CRendererResources::s_ptexLinearDepthFixupUAV;
 CTexture* CRendererResources::s_ptexHDRTarget;
+CTexture* CRendererResources::s_ptexHDRTargetMasked;
 CTexture* CRendererResources::s_ptexVelocity;
 CTexture* CRendererResources::s_ptexVelocityTiles[3] = { NULL };
 CTexture* CRendererResources::s_ptexVelocityObjects[2] = { NULL };
 CTexture* CRendererResources::s_ptexHDRTargetPrev = NULL;
-CTexture* CRendererResources::s_ptexHDRTargetScaled[4];
-CTexture* CRendererResources::s_ptexHDRTargetScaledTmp[4];
-CTexture* CRendererResources::s_ptexHDRTargetScaledTempRT[4];
-CTexture* CRendererResources::s_ptexHDRDofLayers[2];
+CTexture* CRendererResources::s_ptexHDRTargetScaled[4][4] = {{ NULL }};
+CTexture* CRendererResources::s_ptexHDRTargetMaskedScaled[4][4] = {{ NULL }};
 CTexture* CRendererResources::s_ptexSceneCoC[MIN_DOF_COC_K] = { NULL };
 CTexture* CRendererResources::s_ptexSceneCoCTemp = NULL;
-CTexture* CRendererResources::s_ptexHDRTempBloom[2];
 CTexture* CRendererResources::s_ptexHDRFinalBloom;
 CTexture* CRendererResources::s_ptexHDRAdaptedLuminanceCur[8];
 int CRendererResources::s_nCurLumTextureIndex;
@@ -489,16 +491,17 @@ void CRendererResources::LoadDefaultSystemTextures()
 			// Only used for VR, but we need to support runtime switching
 			s_ptexVelocityObjects[1] = CTexture::GetOrCreateTextureObject("$VelocityObjects_R", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET | FT_USAGE_UNORDERED_ACCESS, eTF_Unknown, -1);
 
-			s_ptexBackBuffer = CTexture::GetOrCreateTextureObject("$BackBuffer", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERMAP);
+			s_ptexDisplayTargetSrc           = CTexture::GetOrCreateTextureObject("$DisplayTarget", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERMAP);
+			s_ptexDisplayTargetDst           = CTexture::GetOrCreateTextureObject("$DisplayTargetAlt", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown);
 
-			s_ptexPrevFrameScaled = CTexture::GetOrCreateTextureObject("$PrevFrameScale", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown);
+			s_ptexDisplayTargetScaled[0]     = CTexture::GetOrCreateTextureObject("$DisplayTarget 1/2a", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERSCALED_D2);
+			s_ptexDisplayTargetScaled[1]     = CTexture::GetOrCreateTextureObject("$DisplayTarget 1/4a", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERSCALED_D4);
+			s_ptexDisplayTargetScaled[2]     = CTexture::GetOrCreateTextureObject("$DisplayTarget 1/8" , 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERSCALED_D8);
 
-			s_ptexBackBufferScaled[0] = CTexture::GetOrCreateTextureObject("$BackBufferScaled_d2", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERSCALED_D2);
-			s_ptexBackBufferScaled[1] = CTexture::GetOrCreateTextureObject("$BackBufferScaled_d4", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERSCALED_D4);
-			s_ptexBackBufferScaled[2] = CTexture::GetOrCreateTextureObject("$BackBufferScaled_d8", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_BACKBUFFERSCALED_D8);
+			s_ptexDisplayTargetScaledTemp[0] = CTexture::GetOrCreateTextureObject("$DisplayTarget 1/2b", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, -1);
+			s_ptexDisplayTargetScaledTemp[1] = CTexture::GetOrCreateTextureObject("$DisplayTarget 1/4b", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, -1);
 
-			s_ptexBackBufferScaledTemp[0] = CTexture::GetOrCreateTextureObject("$BackBufferScaledTemp_d2", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, -1);
-			s_ptexBackBufferScaledTemp[1] = CTexture::GetOrCreateTextureObject("$BackBufferScaledTemp_d4", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, -1);
+			s_ptexDisplayTargetScaledPrev    = CTexture::GetOrCreateTextureObject("$DisplayTarget 1 / 2p", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown);
 
 			s_ptexSceneNormalsMap = CTexture::GetOrCreateTextureObject("$SceneNormalsMap", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8B8A8, TO_SCENE_NORMALMAP);
 			s_ptexSceneNormalsBent = CTexture::GetOrCreateTextureObject("$SceneNormalsBent", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8B8A8);
@@ -510,12 +513,13 @@ void CRendererResources::LoadDefaultSystemTextures()
 			s_ptexSceneDiffuseTmp = CTexture::GetOrCreateTextureObject("$SceneDiffuseTmp", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8B8A8, TO_SCENE_DIFFUSE_ACC);
 			s_ptexSceneSpecularTmp = CTexture::GetOrCreateTextureObject("$SceneSpecularTmp", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8B8A8, TO_SCENE_SPECULAR_ACC);
 			s_ptexShadowMask = CTexture::GetOrCreateTextureObject("$ShadowMask", 0, 0, 1, eTT_2DArray, nRTFlags, eTF_R8, TO_SHADOWMASK);
+			s_ptexClipVolumes = CTexture::GetOrCreateTextureObject("$ClipVolumes", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8);
 
-			s_ptexFlaresGather = CTexture::GetOrCreateTextureObject("$FlaresGather", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8B8A8);
+			s_ptexFlaresGather = CTexture::GetOrCreateTextureObject("$FlaresGather", 0, 0, 1, eTT_2D, nRTFlags, eTF_R8 /* 1-bit used only */);
 			for (i = 0; i < MAX_OCCLUSION_READBACK_TEXTURES; i++)
 			{
 				cry_sprintf(str, "$FlaresOcclusion_%d", i);
-				s_ptexFlaresOcclusionRing[i] = CTexture::GetOrCreateTextureObject(str, 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8B8A8);
+				s_ptexFlaresOcclusionRing[i] = CTexture::GetOrCreateTextureObject(str, 0, 0, 1, eTT_2D, nRTFlags, eTF_R8G8);
 			}
 
 			// fixme: get texture resolution from CREWaterOcean
@@ -526,8 +530,8 @@ void CRendererResources::LoadDefaultSystemTextures()
 			s_ptexWaterVolumeDDN = CTexture::GetOrCreateTextureObject("$WaterVolumeDDN", 64, 64, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET | FT_FORCE_MIPS, eTF_Unknown, TO_WATERVOLUMEMAP);
 			s_ptexWaterVolumeRefl[0] = CTexture::GetOrCreateTextureObject("$WaterVolumeRefl", 64, 64, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET | FT_FORCE_MIPS, eTF_Unknown, TO_WATERVOLUMEREFLMAP);
 			s_ptexWaterVolumeRefl[1] = CTexture::GetOrCreateTextureObject("$WaterVolumeReflPrev", 64, 64, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET | FT_FORCE_MIPS, eTF_Unknown, TO_WATERVOLUMEREFLMAPPREV);
-			s_ptexWaterCaustics[0] = CTexture::GetOrCreateTextureObject("$WaterVolumeCaustics", 512, 512, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_WATERVOLUMECAUSTICSMAP);
-			s_ptexWaterCaustics[1] = CTexture::GetOrCreateTextureObject("$WaterVolumeCausticsTemp", 512, 512, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_WATERVOLUMECAUSTICSMAPTEMP);
+			s_ptexWaterCaustics[0] = CTexture::GetOrCreateTextureObject("$WaterVolumeCaustics", 0, 0, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_WATERVOLUMECAUSTICSMAP);
+			s_ptexWaterCaustics[1] = CTexture::GetOrCreateTextureObject("$WaterVolumeCausticsTemp", 0, 0, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_WATERVOLUMECAUSTICSMAPTEMP);
 
 			s_ptexSceneDepthScaled[0] = CTexture::GetOrCreateTextureObject("$SceneDepthScaled", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_DEPTHSTENCIL, eTF_Unknown);
 			s_ptexSceneDepthScaled[1] = CTexture::GetOrCreateTextureObject("$SceneDepthScaled2", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_DEPTHSTENCIL, eTF_Unknown);
@@ -537,6 +541,7 @@ void CRendererResources::LoadDefaultSystemTextures()
 			s_ptexLinearDepthScaled[0] = CTexture::GetOrCreateTextureObject("$ZTargetScaled", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_DOWNSCALED_ZTARGET_FOR_AO);
 			s_ptexLinearDepthScaled[1] = CTexture::GetOrCreateTextureObject("$ZTargetScaled2", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_QUARTER_ZTARGET_FOR_AO);
 			s_ptexLinearDepthScaled[2] = CTexture::GetOrCreateTextureObject("$ZTargetScaled3", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown);
+			s_ptexLinearDepthFixup     = CTexture::GetOrCreateTextureObject("$ZTargetFixup", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown);
 		}
 
 		s_ptexSceneSelectionIDs = CTexture::GetOrCreateTextureObject("$SceneSelectionIDs", 0, 0, 1, eTT_2D, FT_DONT_RELEASE | FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_R32F);
@@ -609,6 +614,49 @@ void CRendererResources::LoadDefaultSystemTextures()
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+ETEX_Format CRendererResources::GetHDRFormat(bool withAlpha, bool lowQuality)
+{
+	ETEX_Format candidate = eTF_R16G16B16A16F;
+
+	if (!withAlpha && s_hwTexFormatSupport.IsFormatSupported(eTF_R11G11B10F))
+	{
+		if (CRenderer::CV_r_HDRTexFormat <= 1 && lowQuality)
+			candidate = eTF_R11G11B10F;
+		if (CRenderer::CV_r_HDRTexFormat <= 0)
+			candidate = eTF_R11G11B10F;
+	}
+
+	return candidate;
+}
+
+ETEX_Format CRendererResources::GetLDRFormat(bool precisionBits)
+{
+	ETEX_Format candidate = eTF_R8G8B8A8;
+
+	if (precisionBits)
+		candidate = eTF_R10G10B10A2;
+
+	return candidate;
+}
+
+ETEX_Format CRendererResources::GetDisplayFormat()
+{
+	ETEX_Format candidate = eTF_R8G8B8A8;
+
+	return candidate;
+}
+
+ETEX_Format CRendererResources::GetDepthFormat()
+{
+	return
+		gRenDev->GetDepthBpp() == 32 ? eTF_D32FS8 :
+		gRenDev->GetDepthBpp() == 24 ? eTF_D24S8 :
+		gRenDev->GetDepthBpp() ==  8 ? eTF_D16S8 : eTF_D16;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void CRendererResources::CreateSystemTargets(int resourceWidth, int resourceHeight)
 {
 	if (!resourceWidth ) resourceWidth =  s_resourceWidth;
@@ -622,14 +670,11 @@ void CRendererResources::CreateSystemTargets(int resourceWidth, int resourceHeig
 
 	if (!gcpRendD3D->m_bSystemTargetsInit)
 	{
-		const bool bR11G11B10FAvailable = s_hwTexFormatSupport.IsFormatSupported(eTF_R11G11B10F);
-		ETEX_Format nHDRFormat = CRenderer::CV_r_HDRTexFormat == 0 && bR11G11B10FAvailable ? eTF_R11G11B10F : eTF_R16G16B16A16F;
-
 		// Create ZTarget
 		CreateDepthMaps(resourceWidth, resourceHeight);
 
 		// Create scene targets
-		CreateSceneMaps(nHDRFormat, resourceWidth, resourceHeight);
+		CreateSceneMaps(resourceWidth, resourceHeight);
 
 		// Create HDR targets
 		CreateHDRMaps(resourceWidth, resourceHeight);
@@ -673,12 +718,11 @@ void CRendererResources::ResizeSystemTargets(int renderWidth, int renderHeight)
 #endif
 		const bool bR11G11B10FAvailable = s_hwTexFormatSupport.IsFormatSupported(eTF_R11G11B10F);
 		ETEX_Format nHDRFormat = (CRenderer::CV_r_HDRTexFormat == 0 && bR11G11B10FAvailable) ? eTF_R11G11B10F : eTF_R16G16B16A16F;
-
 		// Resize ZTarget
 		CreateDepthMaps(resourceWidth, resourceHeight);
 
 		// Resize scene targets
-		CreateSceneMaps(nHDRFormat, resourceWidth, resourceHeight);
+		CreateSceneMaps(resourceWidth, resourceHeight);
 
 		// Resize HDR targets
 		CreateHDRMaps(resourceWidth, resourceHeight);
@@ -733,10 +777,7 @@ void CRendererResources::DestroySystemTargets()
 
 void CRendererResources::CreateDepthMaps(int resourceWidth, int resourceHeight)
 {
-	const ETEX_Format preferredDepthFormat =
-		gRenDev->GetDepthBpp() == 32 ? eTF_D32FS8 :
-		gRenDev->GetDepthBpp() == 24 ? eTF_D24S8  :
-		gRenDev->GetDepthBpp() ==  8 ? eTF_D16S8  : eTF_D16;
+	const ETEX_Format preferredDepthFormat = GetDepthFormat();
 	const ETEX_Format eTFZ = s_eTFZ =
 		preferredDepthFormat == eTF_D32FS8 ? eTF_R32F :
 		preferredDepthFormat == eTF_D24S8  ? eTF_R32F :
@@ -744,12 +785,23 @@ void CRendererResources::CreateDepthMaps(int resourceWidth, int resourceHeight)
 
 	const uint32 nDSFlags = FT_DONT_STREAM | FT_DONT_RELEASE | FT_USAGE_DEPTHSTENCIL;
 	const uint32 nRTFlags = FT_DONT_STREAM | FT_DONT_RELEASE | FT_USAGE_RENDERTARGET;
-	
+	uint32 nUAFlags = FT_DONT_STREAM | FT_DONT_RELEASE | FT_USAGE_RENDERTARGET | FT_USAGE_UNORDERED_ACCESS | FT_USAGE_UAV_RWTEXTURE;
+
 	s_ptexLinearDepth->SetFlags(nRTFlags);
 	s_ptexLinearDepth->SetWidth(resourceWidth);
 	s_ptexLinearDepth->SetHeight(resourceHeight);
 	s_ptexLinearDepth->CreateRenderTarget(eTFZ, ColorF(1.0f, 1.0f, 1.0f, 1.0f));
-	
+
+	if (!CRendererCVars::CV_r_HDRTexFormat)
+	{
+		s_ptexLinearDepthFixup->SetFlags(nUAFlags);
+		s_ptexLinearDepthFixup->SetWidth(resourceWidth);
+		s_ptexLinearDepthFixup->SetHeight(resourceHeight);
+		s_ptexLinearDepthFixup->CreateRenderTarget(eTF_R32F, ColorF(1.0f, 1.0f, 1.0f, 1.0f));
+
+		SResourceView typedUAV = SResourceView::UnorderedAccessView(DXGI_FORMAT_R32_UINT, 0, -1, 0, SResourceView::eUAV_ReadWrite);
+		s_ptexLinearDepthFixupUAV = CRendererResources::s_ptexLinearDepthFixup->GetDevTexture()->GetOrCreateResourceViewHandle(typedUAV);
+	}
 }
 
 void CRendererResources::DestroyDepthMaps()
@@ -759,33 +811,21 @@ void CRendererResources::DestroyDepthMaps()
 
 //==================================================================================================
 
-void CRendererResources::CreateSceneMaps(ETEX_Format eTF, int resourceWidth, int resourceHeight)
+void CRendererResources::CreateSceneMaps(int resourceWidth, int resourceHeight)
 {
 	const int32 nWidth  = resourceWidth;
 	const int32 nHeight = resourceHeight;
+	const ETEX_Format eHDRTF = GetHDRFormat(false, false);
 	uint32 nFlags = FT_DONT_STREAM | FT_USAGE_RENDERTARGET | FT_USAGE_UNORDERED_ACCESS;
 
 	if (!s_ptexSceneTarget)
-		s_ptexSceneTarget = CTexture::GetOrCreateRenderTarget("$SceneTarget", nWidth, nHeight, Clr_Empty, eTT_2D, nFlags, eTF, TO_SCENE_TARGET);
+		s_ptexSceneTarget = CTexture::GetOrCreateRenderTarget("$SceneTarget", nWidth, nHeight, Clr_Empty, eTT_2D, nFlags, eHDRTF, TO_SCENE_TARGET);
 	else
 	{
 		s_ptexSceneTarget->SetFlags(nFlags);
 		s_ptexSceneTarget->SetWidth(nWidth);
 		s_ptexSceneTarget->SetHeight(nHeight);
-		s_ptexSceneTarget->CreateRenderTarget(eTF, Clr_Empty);
-	}
-
-	nFlags &= ~(FT_USAGE_MSAA | FT_USAGE_UNORDERED_ACCESS);
-
-	// This RT used for all post processes passes and shadow mask (group 0) as well
-	if (!CTexture::IsTextureExist(s_ptexBackBuffer))
-		s_ptexBackBuffer = CTexture::GetOrCreateRenderTarget("$BackBuffer", nWidth, nHeight, Clr_Empty, eTT_2D, nFlags | FT_USAGE_ALLOWREADSRGB, eTF_R8G8B8A8, TO_BACKBUFFERMAP);
-	else
-	{
-		s_ptexBackBuffer->SetFlags(nFlags | FT_USAGE_ALLOWREADSRGB);
-		s_ptexBackBuffer->SetWidth(nWidth);
-		s_ptexBackBuffer->SetHeight(nHeight);
-		s_ptexBackBuffer->CreateRenderTarget(eTF_R8G8B8A8, Clr_Empty);
+		s_ptexSceneTarget->CreateRenderTarget(eHDRTF, Clr_Empty);
 	}
 
 	nFlags &= ~(FT_USAGE_MSAA | FT_USAGE_UNORDERED_ACCESS);
@@ -813,7 +853,6 @@ void CRendererResources::CreateSceneMaps(ETEX_Format eTF, int resourceWidth, int
 void CRendererResources::DestroySceneMaps()
 {
 	SAFE_RELEASE(s_ptexSceneTarget);
-	SAFE_RELEASE(s_ptexBackBuffer);
 
 	if (CRenderer::CV_r_UsePersistentRTForModelHUD > 0)
 	{
@@ -832,34 +871,23 @@ void CRendererResources::CreateDeferredMaps(int resourceWidth, int resourceHeigh
 {
 	Vec2i resolution = Vec2i(resourceWidth, resourceHeight);
 
-	static uint32 nPrevLBuffersFmt = CRenderer::CV_r_DeferredShadingLBuffersFmt;
 //	if (!s_ptexSceneNormalsMap ||
 //		!s_ptexSceneNormalsMap->GetDevTexture() ||
 //		s_ptexSceneNormalsMap->GetDevTexture()->IsMSAAChanged()
 //		|| s_ptexSceneNormalsMap->GetWidth() != resolution.x
 //		|| s_ptexSceneNormalsMap->GetHeight() != resolution.y
-//		|| nPrevLBuffersFmt != CRenderer::CV_r_DeferredShadingLBuffersFmt
 //		|| (gRenDev->IsStereoEnabled() && !s_ptexVelocityObjects[1]->GetDevTexture()))
 	{
-		nPrevLBuffersFmt = CRenderer::CV_r_DeferredShadingLBuffersFmt;
-
 		const int width  = resolution.x, width_r2  = (width  + 1) / 2, width_r4  = (width_r2  + 1) / 2, width_r8  = (width_r4 +  1) / 2;
 		const int height = resolution.y, height_r2 = (height + 1) / 2, height_r4 = (height_r2 + 1) / 2, height_r8 = (height_r4 + 1) / 2;
 
 		SD3DPostEffectsUtils::GetOrCreateRenderTarget("$SceneNormalsMap", s_ptexSceneNormalsMap, width, height, Clr_Unknown, true, false, eTF_R8G8B8A8, TO_SCENE_NORMALMAP, FT_USAGE_ALLOWREADSRGB);
 		SD3DPostEffectsUtils::GetOrCreateRenderTarget("$SceneNormalsBent", s_ptexSceneNormalsBent, width, height, Clr_Median, true, false, eTF_R8G8B8A8);
 		SD3DPostEffectsUtils::GetOrCreateRenderTarget("$AOColorBleed", s_ptexAOColorBleed, width_r8, height_r8, Clr_Unknown, true, false, eTF_R8G8B8A8);
-		
-		ETEX_Format preferredDepthFormat =
-			gRenDev->GetDepthBpp() == 32 ? eTF_D32FS8 :
-			gRenDev->GetDepthBpp() == 24 ? eTF_D24S8 :
-			gRenDev->GetDepthBpp() ==  8 ? eTF_D16S8 : eTF_D16;
+		SD3DPostEffectsUtils::GetOrCreateRenderTarget("$ClipVolumes", s_ptexClipVolumes, width, height, Clr_Empty, false, false, eTF_R8G8);
+
+		ETEX_Format preferredDepthFormat = GetDepthFormat();
 		ETEX_Format fmtZScaled = eTF_R16G16B16A16F;
-		ETEX_Format nTexFormat = eTF_R16G16B16A16F;
-#if CRY_PLATFORM_WINDOWS || CRY_PLATFORM_APPLE || CRY_PLATFORM_LINUX || CRY_PLATFORM_ANDROID
-		if (CRenderer::CV_r_DeferredShadingLBuffersFmt == 1)
-			nTexFormat = eTF_R11G11B10F;
-#endif
 
 		SD3DPostEffectsUtils::GetOrCreateRenderTarget("$SceneDiffuseTmp", s_ptexSceneDiffuseTmp, width, height, Clr_Empty, true, false, eTF_R8G8B8A8);
 		SD3DPostEffectsUtils::GetOrCreateRenderTarget("$SceneSpecularTmp", s_ptexSceneSpecularTmp, width, height, Clr_Empty, true, false, eTF_R8G8B8A8);
@@ -967,6 +995,7 @@ void CRendererResources::DestroyDeferredMaps()
 	// shadow mask
 	SAFE_RELEASE(s_ptexRT_ShadowPool);
 	SAFE_RELEASE(s_ptexShadowMask);
+	SAFE_RELEASE(s_ptexClipVolumes);
 
 	// height map AO mask
 	SAFE_RELEASE(s_ptexHeightMapAO[0]);
@@ -985,35 +1014,35 @@ void CRendererResources::CreateHDRMaps(int resourceWidth, int resourceHeight)
 
 	pHDRPostProcess->ClearRenderTargetList();
 
-	const bool bR11G11B10FAvailable = s_hwTexFormatSupport.IsFormatSupported(eTF_R11G11B10F);
-	ETEX_Format nHDRFormat = (CRenderer::CV_r_HDRTexFormat == 0 && bR11G11B10FAvailable) ? eTF_R11G11B10F : eTF_R16G16B16A16F;
+	const ETEX_Format nHDRFormat  = GetHDRFormat(false, false); // No alpha, default is HiQ, can be downgraded
+	const ETEX_Format nHDRQFormat = GetHDRFormat(false, true ); // No alpha, default is LoQ, can be upgraded
+	const ETEX_Format nHDRAFormat = GetHDRFormat(true , false); // With alpha
 
 	uint32 nHDRTargetFlags = FT_DONT_RELEASE;
 	uint32 nHDRTargetFlagsUAV = nHDRTargetFlags | (FT_USAGE_UNORDERED_ACCESS);  // UAV required for tiled deferred shading
-	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, nHDRFormat, 1.0f, "$HDRTarget", &s_ptexHDRTarget, nHDRTargetFlagsUAV);
 
-#if !CRY_MOBILE_PIPELINE && !defined(CRY_PLATFORM_MOBILE)
-	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, eTF_R11G11B10F, 1.0f, "$HDRTargetPrev", &s_ptexHDRTargetPrev);
+	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, nHDRFormat , 1.0f, "$HDRTarget"      , &s_ptexHDRTarget      , nHDRTargetFlagsUAV);
+	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, nHDRAFormat, 1.0f, "$HDRTargetMasked", &s_ptexHDRTargetMasked, nHDRTargetFlags);
+	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, nHDRQFormat, 1.0f, "$HDRTargetPrev"  , &s_ptexHDRTargetPrev);
 
 	// Scaled versions of the HDR scene texture
-	pHDRPostProcess->AddRenderTarget(width_r2, height_r2, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaled0", &s_ptexHDRTargetScaled[0], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r2, height_r2, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTmp0", &s_ptexHDRTargetScaledTmp[0], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r2, height_r2, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTempRT0", &s_ptexHDRTargetScaledTempRT[0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r2 , height_r2 , Clr_Unknown, nHDRFormat, 0.9f, "$HDRTarget 1/2a" , &s_ptexHDRTargetScaled[0][0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r4 , height_r4 , Clr_Unknown, nHDRFormat, 0.9f, "$HDRTarget 1/4a" , &s_ptexHDRTargetScaled[1][0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r4 , height_r4 , Clr_Unknown, nHDRFormat, 0.9f, "$HDRTarget 1/4b" , &s_ptexHDRTargetScaled[1][1], FT_DONT_RELEASE);
 
-	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaled1", &s_ptexHDRTargetScaled[1], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTmp1", &s_ptexHDRTargetScaledTmp[1], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTempRT1", &s_ptexHDRTargetScaledTempRT[1], FT_DONT_RELEASE);
+	// Scaled versions of compositions of the HDR scene texture (with alpha)
+	pHDRPostProcess->AddRenderTarget(width_r2 , height_r2 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/2a" , &s_ptexHDRTargetMaskedScaled[0][0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r2 , height_r2 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/2b" , &s_ptexHDRTargetMaskedScaled[0][1], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r2 , height_r2 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/2c" , &s_ptexHDRTargetMaskedScaled[0][2], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r2 , height_r2 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/2d" , &s_ptexHDRTargetMaskedScaled[0][3], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r4 , height_r4 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/4a" , &s_ptexHDRTargetMaskedScaled[1][0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r4 , height_r4 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/4b" , &s_ptexHDRTargetMaskedScaled[1][1], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r8 , height_r8 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/8a" , &s_ptexHDRTargetMaskedScaled[2][0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r8 , height_r8 , Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/8b" , &s_ptexHDRTargetMaskedScaled[2][1], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r16, height_r16, Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/16a", &s_ptexHDRTargetMaskedScaled[3][0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r16, height_r16, Clr_Unknown, nHDRAFormat, 0.9f, "$HDRTargetMasked 1/16b", &s_ptexHDRTargetMaskedScaled[3][1], FT_DONT_RELEASE);
 
-	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, eTF_R11G11B10F, 0.9f, "$HDRTempBloom0", &s_ptexHDRTempBloom[0], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, eTF_R11G11B10F, 0.9f, "$HDRTempBloom1", &s_ptexHDRTempBloom[1], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, eTF_R11G11B10F, 0.9f, "$HDRFinalBloom", &s_ptexHDRFinalBloom, FT_DONT_RELEASE);
-
-	pHDRPostProcess->AddRenderTarget(width_r8, height_r8, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaled2", &s_ptexHDRTargetScaled[2], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r8, height_r8, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTempRT2", &s_ptexHDRTargetScaledTempRT[2], FT_DONT_RELEASE);
-
-	pHDRPostProcess->AddRenderTarget(width_r16, height_r16, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaled3", &s_ptexHDRTargetScaled[3], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r16, height_r16, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTmp3", &s_ptexHDRTargetScaledTmp[3], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r16, height_r16, Clr_Unknown, nHDRFormat, 0.9f, "$HDRTargetScaledTempRT3", &s_ptexHDRTargetScaledTempRT[3], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(width_r4, height_r4, Clr_Unknown, nHDRQFormat, 0.9f, "$HDRFinalBloom", &s_ptexHDRFinalBloom, FT_DONT_RELEASE);
 
 	for (int i = 0; i < 8; i++)
 	{
@@ -1022,19 +1051,15 @@ void CRendererResources::CreateHDRMaps(int resourceWidth, int resourceHeight)
 		pHDRPostProcess->AddRenderTarget(1, 1, Clr_White, eTF_R16G16F, 0.1f, szName, &s_ptexHDRAdaptedLuminanceCur[i], FT_DONT_RELEASE);
 	}
 
-	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, eTF_R11G11B10F, 1.0f, "$SceneTargetR11G11B10F_0", &s_ptexSceneTargetR11G11B10F[0], nHDRTargetFlagsUAV);
-	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, eTF_R11G11B10F, 1.0f, "$SceneTargetR11G11B10F_1", &s_ptexSceneTargetR11G11B10F[1], nHDRTargetFlags);
-#endif
+	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, nHDRQFormat, 1.0f, "$SceneTargetR11G11B10F_0", &s_ptexSceneTargetR11G11B10F[0], nHDRTargetFlagsUAV);
+	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, nHDRQFormat, 1.0f, "$SceneTargetR11G11B10F_1", &s_ptexSceneTargetR11G11B10F[1], nHDRTargetFlags);
 
 	pHDRPostProcess->AddRenderTarget(width, height, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$Velocity", &s_ptexVelocity, FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(20, height, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$VelocityTilesTmp0", &s_ptexVelocityTiles[0], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(20, 20, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$VelocityTilesTmp1", &s_ptexVelocityTiles[1], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(20, 20, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$VelocityTiles", &s_ptexVelocityTiles[2], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(   20, height, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$VelocityTilesTmp0", &s_ptexVelocityTiles[0], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(   20,     20, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$VelocityTilesTmp1", &s_ptexVelocityTiles[1], FT_DONT_RELEASE);
+	pHDRPostProcess->AddRenderTarget(   20,     20, Clr_Unknown, eTF_R8G8B8A8, 0.1f, "$VelocityTiles", &s_ptexVelocityTiles[2], FT_DONT_RELEASE);
 
-
-#if !CRY_MOBILE_PIPELINE && !defined(CRY_PLATFORM_MOBILE)
-	pHDRPostProcess->AddRenderTarget(width_r2, height_r2, Clr_Unknown, nHDRFormat, 0.9f, "$HDRDofLayerNear", &s_ptexHDRDofLayers[0], FT_DONT_RELEASE);
-	pHDRPostProcess->AddRenderTarget(width_r2, height_r2, Clr_Unknown, nHDRFormat, 0.9f, "$HDRDofLayerFar", &s_ptexHDRDofLayers[1], FT_DONT_RELEASE);
+#if RENDERER_ENABLE_FULL_PIPELINE
 	pHDRPostProcess->AddRenderTarget(width_r2, height_r2, Clr_Unknown, eTF_R16G16F, 1.0f, "$MinCoC_0_Temp", &s_ptexSceneCoCTemp, FT_DONT_RELEASE);
 	for (int i = 0; i < MIN_DOF_COC_K; i++)
 	{
@@ -1074,23 +1099,9 @@ void CRendererResources::DestroyHDRMaps()
 	int i;
 
 	SAFE_RELEASE_FORCE(s_ptexHDRTarget);
+	SAFE_RELEASE_FORCE(s_ptexHDRTargetMasked);
 	SAFE_RELEASE_FORCE(s_ptexHDRTargetPrev);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaled[0]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaled[1]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaled[2]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaled[3]);
 
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTmp[0]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTmp[1]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTmp[3]);
-
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTempRT[0]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTempRT[1]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTempRT[2]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTargetScaledTempRT[3]);
-
-	SAFE_RELEASE_FORCE(s_ptexHDRTempBloom[0]);
-	SAFE_RELEASE_FORCE(s_ptexHDRTempBloom[1]);
 	SAFE_RELEASE_FORCE(s_ptexHDRFinalBloom);
 
 	for (i = 0; i < 8; i++)
@@ -1115,8 +1126,15 @@ void CRendererResources::DestroyHDRMaps()
 	SAFE_RELEASE_FORCE(s_ptexVelocityTiles[1]);
 	SAFE_RELEASE_FORCE(s_ptexVelocityTiles[2]);
 
-	SAFE_RELEASE_FORCE(s_ptexHDRDofLayers[0]);
-	SAFE_RELEASE_FORCE(s_ptexHDRDofLayers[1]);
+	for (int i = 0; i < 4; ++i)
+	{
+		for (int j = 0; j < 4; ++j)
+		{
+			SAFE_RELEASE_FORCE(s_ptexHDRTargetScaled      [i][j]);
+			SAFE_RELEASE_FORCE(s_ptexHDRTargetMaskedScaled[i][j]);
+		}
+	}
+
 	SAFE_RELEASE_FORCE(s_ptexSceneCoCTemp);
 	for (i = 0; i < MIN_DOF_COC_K; i++)
 	{
@@ -1128,48 +1146,54 @@ void CRendererResources::DestroyHDRMaps()
 
 bool CRendererResources::CreatePostFXMaps(int resourceWidth, int resourceHeight)
 {
-#if !defined(CRY_PLATFORM_MOBILE)
+#if RENDERER_ENABLE_FULL_PIPELINE
 	const bool bCreateCaustics = (CRenderer::CV_r_watervolumecaustics && CRenderer::CV_r_watercaustics && CRenderer::CV_r_watercausticsdeferred) && !CTexture::IsTextureExist(s_ptexWaterCaustics[0]);
 
-	const int width = resourceWidth, width_r2 = (width + 1) / 2, width_r4 = (width_r2 + 1) / 2, width_r8 = (width_r4 + 1) / 2;
+	const int width  = resourceWidth , width_r2  = (width  + 1) / 2, width_r4  = (width_r2  + 1) / 2, width_r8  = (width_r4  + 1) / 2;
 	const int height = resourceHeight, height_r2 = (height + 1) / 2, height_r4 = (height_r2 + 1) / 2, height_r8 = (height_r4 + 1) / 2;
+	
+	const ETEX_Format nHDRFormat  = GetHDRFormat(false, false); // No alpha, default is HiQ, can be downgraded
+	const ETEX_Format nHDRQFormat = GetHDRFormat(false, true ); // No alpha, default is LoQ, can be upgraded
+	const ETEX_Format nHDRAFormat = GetHDRFormat(true , false); // With alpha
+	const ETEX_Format nLDRPFormat = GetLDRFormat(true);         // With more than 8 mantissa bits for calculations
 
-	if (!s_ptexBackBufferScaled[0] ||
-		s_ptexBackBufferScaled[0]->GetWidth() != width_r2 ||
-		s_ptexBackBufferScaled[0]->GetHeight() != height_r2 || 
+	if (!s_ptexDisplayTargetSrc ||
+		s_ptexDisplayTargetSrc->GetWidth() != width ||
+		s_ptexDisplayTargetSrc->GetHeight() != height ||
 		bCreateCaustics)
 	{
 		assert(gRenDev);
 
+		// Scaled versions of the scene target
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget"   , s_ptexDisplayTargetSrc, width, height, Clr_Unknown, 1, 0, nLDRPFormat, TO_BACKBUFFERMAP, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTargetDst", s_ptexDisplayTargetDst, width, height, Clr_Unknown, 1, 0, nLDRPFormat, TO_BACKBUFFERMAP, FT_DONT_RELEASE);
+
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget 1/2a", s_ptexDisplayTargetScaled[0], width_r2, height_r2, Clr_Unknown, 1, 0, nLDRPFormat, TO_BACKBUFFERSCALED_D2, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget 1/4a", s_ptexDisplayTargetScaled[1], width_r4, height_r4, Clr_Unknown, 1, 0, nLDRPFormat, TO_BACKBUFFERSCALED_D4, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget 1/8" , s_ptexDisplayTargetScaled[2], width_r8, height_r8, Clr_Unknown, 1, 0, nLDRPFormat, TO_BACKBUFFERSCALED_D8, FT_DONT_RELEASE);
+
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget 1/2b", s_ptexDisplayTargetScaledTemp[0], width_r2, height_r2, Clr_Unknown, 1, 0, nLDRPFormat, -1, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget 1/4b", s_ptexDisplayTargetScaledTemp[1], width_r4, height_r4, Clr_Unknown, 1, 0, nLDRPFormat, -1, FT_DONT_RELEASE);
+
+		// Ghosting requires data overframes, need to handle for each GPU in MGPU mode
+		SPostEffectsUtils::GetOrCreateRenderTarget("$DisplayTarget 1/2p", s_ptexDisplayTargetScaledPrev, width_r2, height_r2, Clr_Unknown, 1, 0, nLDRPFormat, -1, FT_DONT_RELEASE);
+
 		SPostEffectsUtils::GetOrCreateRenderTarget("$Cached3DHud", s_ptexCached3DHud, width, height, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
 		SPostEffectsUtils::GetOrCreateRenderTarget("$Cached3DHudDownsampled", s_ptexCached3DHudScaled, width_r4, height_r4, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
 
-		// Scaled versions of the scene target
-		SPostEffectsUtils::GetOrCreateRenderTarget("$BackBufferScaled_d2", s_ptexBackBufferScaled[0], width_r2, height_r2, Clr_Unknown, 1, 0, eTF_R8G8B8A8, TO_BACKBUFFERSCALED_D2, FT_DONT_RELEASE);
-
-		// Ghosting requires data overframes, need to handle for each GPU in MGPU mode
-		SPostEffectsUtils::GetOrCreateRenderTarget("$PrevFrameScaled", s_ptexPrevFrameScaled, width_r2, height_r2, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
-
-		SPostEffectsUtils::GetOrCreateRenderTarget("$BackBufferScaledTemp_d2", s_ptexBackBufferScaledTemp[0], width_r2, height_r2, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
-		SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeRefl", s_ptexWaterVolumeRefl[0], width_r2, height_r2, Clr_Unknown, 1, true, eTF_R11G11B10F, TO_WATERVOLUMEREFLMAP, FT_DONT_RELEASE);
-		SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeReflPrev", s_ptexWaterVolumeRefl[1], width_r2, height_r2, Clr_Unknown, 1, true, eTF_R11G11B10F, TO_WATERVOLUMEREFLMAPPREV, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeRefl"    , s_ptexWaterVolumeRefl[0], width_r2, height_r2, Clr_Unknown, 1, true, nHDRQFormat, TO_WATERVOLUMEREFLMAP, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeReflPrev", s_ptexWaterVolumeRefl[1], width_r2, height_r2, Clr_Unknown, 1, true, nHDRQFormat, TO_WATERVOLUMEREFLMAPPREV, FT_DONT_RELEASE);
 
 		//	s_ptexWaterVolumeRefl[0]->DisableMgpuSync();
 		//	s_ptexWaterVolumeRefl[1]->DisableMgpuSync();
 
-		SPostEffectsUtils::GetOrCreateRenderTarget("$BackBufferScaled_d4", s_ptexBackBufferScaled[1], width_r4, height_r4, Clr_Unknown, 1, 0, eTF_R8G8B8A8, TO_BACKBUFFERSCALED_D4, FT_DONT_RELEASE);
-		SPostEffectsUtils::GetOrCreateRenderTarget("$BackBufferScaledTemp_d4", s_ptexBackBufferScaledTemp[1], width_r4, height_r4, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
-
-		SPostEffectsUtils::GetOrCreateRenderTarget("$BackBufferScaled_d8", s_ptexBackBufferScaled[2], width_r8, height_r8, Clr_Unknown, 1, 0, eTF_R8G8B8A8, TO_BACKBUFFERSCALED_D8, FT_DONT_RELEASE);
-
-		SPostEffectsUtils::GetOrCreateRenderTarget("$RainSSOcclusion0", s_ptexRainSSOcclusion[0], width_r8, height_r8, Clr_Unknown, 1, false, eTF_R8G8B8A8);
-		SPostEffectsUtils::GetOrCreateRenderTarget("$RainSSOcclusion1", s_ptexRainSSOcclusion[1], width_r8, height_r8, Clr_Unknown, 1, false, eTF_R8G8B8A8);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$RainSSOcclusion0", s_ptexRainSSOcclusion[0], width_r8, height_r8, Clr_Unknown, 1, false, eTF_R8);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$RainSSOcclusion1", s_ptexRainSSOcclusion[1], width_r8, height_r8, Clr_Unknown, 1, false, eTF_R8);
 
 		if (CRenderer::CV_r_watervolumecaustics && CRenderer::CV_r_watercaustics && CRenderer::CV_r_watercausticsdeferred)
 		{
-			const int nCausticRes = clamp_tpl(CRenderer::CV_r_watervolumecausticsresolution, 256, 4096);
-			SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeCaustics", s_ptexWaterCaustics[0], nCausticRes, nCausticRes, Clr_Unknown, 1, false, eTF_R8G8B8A8, TO_WATERVOLUMECAUSTICSMAP);
-			SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeCausticsTemp", s_ptexWaterCaustics[1], nCausticRes, nCausticRes, Clr_Unknown, 1, false, eTF_R8G8B8A8, TO_WATERVOLUMECAUSTICSMAPTEMP);
+			SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeCaustics"     , s_ptexWaterCaustics[0], width_r2, height_r2, Clr_Unknown, 1, false, eTF_R8G8B8A8, TO_WATERVOLUMECAUSTICSMAP);
+			SPostEffectsUtils::GetOrCreateRenderTarget("$WaterVolumeCausticsTemp" , s_ptexWaterCaustics[1], width_r2, height_r2, Clr_Unknown, 1, false, eTF_R8G8B8A8, TO_WATERVOLUMECAUSTICSMAPTEMP);
 		}
 		else
 		{
@@ -1179,8 +1203,8 @@ bool CRendererResources::CreatePostFXMaps(int resourceWidth, int resourceHeight)
 
 #if defined(VOLUMETRIC_FOG_SHADOWS)
 		int fogShadowBufDiv = (CRenderer::CV_r_FogShadows == 2) ? 4 : 2;
-		SPostEffectsUtils::GetOrCreateRenderTarget("$VolFogShadowBuf0", s_ptexVolFogShadowBuf[0], width / fogShadowBufDiv, height / fogShadowBufDiv, Clr_Unknown, 1, 0, eTF_R8G8B8A8, TO_VOLFOGSHADOW_BUF);
-		SPostEffectsUtils::GetOrCreateRenderTarget("$VolFogShadowBuf1", s_ptexVolFogShadowBuf[1], width / fogShadowBufDiv, height / fogShadowBufDiv, Clr_Unknown, 1, 0, eTF_R8G8B8A8);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$VolFogShadowBuf0", s_ptexVolFogShadowBuf[0], width / fogShadowBufDiv, height / fogShadowBufDiv, Clr_Unknown, 1, 0, eTF_R8G8, TO_VOLFOGSHADOW_BUF);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$VolFogShadowBuf1", s_ptexVolFogShadowBuf[1], width / fogShadowBufDiv, height / fogShadowBufDiv, Clr_Unknown, 1, 0, eTF_R8G8);
 #endif
 
 		// TODO: Only create necessary RTs for minimal ring?
@@ -1188,10 +1212,10 @@ bool CRendererResources::CreatePostFXMaps(int resourceWidth, int resourceHeight)
 		for (int i = 0, end = gcpRendD3D->GetActiveGPUCount() * MAX_FRAMES_IN_FLIGHT; i < end; i++)
 		{
 			sprintf(str, "$FlaresOcclusion_%d", i);
-			SPostEffectsUtils::GetOrCreateRenderTarget(str, s_ptexFlaresOcclusionRing[i], CFlareSoftOcclusionQuery::s_nIDColMax, CFlareSoftOcclusionQuery::s_nIDRowMax, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE | FT_STAGE_READBACK);
+			SPostEffectsUtils::GetOrCreateRenderTarget(str, s_ptexFlaresOcclusionRing[i], CFlareSoftOcclusionQuery::s_nIDColMax, CFlareSoftOcclusionQuery::s_nIDRowMax, Clr_Unknown, 1, 0, eTF_R8G8, -1, FT_DONT_RELEASE | FT_STAGE_READBACK);
 		}
 
-		SPostEffectsUtils::GetOrCreateRenderTarget("$FlaresGather", s_ptexFlaresGather, CFlareSoftOcclusionQuery::s_nGatherTextureWidth, CFlareSoftOcclusionQuery::s_nGatherTextureHeight, Clr_Unknown, 1, 0, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$FlaresGather", s_ptexFlaresGather, CFlareSoftOcclusionQuery::s_nGatherTextureWidth, CFlareSoftOcclusionQuery::s_nGatherTextureHeight, Clr_Unknown, 1, 0, eTF_R8, -1, FT_DONT_RELEASE);
 	}
 
 	/*
@@ -1199,7 +1223,7 @@ bool CRendererResources::CreatePostFXMaps(int resourceWidth, int resourceHeight)
 	 */
 
 	if (!CTexture::IsTextureExist(s_ptexRainOcclusion))
-		SPostEffectsUtils::GetOrCreateRenderTarget("$RainOcclusion", s_ptexRainOcclusion, RAIN_OCC_MAP_SIZE, RAIN_OCC_MAP_SIZE, Clr_Neutral, false, false, eTF_R8G8B8A8, -1, FT_DONT_RELEASE);
+		SPostEffectsUtils::GetOrCreateRenderTarget("$RainOcclusion", s_ptexRainOcclusion, RAIN_OCC_MAP_SIZE, RAIN_OCC_MAP_SIZE, Clr_Neutral, false, false, eTF_R8, -1, FT_DONT_RELEASE);
 
 	if (!CTexture::IsTextureExist(s_ptexWaterVolumeDDN))
 	{
@@ -1213,12 +1237,14 @@ bool CRendererResources::CreatePostFXMaps(int resourceWidth, int resourceHeight)
 
 void CRendererResources::DestroyPostFXMaps()
 {
-	SAFE_RELEASE_FORCE(s_ptexBackBufferScaled[0]);
-	SAFE_RELEASE_FORCE(s_ptexBackBufferScaled[1]);
-	SAFE_RELEASE_FORCE(s_ptexBackBufferScaled[2]);
-
-	SAFE_RELEASE_FORCE(s_ptexBackBufferScaledTemp[0]);
-	SAFE_RELEASE_FORCE(s_ptexBackBufferScaledTemp[1]);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetSrc);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetDst);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetScaled[0]);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetScaled[1]);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetScaled[2]);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetScaledTemp[0]);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetScaledTemp[1]);
+	SAFE_RELEASE_FORCE(s_ptexDisplayTargetScaledPrev);
 
 	SAFE_RELEASE(s_ptexWaterVolumeDDN);
 	SAFE_RELEASE_FORCE(s_ptexWaterVolumeRefl[0]);
@@ -1228,8 +1254,6 @@ void CRendererResources::DestroyPostFXMaps()
 
 	SAFE_RELEASE_FORCE(s_ptexCached3DHud);
 	SAFE_RELEASE_FORCE(s_ptexCached3DHudScaled);
-
-	SAFE_RELEASE_FORCE(s_ptexPrevFrameScaled);
 
 	SAFE_RELEASE(s_ptexRainSSOcclusion[0]);
 	SAFE_RELEASE(s_ptexRainSSOcclusion[1]);
@@ -1435,7 +1459,8 @@ void CRendererResources::Clear()
 		s_ptexSceneSpecular,
 		s_ptexSceneDiffuseTmp,
 		s_ptexSceneSpecularTmp,
-		s_ptexBackBuffer,
+		s_ptexDisplayTargetSrc,
+		s_ptexDisplayTargetDst,
 		s_ptexSceneTarget,
 		s_ptexLinearDepth,
 		s_ptexHDRTarget
@@ -1462,7 +1487,8 @@ void CRendererResources::ShutDown()
 		s_ptexSceneSpecular = NULL;
 		s_ptexSceneDiffuseTmp = NULL;
 		s_ptexSceneSpecularTmp = NULL;
-		s_ptexBackBuffer = NULL;
+		s_ptexDisplayTargetSrc = NULL;
+		s_ptexDisplayTargetDst = NULL;
 		s_ptexSceneTarget = NULL;
 		s_ptexLinearDepth = NULL;
 		s_ptexHDRTarget = NULL;
@@ -1488,14 +1514,9 @@ size_t CRendererResources::m_DTallocs = 0;
 
 CTexture* CRendererResources::CreateDepthTarget(int nWidth, int nHeight, const ColorF& cClear, ETEX_Format eTF)
 {
-	const ETEX_Format preferredDepthFormat = eTF == eTF_Unknown ?
-		gRenDev->GetDepthBpp() == 32 ? eTF_D32FS8 :
-		gRenDev->GetDepthBpp() == 24 ? eTF_D24S8 :
-		gRenDev->GetDepthBpp() == 8  ? eTF_D16S8 : eTF_D16 : eTF;
-
 	char pName[128]; // Create unique names for every allocation, otherwise name-matches would occur in GetOrCreateDepthStencil()
 	cry_sprintf(pName, "$DynDepthStencil_%8_x%d", m_DTallocs + 1, m_DTallocs + 2); ++m_DTallocs;
-	return CTexture::GetOrCreateDepthStencil(pName, nWidth, nHeight, cClear, eTT_2D, FT_USAGE_TEMPORARY | FT_NOMIPS, preferredDepthFormat);
+	return CTexture::GetOrCreateDepthStencil(pName, nWidth, nHeight, cClear, eTT_2D, FT_USAGE_TEMPORARY | FT_NOMIPS, eTF == eTF_Unknown ? GetDepthFormat() : eTF);
 }
 
 CTexture* CRendererResources::CreateRenderTarget(int nWidth, int nHeight, const ColorF& cClear, ETEX_Format eTF)

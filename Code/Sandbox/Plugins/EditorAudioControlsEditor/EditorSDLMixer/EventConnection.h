@@ -16,13 +16,14 @@ class CEventConnection final : public CBaseConnection
 {
 public:
 
-	enum class EActionType
+	enum class EActionType : CryAudio::EnumFlagsType
 	{
 		Start,
 		Stop,
 		Pause,
-		Resume,
-	};
+		Resume, };
+
+	CEventConnection() = delete;
 
 	explicit CEventConnection(ControlId const id)
 		: CBaseConnection(id)
@@ -37,8 +38,6 @@ public:
 		, m_isInfiniteLoop(false)
 		, m_loopCount(1)
 	{}
-
-	CEventConnection() = delete;
 
 	// CBaseConnection
 	virtual void Serialize(Serialization::IArchive& ar) override;

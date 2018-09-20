@@ -171,6 +171,11 @@ if (DURANGO)
 	endif()
 endif()
 
+if (OPTION_STATIC_LINKING_WITH_GAME_AS_DLL)
+		MESSAGE(STATUS "Enabling OPTION_STATIC_LINKING because OPTION_STATIC_LINKING_WITH_GAME_AS_DLL was set")
+		set(OPTION_STATIC_LINKING ON CACHE BOOL "Enabling OPTION_STATIC_LINKING because OPTION_STATIC_LINKING_WITH_GAME_AS_DLL was set" FORCE)
+endif()
+
 if(OPTION_STATIC_LINKING)
 	# Enable static libraries
 	MESSAGE(STATUS "Use Static Linking (.lib/.a)" )
@@ -194,16 +199,6 @@ if (OUTPUT_DIRECTORY)
 	# Make sure the output directory exists
 	file(MAKE_DIRECTORY "${OUTPUT_DIRECTORY}")
 endif (OUTPUT_DIRECTORY)
-
-# Bootstrap support
-if(EXISTS "${TOOLS_CMAKE_DIR}/Bootstrap.cmake")
-	include("${TOOLS_CMAKE_DIR}/Bootstrap.cmake")
-	if(OPTION_AUTO_BOOTSTRAP)
-		set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "bootstrap.dat")
-	endif()
-elseif(EXISTS "${TOOLS_CMAKE_DIR}/DownloadSDKs.cmake")
-	include("${TOOLS_CMAKE_DIR}/DownloadSDKs.cmake")
-endif()
 
 include("${TOOLS_CMAKE_DIR}/ConfigureChecks.cmake")
 include("${TOOLS_CMAKE_DIR}/CommonMacros.cmake")

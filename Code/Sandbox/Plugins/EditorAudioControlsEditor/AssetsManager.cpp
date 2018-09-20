@@ -105,11 +105,11 @@ CControl* CAssetsManager::CreateControl(string const& name, EAssetType const typ
 }
 
 //////////////////////////////////////////////////////////////////////////
-CControl* CAssetsManager::CreateDefaultControl(string const& name, EAssetType const type, CAsset* const pParent, bool const isInternal, string const& description)
+CControl* CAssetsManager::CreateDefaultControl(string const& name, EAssetType const type, CAsset* const pParent, EAssetFlags const flags, string const& description)
 {
 	CControl* pControl = nullptr;
 
-	if (isInternal)
+	if ((flags& EAssetFlags::IsInternalControl) != 0)
 	{
 		pControl = CreateControl(name, type, pParent);
 	}
@@ -153,15 +153,7 @@ CControl* CAssetsManager::CreateDefaultControl(string const& name, EAssetType co
 	{
 		pControl->SetScope(GlobalScopeId);
 		pControl->SetDescription(description);
-
-		if (isInternal)
-		{
-			pControl->SetFlags(pControl->GetFlags() | (EAssetFlags::IsDefaultControl | EAssetFlags::IsInternalControl));
-		}
-		else
-		{
-			pControl->SetFlags(pControl->GetFlags() | EAssetFlags::IsDefaultControl);
-		}
+		pControl->SetFlags(pControl->GetFlags() | flags);
 	}
 
 	return pControl;
@@ -335,32 +327,21 @@ void CAssetsManager::OnAssetRenamed(CAsset* const pAsset)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CAssetsManager::UpdateFolderPaths()
+void CAssetsManager::UpdateConfigFolderPath()
 {
-	string const rootPath = AUDIO_SYSTEM_DATA_ROOT "/";
-
 	if (g_pIImpl != nullptr)
 	{
-		string const& implFolderPath = rootPath + g_pIImpl->GetFolderName() + "/";
-		m_configFolderPath = implFolderPath + CryAudio::s_szConfigFolderName + "/";
-		m_assetFolderPath = implFolderPath + CryAudio::s_szAssetsFolderName + "/";
+		m_configFolderPath = AUDIO_SYSTEM_DATA_ROOT "/" + g_pIImpl->GetFolderName() + "/" + CryAudio::s_szConfigFolderName + "/";
 	}
 	else
 	{
-		m_configFolderPath = rootPath;
-		m_assetFolderPath = rootPath;
+		m_configFolderPath = AUDIO_SYSTEM_DATA_ROOT "/";
 	}
 }
 //////////////////////////////////////////////////////////////////////////
 string const& CAssetsManager::GetConfigFolderPath() const
 {
 	return m_configFolderPath;
-}
-
-//////////////////////////////////////////////////////////////////////////
-string const& CAssetsManager::GetAssetFolderPath() const
-{
-	return m_assetFolderPath;
 }
 
 //////////////////////////////////////////////////////////////////////////

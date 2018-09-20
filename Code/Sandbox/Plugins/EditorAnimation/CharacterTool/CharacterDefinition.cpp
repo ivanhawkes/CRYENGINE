@@ -910,6 +910,7 @@ void MirrorAttachment(const CharacterAttachment& att0, CharacterAttachment& att1
 		att1.m_frame0[j] = ((int)fabs(att1.m_frame0[j] * 10) * 0.1f) * sgnnz(att1.m_frame0[j]);
 	att1.m_damping = att0.m_damping;
 	att1.m_tension = att0.m_tension;
+	att1.m_submtlId = att0.m_submtlId;
 	att1.m_updateMirror = false;
 }
 
@@ -1146,6 +1147,7 @@ void CharacterAttachment::Serialize(Serialization::IArchive& ar)
 			ar(Serialization::RadiansAsDeg(m_frame0), "frame0", "Rotation0");
 			ar(m_tension, "tension", "Spring Tension");
 			ar(m_damping, "damping", "Spring Damping");
+			ar(m_submtlId, "submtl", "SubMtl Index");
 			ar(m_strJointNameMirror, "mirrorName");
 			ar(m_boneTrans, "boneTrans");
 			ar(m_boneTransMirror, "boneTransMirror");
@@ -1335,16 +1337,16 @@ void CharacterAttachment::Serialize(Serialization::IArchive& ar)
 				ar.closeBlock();
 			}
 
-			if (ar.openBlock("longrangeattachments", "+Long Range Attachments"))
+			if (ar.openBlock("nearestNeighborDistanceConstraints", "+Nearest Neighbor Distance Constraints"))
 			{
-				ar(m_vclothParams.longRangeAttachments, "longRangeAttachments", "Long Range Attachments");
-				ar.doc("Enables LRA for improved stiffness, while reducing elasticity.");
-				ar(Serialization::Range(m_vclothParams.longRangeAttachmentsMaximumShiftFactor, 0.0f, 0.8f), "longRangeAttachmentsMaximumShiftFactor", "LRA maximum shift factor");
-				ar.doc("Scales maximum shift per iteration in direction of closest neighbor, e.g. 0.5 -> half way to closest neighbor. Smaller values result in higher stability.");
-				ar(Serialization::Range(m_vclothParams.longRangeAttachmentsShiftCollisionFactor, -2.0f, 2.0f), "longRangeAttachmentsShiftCollisionFactor", "LRA shift collision factor");
+				ar(m_vclothParams.useNearestNeighborDistanceConstraints, "nearestNeighborDistanceConstraints", "Nearest Neighbor Distance Constraints");
+				ar.doc("Enables NNDC for improved stiffness, while reducing elasticity.");
+				ar(Serialization::Range(m_vclothParams.nndcMaximumShiftFactor, 0.0f, 0.8f), "nndcMaximumShiftFactor", "NNDC maximum shift factor");
+				ar.doc("Scales maximum shift per iteration in direction of closest neighbor, e.g. 0.5 -> half way to nearest neighbor. Smaller values result in higher stability.");
+				ar(Serialization::Range(m_vclothParams.nndcShiftCollisionFactor, -2.0f, 2.0f), "nndcShiftCollisionFactor", "NNDC shift collision factor");
 				ar.doc("Scales in case of shift the velocity, 0.0=no shift, 1.0=no velocity change, -1=increase velocity by change.");
-				ar(Serialization::Range(m_vclothParams.longRangeAttachmentsAllowedExtension, 0.0f, 1.0f), "longRangeAttachmentsAllowedExtension", "LRA allowed extension");
-				ar.doc("Allowed extension for Long Range Attachments, e.g. 0.1 = 10%");
+				ar(Serialization::Range(m_vclothParams.nndcAllowedExtension, 0.0f, 1.0f), "nndcAllowedExtension", "NNDC maximum allowed extension per neighbor");
+				ar.doc("Allowed extension for nndc, e.g. 0.1 = 10%");
 				ar.closeBlock();
 			}
 
@@ -1391,7 +1393,7 @@ void CharacterAttachment::Serialize(Serialization::IArchive& ar)
 			{
 				ar(Serialization::Range(m_vclothParams.debugDrawVerticesRadius, 0.0f, 1.0f), "debugDrawVerticesRadius", "Draw Vertices Radius");
 				ar(Serialization::Range(m_vclothParams.debugDrawCloth,0, std::numeric_limits<int>::max()), "debugDrawCloth", "Draw Cloth");
-				ar(Serialization::Range(m_vclothParams.debugDrawLRA,0, std::numeric_limits<int>::max()), "debugDrawLRA", "Draw Long Range Attachments");
+				ar(Serialization::Range(m_vclothParams.debugDrawNndc,0, std::numeric_limits<int>::max()), "debugDrawNNDC", "Draw Nearest Neighbor Distance Constraints");
 				ar(Serialization::Range(m_vclothParams.debugPrint,0, std::numeric_limits<int>::max()), "debugPrint", "Debug");
 				ar.closeBlock();
 			}
@@ -1516,7 +1518,6 @@ bool CharacterDefinition::LoadFromXml(const XmlNodeRef& root)
 		tagname(uint32 crc32, AttachmentTypes type, bool dsetup, bool dtext, bool active)
 		{
 			m_crc32 = crc32;
-			;
 			m_type = type;
 			m_dsetup = dsetup;
 			m_dtext = dtext;
@@ -1797,11 +1798,11 @@ bool CharacterDefinition::LoadFromXml(const XmlNodeRef& root)
 					nodeAttach->getAttr("springDampingPerSubstep", attach.m_vclothParams.springDampingPerSubstep);
 					nodeAttach->getAttr("collisionDampingTangential", attach.m_vclothParams.collisionDampingTangential);
 
-					// Long Range Attachments
-					nodeAttach->getAttr("longRangeAttachments", attach.m_vclothParams.longRangeAttachments);
-					nodeAttach->getAttr("longRangeAttachmentsAllowedExtension", attach.m_vclothParams.longRangeAttachmentsAllowedExtension);
-					nodeAttach->getAttr("longRangeAttachmentsMaximumShiftFactor", attach.m_vclothParams.longRangeAttachmentsMaximumShiftFactor);
-					nodeAttach->getAttr("longRangeAttachmentsShiftCollisionFactor", attach.m_vclothParams.longRangeAttachmentsShiftCollisionFactor);
+					// Nearest Neighbor Distance Constraints
+					nodeAttach->getAttr("nearestNeighborDistanceConstraints", attach.m_vclothParams.useNearestNeighborDistanceConstraints);
+					nodeAttach->getAttr("nndcAllowedExtension", attach.m_vclothParams.nndcAllowedExtension);
+					nodeAttach->getAttr("nndcMaximumShiftFactor", attach.m_vclothParams.nndcMaximumShiftFactor);
+					nodeAttach->getAttr("nndcShiftCollisionFactor", attach.m_vclothParams.nndcShiftCollisionFactor);
 
 					// Test Reset Damping
 					nodeAttach->getAttr("resetDampingFactor", attach.m_vclothParams.resetDampingFactor);
@@ -1823,7 +1824,7 @@ bool CharacterDefinition::LoadFromXml(const XmlNodeRef& root)
 					attach.m_vclothParams.material = nodeAttach->getAttr("Material");
 					nodeAttach->getAttr("debugDrawVerticesRadius", attach.m_vclothParams.debugDrawVerticesRadius);
 					nodeAttach->getAttr("debugDrawCloth", attach.m_vclothParams.debugDrawCloth);
-					nodeAttach->getAttr("debugDrawLRA", attach.m_vclothParams.debugDrawLRA);
+					nodeAttach->getAttr("debugDrawNNDC", attach.m_vclothParams.debugDrawNndc);
 					nodeAttach->getAttr("debugPrint", attach.m_vclothParams.debugPrint);
 				}
 
@@ -2269,11 +2270,11 @@ void CharacterDefinition::ExportVClothAttachment(const CharacterAttachment& atta
 	nodeAttach->setAttr("springDampingPerSubstep", attach.m_vclothParams.springDampingPerSubstep);
 	nodeAttach->setAttr("collisionDampingTangential", attach.m_vclothParams.collisionDampingTangential);
 
-	// Long Range Attachments
-	nodeAttach->setAttr("longRangeAttachments", attach.m_vclothParams.longRangeAttachments);
-	nodeAttach->setAttr("longRangeAttachmentsAllowedExtension", attach.m_vclothParams.longRangeAttachmentsAllowedExtension);
-	nodeAttach->setAttr("longRangeAttachmentsMaximumShiftFactor", attach.m_vclothParams.longRangeAttachmentsMaximumShiftFactor);
-	nodeAttach->setAttr("longRangeAttachmentsShiftCollisionFactor", attach.m_vclothParams.longRangeAttachmentsShiftCollisionFactor);
+	// Nearest Neighbor Distance Constraints
+	nodeAttach->setAttr("nearestNeighborDistanceConstraints", attach.m_vclothParams.useNearestNeighborDistanceConstraints);
+	nodeAttach->setAttr("nndcAllowedExtension", attach.m_vclothParams.nndcAllowedExtension);
+	nodeAttach->setAttr("nndcMaximumShiftFactor", attach.m_vclothParams.nndcMaximumShiftFactor);
+	nodeAttach->setAttr("nndcShiftCollisionFactor", attach.m_vclothParams.nndcShiftCollisionFactor);
 
 	// Test Reset Damping
 	nodeAttach->setAttr("resetDampingFactor", attach.m_vclothParams.resetDampingFactor);
@@ -2295,7 +2296,7 @@ void CharacterDefinition::ExportVClothAttachment(const CharacterAttachment& atta
 	nodeAttach->setAttr("Material", attach.m_vclothParams.material); // also store material in vCloth-node - otherwise material would be lost, while saving
 	nodeAttach->setAttr("debugDrawVerticesRadius", attach.m_vclothParams.debugDrawVerticesRadius);
 	nodeAttach->setAttr("debugDrawCloth", attach.m_vclothParams.debugDrawCloth);
-	nodeAttach->setAttr("debugDrawLRA", attach.m_vclothParams.debugDrawLRA);
+	nodeAttach->setAttr("debugDrawNNDC", attach.m_vclothParams.debugDrawNndc);
 	nodeAttach->setAttr("debugPrint", attach.m_vclothParams.debugPrint);
 }
 
@@ -2472,7 +2473,7 @@ void CharacterDefinition::ApplyPhysAttachments(ICharacterInstance* pICharacterIn
 			if (IGeometry *pGeom = attachment.CreateProxyGeom())
 			{
 				CryBonePhysics& phys = *skel.GetJointPhysInfo(skel.GetJointIDByName(attachment.m_strJointName), m_physLod);
-				phys.pPhysGeom = pGeoman->RegisterGeometry(pGeom);
+				phys.pPhysGeom = pGeoman->RegisterGeometry(pGeom, attachment.m_submtlId);
 				pGeom->Release();
 				phys.flags = joint_no_gravity | joint_isolated_accelerations;
 				*(Vec3*)phys.min = DEG2RAD(Vec3(attachment.m_limits[0]));
@@ -2791,6 +2792,7 @@ void CharacterDefinition::LoadPhysProxiesFromCharacter(ICharacterInstance *chara
 			att.m_frame0 = Ang3(q0);
 			for(j = 0; j < 3; j++)
 				att.m_frame0[j] = ((int)fabs(att.m_frame0[j] * 10) * 0.1f) * sgnnz(att.m_frame0[j]);
+			att.m_submtlId = pPhys->surface_idx;
 			att.UpdateMirrorInfo(i, skel);
 
 			attachments.push_back(att);
@@ -2803,13 +2805,14 @@ void CharacterDefinition::SavePhysProxiesToCGF(const char* fname)
 {
 	IStatObj* pSkelObj = gEnv->p3DEngine->CreateStatObj();
 	pSkelObj->FreeIndexedMesh();
+	pSkelObj->SetMaterial(gEnv->p3DEngine->GetMaterialManager()->FindMaterial(materialPath));
 	for(int i = 0; i < attachments.size(); i++)
 	{
 		const CharacterAttachment& att = attachments[i];
 		if (att.m_attachmentType != CA_PROX || att.m_ProxyPurpose != CharacterAttachment::RAGDOLL)
 			continue;
 		IStatObj::SSubObject& subObj = pSkelObj->AddSubObject(gEnv->p3DEngine->CreateStatObj());
-		phys_geometry *pGeom = gEnv->pPhysicalWorld->GetGeomManager()->RegisterGeometry(att.CreateProxyGeom());
+		phys_geometry *pGeom = gEnv->pPhysicalWorld->GetGeomManager()->RegisterGeometry(att.CreateProxyGeom(), att.m_submtlId);
 		pGeom->pGeom->Release();
 		subObj.pStatObj->SetPhysGeom(pGeom);
 		subObj.pStatObj->SetBBoxMax(Vec3(0.1f));

@@ -1,19 +1,16 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
-#include <StdAfx.h>
-
-// EditorCommon
-#include <ICommandManager.h>
-#include <IUndoObject.h>
-#include <Grid.h>
-
-// Sandbox
-#include "IEditorImpl.h"
-#include "Objects/ObjectManager.h"
-#include "Objects/ObjectLayerManager.h"
+#include "StdAfx.h"
 
 #include "Objects/Group.h"
+#include "Objects/ObjectManager.h"
+#include "Objects/ObjectLayerManager.h"
 #include "Objects/PrefabObject.h"
 #include "Prefabs/PrefabManager.h"
+#include "IEditorImpl.h"
+
+#include <Preferences/SnappingPreferences.h>
+#include <ICommandManager.h>
+#include <IUndoObject.h>
 
 namespace Private_EditorCommands
 {
@@ -268,7 +265,7 @@ REGISTER_EDITOR_AND_SCRIPT_COMMAND(Private_EditorCommands::DetachFromGroup, grou
 REGISTER_EDITOR_UI_COMMAND_DESC(group, detach, "Detach", "", "", false);
 REGISTER_COMMAND_REMAPPING(ui_action, actionGroup_Detach, group, detach)
 
-REGISTER_EDITOR_AND_SCRIPT_COMMAND(Private_EditorCommands::DetachFromGroup, group, detach_from_hierarchy,
+REGISTER_EDITOR_AND_SCRIPT_COMMAND(Private_EditorCommands::DetachToRoot, group, detach_from_hierarchy,
                                    CCommandDescription("Detaches selected objects from full hierarchy. The object will placed directly on it's owning layer"))
 REGISTER_EDITOR_UI_COMMAND_DESC(group, detach_from_hierarchy, "Detach from Hierarchy", "", "", false);
 REGISTER_COMMAND_REMAPPING(ui_action, actionGroup_DetachToRoot, group, detach_from_hierarchy)

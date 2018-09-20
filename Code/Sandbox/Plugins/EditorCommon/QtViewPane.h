@@ -3,17 +3,17 @@
 #pragma once
 
 #include "EditorCommonAPI.h"
+
+#include "EditorFramework/StateSerializable.h"
+#include "IEditor.h"
 #include "IEditorClassFactory.h"
-#include "AutoRegister.h"
-#include <QWidget>
+#include "ICommandManager.h"
+
 #include <QMainWindow>
-#include <QVariantMap>
+#include <QMenu>
 #include <QRect>
 #include <QSize>
-#include <QMenu>
-#include "EditorFramework/StateSerializable.h"
-#include <IEditor.h>
-#include <ICommandManager.h>
+#include <QWidget>
 
 struct IPane;
 
@@ -75,11 +75,10 @@ public:
 	// Get pane menu
 	virtual QMenu* GetPaneMenu() const
 	{
-		QMenu* helpMenu = new QMenu();
-		helpMenu->setTitle("Help");
-		QMenu* menuItem = helpMenu->addMenu("Help");
-		menuItem->addAction(GetIEditor()->GetICommandManager()->GetAction("general.help"));
-		return helpMenu;
+		QMenu* pMainMenu = new QMenu();
+		QMenu* pHelpMenu = pMainMenu->addMenu("Help");
+		pHelpMenu->addAction(GetIEditor()->GetICommandManager()->GetAction("general.help"));
+		return pMainMenu;
 	}
 
 	// Restore transient state
@@ -112,7 +111,7 @@ class EDITOR_COMMON_API CDockableWidget : public CDockableWidgetT<QWidget>
 	Q_OBJECT;
 	Q_INTERFACES(IPane);
 public:
-	CDockableWidget(QWidget* pParent = nullptr) : CDockableWidgetT<QWidget>(pParent) {};
+	CDockableWidget(QWidget* pParent = nullptr) : CDockableWidgetT<QWidget>(pParent) {}
 	virtual ~CDockableWidget() {}
 };
 
@@ -122,7 +121,7 @@ class EDITOR_COMMON_API CDockableWindow : public CDockableWidgetT<QMainWindow>
 	Q_OBJECT;
 	Q_INTERFACES(IPane);
 public:
-	CDockableWindow(QWidget* pParent = nullptr) : CDockableWidgetT<QMainWindow>(pParent) {};
+	CDockableWindow(QWidget* pParent = nullptr) : CDockableWidgetT<QMainWindow>(pParent) {}
 	virtual ~CDockableWindow() {}
 };
 

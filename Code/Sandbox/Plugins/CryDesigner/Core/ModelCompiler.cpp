@@ -2,14 +2,14 @@
 
 #include "StdAfx.h"
 #include "ModelCompiler.h"
-#include "Model.h"
-#include <Preferences/ViewportPreferences.h>
-#include "Objects/DesignerObject.h"
-#include "Tools/BaseTool.h"
+
 #include "Core/SmoothingGroupManager.h"
-#include "Subdivision.h"
-#include "Material/Material.h"
-#include "Helper.h"
+#include "Core/Subdivision.h"
+#include "Objects/DesignerObject.h"
+#include "DesignerEditor.h"
+
+#include <Material/Material.h>
+#include <Objects/IObjectLayer.h>
 
 namespace Designer
 {
@@ -183,6 +183,7 @@ bool ModelCompiler::UpdateMesh(CBaseObject* pBaseObject, Model* pModel, ShelfID 
 	{
 		RemoveStatObj(nShelf);
 		DeleteRenderNode(nShelf);
+		pBaseObject->GetLayer()->SetModified(true);
 		return true;
 	}
 
@@ -205,6 +206,7 @@ bool ModelCompiler::UpdateMesh(CBaseObject* pBaseObject, Model* pModel, ShelfID 
 
 	InvalidateStatObj(m_pStatObj[nShelf], CheckFlags(eCompiler_Physicalize));
 	m_pStatObj[nShelf]->m_eStreamingStatus = ecss_Ready;
+	pBaseObject->GetLayer()->SetModified(true);
 
 	return true;
 }
@@ -312,7 +314,7 @@ void ModelCompiler::UpdateRenderNode(CBaseObject* pBaseObject, ShelfID nShelf)
 		}
 	}
 
-	int renderFlags = m_RenderFlags;
+	uint64 renderFlags = m_RenderFlags;
 
 	m_pRenderNode[nShelf]->SetRndFlags(renderFlags);
 	m_pRenderNode[nShelf]->SetViewDistRatio(m_viewDistRatio);
@@ -711,4 +713,3 @@ bool ModelCompiler::IsValid() const
 	return m_pStatObj[0] || m_pStatObj[1];
 }
 };
-

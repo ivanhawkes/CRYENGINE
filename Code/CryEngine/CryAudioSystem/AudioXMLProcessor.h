@@ -2,24 +2,21 @@
 
 #pragma once
 
-#include "FileCacheManager.h"
+#include <CryAudio/IAudioSystem.h>
+
+class XmlNodeRef;
 
 namespace CryAudio
 {
-struct SInternalControls;
+class CATLSwitch;
+class CATLPreloadRequest;
+class CATLAudioEnvironment;
 
 class CAudioXMLProcessor final
 {
 public:
 
-	explicit CAudioXMLProcessor(
-		AudioTriggerLookup& triggers,
-		AudioParameterLookup& parameters,
-		AudioSwitchLookup& switches,
-		AudioEnvironmentLookup& environments,
-		AudioPreloadRequestLookup& preloadRequests,
-		CFileCacheManager& fileCacheMgr,
-		SInternalControls const& internalControls);
+	CAudioXMLProcessor() = default;
 
 	CAudioXMLProcessor(CAudioXMLProcessor const&) = delete;
 	CAudioXMLProcessor(CAudioXMLProcessor&&) = delete;
@@ -39,21 +36,11 @@ private:
 	void ParseDefaultTriggers(XmlNodeRef const pXMLTriggerRoot);
 	void ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataScope const dataScope);
 	void ParseParameters(XmlNodeRef const pXMLParameterRoot, EDataScope const dataScope);
-	void ParseDefaultParameters(XmlNodeRef const pXMLParameterRoot);
 	void ParsePreloads(XmlNodeRef const pPreloadDataRoot, EDataScope const dataScope, char const* const szFolderName, uint const version);
 	void ParseEnvironments(XmlNodeRef const pAudioEnvironmentRoot, EDataScope const dataScope);
+	void ParseSettings(XmlNodeRef const pRoot, EDataScope const dataScope);
 
-	void DeleteSwitch(CATLSwitch const* const pSwitch);
 	void DeletePreloadRequest(CATLPreloadRequest const* const pPreloadRequest);
 	void DeleteEnvironment(CATLAudioEnvironment const* const pEnvironment);
-
-	AudioTriggerLookup&        m_triggers;
-	AudioParameterLookup&      m_parameters;
-	AudioSwitchLookup&         m_switches;
-	AudioEnvironmentLookup&    m_environments;
-	AudioPreloadRequestLookup& m_preloadRequests;
-	TriggerImplId              m_triggerImplIdCounter;
-	CFileCacheManager&         m_fileCacheMgr;
-	SInternalControls const&   m_internalControls;
 };
 } // namespace CryAudio

@@ -23,8 +23,8 @@
 
 namespace LevelModelsAttributes
 {
-CItemModelAttribute s_visibleAttribute("Visible", &Attributes::s_booleanAttributeType, CItemModelAttribute::Visible, true, Qt::Checked);
-CItemModelAttribute s_frozenAttribute("Frozen", &Attributes::s_booleanAttributeType);
+CItemModelAttribute s_visibleAttribute("Visible", &Attributes::s_booleanAttributeType, CItemModelAttribute::Visible, true, Qt::Checked, Qt::CheckStateRole);
+CItemModelAttribute s_frozenAttribute("Frozen", &Attributes::s_booleanAttributeType, CItemModelAttribute::Visible, true, Qt::Unchecked, Qt::CheckStateRole);
 CItemModelAttribute s_layerNameAttribute("Layer", &Attributes::s_stringAttributeType);
 CItemModelAttribute s_objectTypeDescAttribute("Type", &Attributes::s_stringAttributeType);
 CItemModelAttribute s_defaultMaterialAttribute("Default Material", &Attributes::s_stringAttributeType, CItemModelAttribute::StartHidden);
@@ -179,6 +179,7 @@ CLevelLayerModel::~CLevelLayerModel()
 
 void CLevelLayerModel::Connect()
 {
+	m_isDisconnected = false;
 	CObjectManager* pObjManager = static_cast<CObjectManager*>(GetIEditorImpl()->GetObjectManager());
 
 	pObjManager->signalObjectsChanged.Connect(this, &CLevelLayerModel::OnObjectEvent);
@@ -187,6 +188,7 @@ void CLevelLayerModel::Connect()
 
 void CLevelLayerModel::Disconnect()
 {
+	m_isDisconnected = true;
 	CObjectManager* pObjManager = static_cast<CObjectManager*>(GetIEditorImpl()->GetObjectManager());
 
 	pObjManager->signalObjectsChanged.DisconnectObject(this);
@@ -662,7 +664,7 @@ bool CLevelLayerModel::dropMimeData(const QMimeData* pData, Qt::DropAction actio
 		if (toBeLinked.size())
 			pObjectManager->Link(toBeLinked, pTargetObject);
 
-		if (pAttachTo) // if dropping into a group, select the group
+		if (pAttachTo && !pAttachTo->IsOpen()) // if dropping into a closed group, select the group instead
 			pObjectManager->SelectObject(pTargetObject);
 
 		GetIEditorImpl()->GetIUndoManager()->Accept("Level Explorer Move");
@@ -1771,6 +1773,10 @@ bool CLevelLayerModel::IsRelatedToTopLevelObject(CBaseObject* pObject) const
 
 void CLevelLayerModel::StartBatchProcess()
 {
+	// If we're not handling any object events, then don't handle batch changes either
+	if (m_isDisconnected)
+		return;
+
 	assert(!m_isRuningBatchProcess);
 	m_isRuningBatchProcess = true;
 	beginResetModel();
@@ -1778,6 +1784,10 @@ void CLevelLayerModel::StartBatchProcess()
 
 void CLevelLayerModel::FinishBatchProcess()
 {
+	// If we're not handling any object events, then don't handle batch changes either
+	if (m_isDisconnected)
+		return;
+
 	endResetModel();
 	assert(m_isRuningBatchProcess);
 	m_isRuningBatchProcess = false;
