@@ -613,7 +613,7 @@ bool CBaseObject::Init(CBaseObject* prev, const string& file)
 
 CBaseObject::~CBaseObject()
 {
-	for (BaseObjectArray::iterator c = m_children.begin(); c != m_children.end(); c++)
+	for (BaseObjectArray::iterator c = m_children.begin(); c != m_children.end(); ++c)
 	{
 		CBaseObject* child = *c;
 		child->m_parent = 0;
@@ -2746,7 +2746,6 @@ void CBaseObject::ResolveParent(CBaseObject* parent)
 		{
 			bSuspended = GetIEditor()->SuspendUpdateCGroup(parent);
 			parent->AddMember(this, false);
-			CryLog("Reparenting %s to %s", GetName(), m_parent->GetName());
 			if (bSuspended)
 				GetIEditor()->ResumeUpdateCGroup(parent);
 		}

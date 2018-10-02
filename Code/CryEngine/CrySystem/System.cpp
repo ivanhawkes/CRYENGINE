@@ -1486,6 +1486,9 @@ int prev_sys_float_exceptions = -1;
 //////////////////////////////////////////////////////////////////////
 void CSystem::PrePhysicsUpdate()
 {
+	CRY_PROFILE_REGION(PROFILE_SYSTEM, "System::PrePhysicsUpdate");
+	CRYPROFILE_SCOPE_PROFILE_MARKER("System::PrePhysicsUpdate");
+
 	if (m_env.pGameFramework)
 	{
 		m_env.pGameFramework->PrePhysicsUpdate();
@@ -2869,7 +2872,7 @@ void CSystem::Strange()
 void CSystem::Relaunch(bool bRelaunch)
 {
 	if (m_sys_firstlaunch)
-		m_sys_firstlaunch->Set("0");
+		m_sys_firstlaunch->Set(0);
 
 	m_bRelaunch = bRelaunch;
 	SaveConfiguration();

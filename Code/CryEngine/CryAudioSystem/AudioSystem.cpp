@@ -37,6 +37,64 @@ enum class ELoggingOptions : EnumFlagsType
 CRY_CREATE_ENUM_FLAG_OPERATORS(ELoggingOptions);
 
 //////////////////////////////////////////////////////////////////////////
+void AllocateMemoryPools()
+{
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Trigger Pool");
+	CTrigger::CreateAllocator(g_poolSizes.triggers);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Parameter Pool");
+	CParameter::CreateAllocator(g_poolSizes.parameters);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Switch Pool");
+	CATLSwitch::CreateAllocator(g_poolSizes.switches);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System SwitchState Pool");
+	CATLSwitchState::CreateAllocator(g_poolSizes.states);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Environment Pool");
+	CATLAudioEnvironment::CreateAllocator(g_poolSizes.environments);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Preload Pool");
+	CATLPreloadRequest::CreateAllocator(g_poolSizes.preloads);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Settings Pool");
+	CSetting::CreateAllocator(g_poolSizes.settings);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Trigger Connection Pool");
+	CATLTriggerImpl::CreateAllocator(g_poolSizes.triggerConnections);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Parameter Connection Pool");
+	CParameterImpl::CreateAllocator(g_poolSizes.parameterConnections);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System State Connection Pool");
+	CSwitchStateImpl::CreateAllocator(g_poolSizes.stateConnections);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Environment Connection Pool");
+	CATLEnvironmentImpl::CreateAllocator(g_poolSizes.environmentConnections);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Setting Connection Pool");
+	CSettingImpl::CreateAllocator(g_poolSizes.settingConnections);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void FreeMemoryPools()
+{
+	CTrigger::FreeMemoryPool();
+	CParameter::FreeMemoryPool();
+	CATLSwitch::FreeMemoryPool();
+	CATLSwitchState::FreeMemoryPool();
+	CATLAudioEnvironment::FreeMemoryPool();
+	CATLPreloadRequest::FreeMemoryPool();
+	CSetting::FreeMemoryPool();
+
+	CATLTriggerImpl::FreeMemoryPool();
+	CParameterImpl::FreeMemoryPool();
+	CSwitchStateImpl::FreeMemoryPool();
+	CATLEnvironmentImpl::FreeMemoryPool();
+	CSettingImpl::FreeMemoryPool();
+}
+
+//////////////////////////////////////////////////////////////////////////
 void CMainThread::ThreadEntry()
 {
 	while (m_doWork)
@@ -176,7 +234,7 @@ void CSystem::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam
 
 			if (!levelNameOnly.empty() && levelNameOnly.compareNoCase("Untitled") != 0)
 			{
-				CryFixedStringT<MaxFilePathLength> audioLevelPath(m_configPath);
+				CryFixedStringT<MaxFilePathLength> audioLevelPath(g_configPath);
 				audioLevelPath += s_szLevelsFolderName;
 				audioLevelPath += "/";
 				audioLevelPath += levelNameOnly;
@@ -431,6 +489,8 @@ bool CSystem::Initialize()
 			g_cvars.m_audioObjectPoolSize = 1;
 			Cry::Audio::Log(ELogType::Warning, R"(Audio Object pool size must be at least 1. Forcing the cvar "s_AudioObjectPoolSize" to 1!)");
 		}
+
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Object Pool");
 		CATLAudioObject::CreateAllocator(g_cvars.m_audioObjectPoolSize);
 
 		if (g_cvars.m_audioEventPoolSize < 1)
@@ -438,6 +498,8 @@ bool CSystem::Initialize()
 			g_cvars.m_audioEventPoolSize = 1;
 			Cry::Audio::Log(ELogType::Warning, R"(Audio Event pool size must be at least 1. Forcing the cvar "s_AudioEventPoolSize" to 1!)");
 		}
+
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Event Pool");
 		CATLEvent::CreateAllocator(g_cvars.m_audioEventPoolSize);
 
 		if (g_cvars.m_audioStandaloneFilePoolSize < 1)
@@ -445,6 +507,8 @@ bool CSystem::Initialize()
 			g_cvars.m_audioStandaloneFilePoolSize = 1;
 			Cry::Audio::Log(ELogType::Warning, R"(Audio Standalone File pool size must be at least 1. Forcing the cvar "s_AudioStandaloneFilePoolSize" to 1!)");
 		}
+
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Standalone File Pool");
 		CATLStandaloneFile::CreateAllocator(g_cvars.m_audioStandaloneFilePoolSize);
 
 		// Add the callback for the obstruction calculation.
@@ -499,6 +563,10 @@ void CSystem::Release()
 		g_objectManager.Terminate();
 		g_listenerManager.Terminate();
 		g_cvars.UnregisterVariables();
+
+		CATLAudioObject::FreeMemoryPool();
+		CATLEvent::FreeMemoryPool();
+		CATLStandaloneFile::FreeMemoryPool();
 
 #if defined(ENABLE_AUDIO_LOGGING)
 		IConsole* const pIConsole = gEnv->pConsole;
@@ -892,14 +960,14 @@ void CSystem::ReloadControlsData(
 ///////////////////////////////////////////////////////////////////////////
 char const* CSystem::GetConfigPath() const
 {
-	return m_configPath.c_str();
+	return g_configPath.c_str();
 }
 
 ///////////////////////////////////////////////////////////////////////////
 CryAudio::IListener* CSystem::CreateListener(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 	CATLListener* pListener = nullptr;
-	SListenerRequestData<EListenerRequestType::RegisterListener> const requestData(&pListener, transformation, szName);
+	SManagerRequestData<EManagerRequestType::RegisterListener> const requestData(&pListener, transformation, szName);
 	CAudioRequest request(&requestData);
 	request.flags = ERequestFlags::ExecuteBlocking;
 	PushRequest(request);
@@ -910,22 +978,18 @@ CryAudio::IListener* CSystem::CreateListener(CObjectTransformation const& transf
 ///////////////////////////////////////////////////////////////////////////
 void CSystem::ReleaseListener(CryAudio::IListener* const pIListener)
 {
-	SListenerRequestData<EListenerRequestType::ReleaseListener> const requestData(static_cast<CATLListener*>(pIListener));
+	SManagerRequestData<EManagerRequestType::ReleaseListener> const requestData(static_cast<CATLListener*>(pIListener));
 	CAudioRequest const request(&requestData);
 	PushRequest(request);
 }
 
 //////////////////////////////////////////////////////////////////////////
-CryAudio::IObject* CSystem::CreateObject(SCreateObjectData const& objectData /*= SCreateObjectData::GetEmptyObject()*/, SRequestUserData const& userData /*= SRequestUserData::GetEmptyObject()*/)
+CryAudio::IObject* CSystem::CreateObject(SCreateObjectData const& objectData /*= SCreateObjectData::GetEmptyObject()*/)
 {
-	CATLAudioObject* const pObject = new CATLAudioObject(objectData.transformation);
-	SObjectRequestData<EObjectRequestType::RegisterObject> const requestData(objectData);
+	CATLAudioObject* pObject = nullptr;
+	SManagerRequestData<EManagerRequestType::RegisterObject> const requestData(&pObject, objectData);
 	CAudioRequest request(&requestData);
-	request.flags = userData.flags;
-	request.pObject = pObject;
-	request.pOwner = userData.pOwner;
-	request.pUserData = userData.pUserData;
-	request.pUserDataOwner = userData.pUserDataOwner;
+	request.flags = ERequestFlags::ExecuteBlocking;
 	PushRequest(request);
 	return static_cast<CryAudio::IObject*>(pObject);
 }
@@ -933,9 +997,8 @@ CryAudio::IObject* CSystem::CreateObject(SCreateObjectData const& objectData /*=
 //////////////////////////////////////////////////////////////////////////
 void CSystem::ReleaseObject(CryAudio::IObject* const pIObject)
 {
-	SObjectRequestData<EObjectRequestType::ReleaseObject> const requestData;
-	CAudioRequest request(&requestData);
-	request.pObject = static_cast<CATLAudioObject*>(pIObject);
+	SManagerRequestData<EManagerRequestType::ReleaseObject> const requestData(static_cast<CATLAudioObject*>(pIObject));
+	CAudioRequest const request(&requestData);
 	PushRequest(request);
 }
 
@@ -997,6 +1060,8 @@ void CSystem::ReleaseImpl()
 	// Note: The object and listener managers are an exception as we need their data to survive in case the middleware is swapped out.
 	g_eventManager.Release();
 	g_fileManager.Release();
+
+	FreeMemoryPools();
 
 	g_systemStates &= ~ESystemStates::ImplShuttingDown;
 }
@@ -1482,6 +1547,7 @@ ERequestStatus CSystem::ProcessManagerRequest(CAudioRequest const& request)
 			}
 
 			g_xmlProcessor.ClearControlsData(EDataScope::All);
+			g_xmlProcessor.ParseSystemData();
 			g_xmlProcessor.ParseControlsData(pRequestData->folderPath, EDataScope::Global);
 
 			if (strcmp(pRequestData->levelName, "") != 0)
@@ -1516,6 +1582,75 @@ ERequestStatus CSystem::ProcessManagerRequest(CAudioRequest const& request)
 			SManagerRequestData<EManagerRequestType::GetImplInfo> const* const pRequestData =
 				static_cast<SManagerRequestData<EManagerRequestType::GetImplInfo> const* const>(request.GetData());
 			g_pIImpl->GetInfo(pRequestData->implInfo);
+			break;
+		}
+	case EManagerRequestType::RegisterListener:
+		{
+			SManagerRequestData<EManagerRequestType::RegisterListener> const* const pRequestData =
+				static_cast<SManagerRequestData<EManagerRequestType::RegisterListener> const*>(request.GetData());
+			*pRequestData->ppListener = g_listenerManager.CreateListener(pRequestData->transformation, pRequestData->name.c_str());
+			break;
+		}
+	case EManagerRequestType::ReleaseListener:
+		{
+			SManagerRequestData<EManagerRequestType::ReleaseListener> const* const pRequestData =
+				static_cast<SManagerRequestData<EManagerRequestType::ReleaseListener> const* const>(request.GetData());
+
+			CRY_ASSERT(pRequestData->pListener != nullptr);
+
+			if (pRequestData->pListener != nullptr)
+			{
+				g_listenerManager.ReleaseListener(pRequestData->pListener);
+				result = ERequestStatus::Success;
+			}
+
+			break;
+		}
+	case EManagerRequestType::RegisterObject:
+		{
+			SManagerRequestData<EManagerRequestType::RegisterObject> const* const pRequestData =
+				static_cast<SManagerRequestData<EManagerRequestType::RegisterObject> const*>(request.GetData());
+
+			auto const pNewObject = new CATLAudioObject(pRequestData->transformation);
+			g_objectManager.RegisterObject(pNewObject);
+
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+			pNewObject->Init(pRequestData->name.c_str(), g_pIImpl->ConstructObject(pRequestData->transformation, pRequestData->name.c_str()), pRequestData->entityId);
+#else
+			pNewObject->Init(nullptr, g_pIImpl->ConstructObject(pRequestData->transformation, nullptr), pRequestData->entityId);
+#endif    // INCLUDE_AUDIO_PRODUCTION_CODE
+
+			if (pRequestData->setCurrentEnvironments)
+			{
+				SetCurrentEnvironmentsOnObject(pNewObject, INVALID_ENTITYID);
+			}
+
+			SetOcclusionType(*pNewObject, pRequestData->occlusionType);
+			*pRequestData->ppObject = pNewObject;
+			result = ERequestStatus::Success;
+
+			break;
+		}
+	case EManagerRequestType::ReleaseObject:
+		{
+			SManagerRequestData<EManagerRequestType::ReleaseObject> const* const pRequestData =
+				static_cast<SManagerRequestData<EManagerRequestType::ReleaseObject> const* const>(request.GetData());
+
+			CRY_ASSERT(pRequestData->pObject != nullptr);
+
+			if (pRequestData->pObject != nullptr)
+			{
+				if (pRequestData->pObject != g_pObject)
+				{
+					pRequestData->pObject->RemoveFlag(EObjectFlags::InUse);
+					result = ERequestStatus::Success;
+				}
+				else
+				{
+					Cry::Audio::Log(ELogType::Warning, "ATL received a request to release the GlobalAudioObject");
+				}
+			}
+
 			break;
 		}
 	case EManagerRequestType::None:
@@ -1936,44 +2071,6 @@ ERequestStatus CSystem::ProcessObjectRequest(CAudioRequest const& request)
 
 			break;
 		}
-	case EObjectRequestType::RegisterObject:
-		{
-			SObjectRequestData<EObjectRequestType::RegisterObject> const* const pRequestData =
-				static_cast<SObjectRequestData<EObjectRequestType::RegisterObject> const*>(request.GetData());
-
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			pObject->Init(pRequestData->name.c_str(), g_pIImpl->ConstructObject(pRequestData->transformation, pRequestData->name.c_str()), pRequestData->entityId);
-#else
-			pObject->Init(nullptr, g_pIImpl->ConstructObject(pRequestData->transformation, nullptr), pRequestData->entityId);
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-
-			pObject->HandleSetTransformation(pRequestData->transformation);
-
-			if (pRequestData->setCurrentEnvironments)
-			{
-				SetCurrentEnvironmentsOnObject(pObject, INVALID_ENTITYID);
-			}
-
-			SetOcclusionType(*pObject, pRequestData->occlusionType);
-			g_objectManager.RegisterObject(pObject);
-			result = ERequestStatus::Success;
-
-			break;
-		}
-	case EObjectRequestType::ReleaseObject:
-		{
-			if (pObject != g_pObject)
-			{
-				pObject->RemoveFlag(EObjectFlags::InUse);
-				result = ERequestStatus::Success;
-			}
-			else
-			{
-				Cry::Audio::Log(ELogType::Warning, "ATL received a request to release the GlobalAudioObject");
-			}
-
-			break;
-		}
 	case EObjectRequestType::ProcessPhysicsRay:
 		{
 			SObjectRequestData<EObjectRequestType::ProcessPhysicsRay> const* const pRequestData =
@@ -2088,27 +2185,6 @@ ERequestStatus CSystem::ProcessListenerRequest(SRequestData const* const pPassed
 			}
 
 			result = ERequestStatus::Success;
-		}
-		break;
-	case EListenerRequestType::RegisterListener:
-		{
-			SListenerRequestData<EListenerRequestType::RegisterListener> const* const pRequestData =
-				static_cast<SListenerRequestData<EListenerRequestType::RegisterListener> const*>(pPassedRequestData);
-			*pRequestData->ppListener = g_listenerManager.CreateListener(pRequestData->transformation, pRequestData->name.c_str());
-		}
-		break;
-	case EListenerRequestType::ReleaseListener:
-		{
-			SListenerRequestData<EListenerRequestType::ReleaseListener> const* const pRequestData =
-				static_cast<SListenerRequestData<EListenerRequestType::ReleaseListener> const* const>(pPassedRequestData);
-
-			CRY_ASSERT(pRequestData->pListener != nullptr);
-
-			if (pRequestData->pListener != nullptr)
-			{
-				g_listenerManager.ReleaseListener(pRequestData->pListener);
-				result = ERequestStatus::Success;
-			}
 		}
 		break;
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
@@ -2293,11 +2369,26 @@ ERequestStatus CSystem::HandleSetImpl(Impl::IImpl* const pIImpl)
 		g_pIImpl = static_cast<Impl::IImpl*>(pImpl);
 	}
 
+	g_xmlProcessor.ParseSystemData();
+
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	if ((g_systemStates& ESystemStates::PoolsAllocated) == 0)
+	{
+		// Don't allocate again after impl switch.
+		AllocateMemoryPools();
+		g_systemStates |= ESystemStates::PoolsAllocated;
+	}
+#else
+	AllocateMemoryPools();
+#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+
 	result = g_pIImpl->Init(m_objectPoolSize, m_eventPoolSize);
 
-	g_pIImpl->GetInfo(m_implInfo);
-	m_configPath = AUDIO_SYSTEM_DATA_ROOT "/";
-	m_configPath += (m_implInfo.folderName + "/" + s_szConfigFolderName + "/").c_str();
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	// Get impl info again (was done in ParseSystemData) to set the impl name, because
+	// it's not guaranteed that it already existed in the impl constructor.
+	g_pIImpl->GetInfo(g_implInfo);
+#endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
 	if (result != ERequestStatus::Success)
 	{
@@ -2360,8 +2451,9 @@ ERequestStatus CSystem::HandleRefresh(char const* const szLevelName)
 
 	g_pIImpl->OnRefresh();
 
-	g_xmlProcessor.ParseControlsData(m_configPath.c_str(), EDataScope::Global);
-	g_xmlProcessor.ParsePreloadsData(m_configPath.c_str(), EDataScope::Global);
+	g_xmlProcessor.ParseSystemData();
+	g_xmlProcessor.ParseControlsData(g_configPath.c_str(), EDataScope::Global);
+	g_xmlProcessor.ParsePreloadsData(g_configPath.c_str(), EDataScope::Global);
 
 	// The global preload might not exist if no preloads have been created, for that reason we don't check the result of this call
 	result = g_fileCacheManager.TryLoadRequest(GlobalPreloadRequestId, true, true);
@@ -2370,7 +2462,7 @@ ERequestStatus CSystem::HandleRefresh(char const* const szLevelName)
 
 	if (szLevelName != nullptr && szLevelName[0] != '\0')
 	{
-		CryFixedStringT<MaxFilePathLength> levelPath = m_configPath;
+		CryFixedStringT<MaxFilePathLength> levelPath = g_configPath;
 		levelPath += s_szLevelsFolderName;
 		levelPath += "/";
 		levelPath += szLevelName;
@@ -2563,6 +2655,43 @@ void CSystem::DrawDebug()
 }
 
 //////////////////////////////////////////////////////////////////////////
+void DrawMemoryPoolInfo(
+	IRenderAuxGeom* const pAuxGeom,
+	float const posX,
+	float& posY,
+	stl::SPoolMemoryUsage const& mem,
+	stl::SMemoryUsage const& pool,
+	char const* const szType)
+{
+	CryFixedStringT<MaxMiscStringLength> memUsedString;
+
+	if (mem.nUsed < 1024)
+	{
+		memUsedString.Format("%" PRISIZE_T " Byte", mem.nUsed);
+	}
+	else
+	{
+		memUsedString.Format("%" PRISIZE_T " KiB", mem.nUsed >> 10);
+	}
+
+	CryFixedStringT<MaxMiscStringLength> memAllocString;
+
+	if (mem.nAlloc < 1024)
+	{
+		memAllocString.Format("%" PRISIZE_T " Byte", mem.nAlloc);
+	}
+	else
+	{
+		memAllocString.Format("%" PRISIZE_T " KiB", mem.nAlloc >> 10);
+	}
+
+	posY += Debug::g_systemLineHeight;
+	pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemFontSize, Debug::g_systemColorTextPrimary.data(), false,
+	                      "[%s] In Use: %" PRISIZE_T " | Constructed: %" PRISIZE_T " (%s) | Memory Pool: %s",
+	                      szType, pool.nUsed, pool.nAlloc, memUsedString.c_str(), memAllocString.c_str());
+}
+
+//////////////////////////////////////////////////////////////////////////
 void CSystem::HandleDrawDebug()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AUDIO);
@@ -2580,41 +2709,85 @@ void CSystem::HandleDrawDebug()
 		float posX = 8.0f;
 		float posY = 4.0f;
 
-		if (!((g_cvars.m_drawAudioDebug & Debug::EDrawFilter::HideMemoryInfo) != 0))
+		if ((g_cvars.m_drawAudioDebug & Debug::EDrawFilter::HideMemoryInfo) == 0)
 		{
-			pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemHeaderFontSize, Debug::g_globalColorHeader.data(), false, "Audio System");
-
 			CryModuleMemoryInfo memInfo;
 			ZeroStruct(memInfo);
 			CryGetMemoryInfoForModule(&memInfo);
 
-			posY += Debug::g_systemHeaderLineHeight;
-			pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemFontSize, Debug::g_systemColorTextPrimary.data(), false,
-			                      "Total Memory Used: %uKiB",
-			                      static_cast<uint32>((memInfo.allocated - memInfo.freed) / 1024));
+			CryFixedStringT<MaxMiscStringLength> memInfoString;
+			auto const memAlloc = static_cast<uint32>(memInfo.allocated - memInfo.freed);
 
+			if (memAlloc < 1024)
 			{
-				CPoolObject<CATLAudioObject, stl::PSyncMultiThread>::Allocator& allocator = CATLAudioObject::GetAllocator();
-				posY += Debug::g_systemLineHeight;
-				auto mem = allocator.GetTotalMemory();
-				auto pool = allocator.GetCounts();
-				pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemFontSize, Debug::g_systemColorTextPrimary.data(), false, "[Objects] In Use: %u | Constructed: %u (%uKiB) | Memory Pool: %uKiB", pool.nUsed, pool.nAlloc, mem.nUsed / 1024, mem.nAlloc / 1024);
+				memInfoString.Format("u Byte", memAlloc);
+			}
+			else
+			{
+				memInfoString.Format("%u KiB", memAlloc >> 10);
 			}
 
-			{
-				CPoolObject<CATLEvent, stl::PSyncNone>::Allocator& allocator = CATLEvent::GetAllocator();
-				posY += Debug::g_systemLineHeight;
-				auto mem = allocator.GetTotalMemory();
-				auto pool = allocator.GetCounts();
-				pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemFontSize, Debug::g_systemColorTextPrimary.data(), false, "[Events] In Use: %u | Constructed: %u (%uKiB) | Memory Pool: %uKiB", pool.nUsed, pool.nAlloc, mem.nUsed / 1024, mem.nAlloc / 1024);
-			}
+			pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemHeaderFontSize, Debug::g_globalColorHeader.data(), false,
+			                      "Audio System (Total Memory: %s)", memInfoString.c_str());
 
+			if ((g_cvars.m_drawAudioDebug & Debug::EDrawFilter::DetailedMemoryInfo) != 0)
 			{
-				CPoolObject<CATLStandaloneFile, stl::PSyncNone>::Allocator& allocator = CATLStandaloneFile::GetAllocator();
-				posY += Debug::g_systemLineHeight;
-				auto mem = allocator.GetTotalMemory();
-				auto pool = allocator.GetCounts();
-				pAuxGeom->Draw2dLabel(posX, posY, Debug::g_systemFontSize, Debug::g_systemColorTextPrimary.data(), false, "[Files] In Use: %u | Constructed: %u (%uKiB) | Memory Pool: %uKiB", pool.nUsed, pool.nAlloc, mem.nUsed / 1024, mem.nAlloc / 1024);
+				{
+					auto& allocator = CATLAudioObject::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Objects");
+				}
+
+				{
+					auto& allocator = CATLEvent::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Events");
+				}
+
+				{
+					auto& allocator = CATLStandaloneFile::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Files");
+				}
+
+				if (g_debugPoolSizes.triggers > 0)
+				{
+					auto& allocator = CTrigger::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Triggers");
+				}
+
+				if (g_debugPoolSizes.parameters > 0)
+				{
+					auto& allocator = CParameter::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Parameters");
+				}
+
+				if (g_debugPoolSizes.switches > 0)
+				{
+					auto& allocator = CATLSwitch::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Switches");
+				}
+
+				if (g_debugPoolSizes.states > 0)
+				{
+					auto& allocator = CATLSwitchState::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "SwitchStates");
+				}
+
+				if (g_debugPoolSizes.environments > 0)
+				{
+					auto& allocator = CATLAudioEnvironment::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Environments");
+				}
+
+				if (g_debugPoolSizes.preloads > 0)
+				{
+					auto& allocator = CATLPreloadRequest::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Preloads");
+				}
+
+				if (g_debugPoolSizes.settings > 0)
+				{
+					auto& allocator = CSetting::GetAllocator();
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Settings");
+				}
 			}
 
 			size_t const numObjects = g_objectManager.GetNumAudioObjects();

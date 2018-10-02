@@ -154,7 +154,7 @@ struct SScopeData
 	int                        layer;
 	int                        numLayers;
 	SScopeContextData*         context[eMEM_Max];
-	class CFragmentIdTrack*      fragTrack[eMEM_Max];
+	class CFragmentTrack*      fragTrack[eMEM_Max];
 	CSequencerNode*            animNode[eMEM_Max];
 	struct SMannequinContexts* mannContexts;
 };
@@ -232,7 +232,7 @@ public:
 	void FillInTagStates()
 	{
 		TagState tags = TAG_STATE_EMPTY;
-		for (THistoryBuffer::iterator iter = m_items.begin(); iter != m_items.end(); iter++)
+		for (THistoryBuffer::iterator iter = m_items.begin(); iter != m_items.end(); ++iter)
 		{
 			SHistoryItem& item = *iter;
 			if (item.type == SHistoryItem::Tag)
@@ -336,7 +336,7 @@ public:
 	const SHistoryItem* FindLastByType(SHistoryItem::EType type, float endTime) const
 	{
 		const SHistoryItem* ret = NULL;
-		for (THistoryBuffer::const_iterator iter = m_items.begin(); (iter != m_items.end()) && (iter->time <= endTime); iter++)
+		for (THistoryBuffer::const_iterator iter = m_items.begin(); (iter != m_items.end()) && (iter->time <= endTime); ++iter)
 		{
 			const SHistoryItem& item = *iter;
 			if (item.type == type)
@@ -358,7 +358,7 @@ public:
 	IActionController& m_actionController;
 };
 
-class CFragmentIdTrack;
+class CFragmentTrack;
 
 struct SFragmentHistoryContext
 {

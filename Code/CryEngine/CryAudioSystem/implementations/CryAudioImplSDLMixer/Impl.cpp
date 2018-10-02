@@ -70,11 +70,10 @@ void OnStandaloneFileFinished(CATLStandaloneFile& standaloneFile, const char* sz
 CImpl::CImpl()
 	: m_pCVarFileExtension(nullptr)
 	, m_isMuted(false)
-{
 #if defined(INCLUDE_SDLMIXER_IMPL_PRODUCTION_CODE)
-	m_name = "SDL Mixer 2.0.2";
+	, m_name("SDL Mixer 2.0.2")
 #endif  // INCLUDE_SDLMIXER_IMPL_PRODUCTION_CODE
-
+{
 #if CRY_PLATFORM_WINDOWS
 	m_memoryAlignment = 16;
 #elif CRY_PLATFORM_MAC
@@ -99,10 +98,10 @@ void CImpl::Update()
 ///////////////////////////////////////////////////////////////////////////
 ERequestStatus CImpl::Init(uint32 const objectPoolSize, uint32 const eventPoolSize)
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "SDL Mixer Object Pool");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "SDL Mixer Object Pool");
 	CObject::CreateAllocator(objectPoolSize);
 
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "SDL Mixer Event Pool");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "SDL Mixer Event Pool");
 	CEvent::CreateAllocator(eventPoolSize);
 
 	m_pCVarFileExtension = REGISTER_STRING("s_SDLMixerStandaloneFileExtension", ".mp3", 0, "the expected file extension for standalone files, played via the sdl_mixer");
@@ -545,20 +544,15 @@ void CImpl::DestructSetting(ISetting const* const pISetting)
 ///////////////////////////////////////////////////////////////////////////
 IObject* CImpl::ConstructGlobalObject()
 {
-	return static_cast<IObject*>(new CObject(0));
+	return static_cast<IObject*>(new CObject(CObjectTransformation::GetEmptyObject(), 0));
 }
 
 ///////////////////////////////////////////////////////////////////////////
 IObject* CImpl::ConstructObject(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 	static uint32 id = 1;
-	CObject* pObject = new CObject(id++);
-
+	auto const pObject = new CObject(transformation, id++);
 	SoundEngine::RegisterObject(pObject);
-
-#if defined(INCLUDE_SDLMIXER_IMPL_PRODUCTION_CODE)
-	m_idToName[pObject->m_id] = szName;
-#endif  // INCLUDE_SDLMIXER_IMPL_PRODUCTION_CODE
 
 	return static_cast<IObject*>(pObject);
 }

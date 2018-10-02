@@ -192,7 +192,7 @@ int CShader::GetTexId()
 	return tp->GetTextureID();
 }
 
-#if CRY_PLATFORM_WINDOWS && CRY_PLATFORM_64BIT
+#if CRY_PLATFORM_WINDOWS
 	#pragma warning( push )               //AMD Port
 	#pragma warning( disable : 4267 )
 #endif
@@ -219,7 +219,7 @@ void CShader::GetMemoryUsage(ICrySizer* pSizer) const
 	pSizer->AddObject(m_HWTechniques);
 }
 
-#if CRY_PLATFORM_WINDOWS && CRY_PLATFORM_64BIT
+#if CRY_PLATFORM_WINDOWS
 	#pragma warning( pop )                //AMD Port
 #endif
 
@@ -264,7 +264,7 @@ CShader::~CShader()
 	SAFE_DELETE(m_DerivedShaders);
 }
 
-#if CRY_PLATFORM_WINDOWS && CRY_PLATFORM_64BIT
+#if CRY_PLATFORM_WINDOWS
 	#pragma warning( push )               //AMD Port
 	#pragma warning( disable : 4311 )     // I believe the int cast below is okay.
 #endif
@@ -298,7 +298,7 @@ CShader& CShader::operator=(const CShader& src)
 	return *this;
 }
 
-#if CRY_PLATFORM_WINDOWS && CRY_PLATFORM_64BIT
+#if CRY_PLATFORM_WINDOWS
 	#pragma warning( pop )                  //AMD Port
 #endif
 
@@ -936,15 +936,50 @@ void CShaderMan::mfInitCommonGlobalFlags(void)
 	mfCreateCommonGlobalFlags(pszGlobalsPath.c_str());
 }
 
+void CShaderMan::mfUpdateBuildVersion(const char* szCachePath)
+{
+	stack_string versionFileName = szCachePath;
+	versionFileName += "version.txt";
+
+	SFileVersion version;
+
+	if (FILE* pHandle = gEnv->pCryPak->FOpen(versionFileName.c_str(), "r", ICryPak::FOPEN_HINT_QUIET))
+	{
+		char buf[256];
+		const size_t count = gEnv->pCryPak->FRead(buf, sizeof(buf) - 1, pHandle);
+		buf[count] = '\0';
+
+		version.Set(buf);
+
+		gEnv->pCryPak->FClose(pHandle);
+	}
+
+	if (version != gEnv->pSystem->GetBuildVersion() && CRenderer::CV_r_shadersCacheClearOnVersionChange)
+	{
+		gEnv->pCryPak->RemoveDir(szCachePath, true);
+	}
+
+	if (FILE* pHandle = gEnv->pCryPak->FOpen(versionFileName.c_str(), "w"))
+	{
+		const CryFixedStringT<32> str = gEnv->pSystem->GetBuildVersion().ToString();
+
+		gEnv->pCryPak->FWrite(str.c_str(), str.size(), pHandle);
+		gEnv->pCryPak->FClose(pHandle);
+	}
+}
+
 void CShaderMan::mfInitLookups()
 {
 	m_ResLookupDataMan[static_cast<int>(cacheSource::readonly)].Clear();
 	string dirdatafilename("%ENGINE%/" + string(m_ShadersCache));
 	dirdatafilename += "lookupdata.bin";
 	m_ResLookupDataMan[static_cast<int>(cacheSource::readonly)].LoadData(dirdatafilename.c_str(), CParserBin::m_bEndians, true);
-
-	m_ResLookupDataMan[static_cast<int>(cacheSource::user)].Clear();
+	
 	dirdatafilename = m_szUserPath + string(m_ShadersCache);
+	
+	mfUpdateBuildVersion(dirdatafilename.c_str());
+	
+	m_ResLookupDataMan[static_cast<int>(cacheSource::user)].Clear();
 	dirdatafilename += "lookupdata.bin";
 	m_ResLookupDataMan[static_cast<int>(cacheSource::user)].LoadData(dirdatafilename.c_str(), CParserBin::m_bEndians, false);
 }
@@ -1087,9 +1122,9 @@ void CShaderMan::mfInit(void)
 		m_ShadersGamePath = gEnv->pCryPak->GetGameFolder() + string("/GameShaders/HWScripts/");
 		m_ShadersGameExtPath = gEnv->pCryPak->GetGameFolder() + string("/GameShaders/");
 		m_ShadersMergeCachePath = "Shaders/MergeCache/";
-#if (CRY_PLATFORM_LINUX && CRY_PLATFORM_32BIT) || CRY_PLATFORM_ANDROID
+#if CRY_PLATFORM_ANDROID
 		m_ShadersCache = "Shaders/Cache/LINUX32/";
-#elif (CRY_PLATFORM_LINUX && CRY_PLATFORM_64BIT)
+#elif CRY_PLATFORM_LINUX
 		m_ShadersCache = "Shaders/Cache/LINUX64/";
 #elif CRY_PLATFORM_MAC
 		m_ShadersCache = "Shaders/Cache/Mac/";

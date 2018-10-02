@@ -493,22 +493,15 @@ void CMainWindow::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lp
 void CMainWindow::ReloadSystemData()
 {
 	m_pMonitorSystem->Disable();
-
 	bool shouldReload = true;
-	char const* szMessageText;
 
 	if (m_isModified)
 	{
-		szMessageText = "External changes have been made to audio controls files.\nIf you reload you will lose all your unsaved changes.\nAre you sure you want to reload?";
+		auto const messageBox = new CQuestionDialog();
+		char const* const szMessageText = "External changes have been made to audio controls files.\nIf you reload you will lose all your unsaved changes.\nAre you sure you want to reload?";
+		messageBox->SetupQuestion(tr(GetEditorName()), tr(szMessageText), QDialogButtonBox::Yes | QDialogButtonBox::No, QDialogButtonBox::No);
+		shouldReload = (messageBox->Execute() == QDialogButtonBox::Yes);
 	}
-	else
-	{
-		szMessageText = "External changes have been made to audio controls files.\nDo you want to reload?";
-	}
-
-	auto const messageBox = new CQuestionDialog();
-	messageBox->SetupQuestion(tr(GetEditorName()), tr(szMessageText), QDialogButtonBox::Yes | QDialogButtonBox::No, QDialogButtonBox::No);
-	shouldReload = (messageBox->Execute() == QDialogButtonBox::Yes);
 
 	if (shouldReload)
 	{
@@ -524,7 +517,7 @@ void CMainWindow::ReloadSystemData()
 //////////////////////////////////////////////////////////////////////////
 void CMainWindow::ReloadMiddlewareData()
 {
-	m_pMonitorSystem->Disable();
+	m_pMonitorMiddleware->Disable();
 	QGuiApplication::setOverrideCursor(Qt::WaitCursor);
 	OnAboutToReload();
 

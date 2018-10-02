@@ -7,6 +7,7 @@
 #include "ImplementationManager.h"
 #include "AssetUtils.h"
 
+#include <IConnection.h>
 #include <IItem.h>
 
 #include <FilePathUtil.h>
@@ -14,6 +15,10 @@
 namespace ACE
 {
 ControlId CAssetsManager::m_nextId = 1;
+
+static constexpr uint32 g_controlPoolSize = 8192;
+static constexpr uint32 g_folderPoolSize = 1024;
+static constexpr uint32 g_libraryPoolSize = 256;
 
 //////////////////////////////////////////////////////////////////////////
 CAssetsManager::CAssetsManager()
@@ -31,11 +36,24 @@ CAssetsManager::~CAssetsManager()
 	CAudioControlsEditorPlugin::SignalAboutToLoad.DisconnectById(reinterpret_cast<uintptr_t>(this));
 	CAudioControlsEditorPlugin::SignalLoaded.DisconnectById(reinterpret_cast<uintptr_t>(this));
 	Clear();
+
+	CControl::FreeMemoryPool();
+	CFolder::FreeMemoryPool();
+	CLibrary::FreeMemoryPool();
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CAssetsManager::Initialize()
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "ACE Control Pool");
+	CControl::CreateAllocator(g_controlPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "ACE Folder Pool");
+	CFolder::CreateAllocator(g_folderPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "ACE Library Pool");
+	CLibrary::CreateAllocator(g_libraryPoolSize);
+
 	g_implementationManager.SignalImplementationAboutToChange.Connect([this]()
 		{
 			ClearAllConnections();
@@ -727,11 +745,11 @@ CAsset* CAssetsManager::CreateAndConnectImplItemsRecursively(Impl::IItem* const 
 		pParent->AddChild(pControl);
 		m_controls.push_back(pControl);
 
-		ConnectionPtr const pAudioConnection = g_pIImpl->CreateConnectionToControl(pControl->GetType(), pIItem);
+		IConnection* const pIConnection = g_pIImpl->CreateConnectionToControl(pControl->GetType(), pIItem);
 
-		if (pAudioConnection != nullptr)
+		if (pIConnection != nullptr)
 		{
-			pControl->AddConnection(pAudioConnection);
+			pControl->AddConnection(pIConnection);
 		}
 
 		pAsset = pControl;

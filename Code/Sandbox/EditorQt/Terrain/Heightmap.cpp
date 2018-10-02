@@ -1732,11 +1732,7 @@ void CHeightmap::Copy(const AABB& srcBox, int targetRot, const Vec3& targetPos, 
 		hmapPosStart = WorldToHmap(targetPos - Vec3(dym.y / 2, dym.x / 2, dym.z)) - CPoint(cx1, cy1);
 	}
 
-#if CRY_PLATFORM_64BIT
 	const LONG blocksize = 4096;
-#else
-	const LONG blocksize = 512;
-#endif
 
 	for (LONG by = by1; by < by2; by += blocksize)
 	{
@@ -2820,7 +2816,7 @@ void CHeightmap::SetWaterLevel(float waterLevel)
 			GetIEditorImpl()->GetSystem()->GetI3DEngine()->GetITerrain()->SetOceanWaterLevel(waterLevel);
 
 	signalWaterLevelChanged();
-};
+}
 
 void CHeightmap::SetHoleAt(const int x, const int y, const bool bHole)
 {

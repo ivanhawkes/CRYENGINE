@@ -217,6 +217,8 @@ class CShaderMan :
 	//////////////////////////////////////////////////////////////////////////
 
 private:
+	void           mfUpdateBuildVersion(const char* szCachePath);
+
 	STexAnim*      mfReadTexSequence(const char* name, int Flags, bool bFindOnly);
 	int            mfReadTexSequence(STexSamplerRT* smp, const char* name, int Flags, bool bFindOnly);
 
@@ -531,7 +533,7 @@ public:
 	void mfAddLTCombination(SCacheCombination* cmb, FXShaderCacheCombinations& CmbsMapDst, DWORD dwL);
 #endif
 
-#if CRY_PLATFORM_WINDOWS && CRY_PLATFORM_64BIT
+#if CRY_PLATFORM_WINDOWS
 	#pragma warning( push )           //AMD Port
 	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'XXX', possible loss of data
 #endif
@@ -560,7 +562,7 @@ public:
 	static float EvalWaveForm2(SWaveForm* wf, float frac);
 };
 
-#if CRY_PLATFORM_WINDOWS && CRY_PLATFORM_64BIT
+#if CRY_PLATFORM_WINDOWS
 	#pragma warning( pop ) //AMD Port
 #endif
 

@@ -20,7 +20,8 @@ const float kSelectionBallScale = 0.05f;
 const float kRotateCircleRadiusScale = 0.75f;
 
 CAxisHelper::CAxisHelper()
-	: m_matrix(IDENTITY)
+	: m_b2D(false)
+	, m_matrix(IDENTITY)
 {
 	m_nModeFlags = MOVE_FLAG;
 	m_highlightMode = MOVE_MODE;
@@ -47,10 +48,8 @@ void CAxisHelper::Prepare(const Matrix34& worldTM, IDisplayViewport* view, float
 	m_bNeedY = true;
 	m_bNeedZ = true;
 
-	CLevelEditorSharedState::Axis axis = CLevelEditorSharedState::Axis::None;
 	m_b2D = false;
-
-	axis = view->GetPerpendicularAxis(&m_b2D);
+	CLevelEditorSharedState::Axis axis = view->GetPerpendicularAxis(&m_b2D);
 
 	// Disable axis if needed (we could be smarter here and just disable based on dot product between gizmo axes and view direction)
 	if (m_b2D && coordSystem == CLevelEditorSharedState::CoordSystem::Local)

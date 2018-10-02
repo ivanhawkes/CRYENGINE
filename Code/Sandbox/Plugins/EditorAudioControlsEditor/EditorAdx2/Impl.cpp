@@ -6,6 +6,7 @@
 #include "Common.h"
 #include "PlatformConnection.h"
 #include "CueConnection.h"
+#include "GenericConnection.h"
 #include "ParameterConnection.h"
 #include "ParameterToStateConnection.h"
 #include "SnapshotConnection.h"
@@ -25,6 +26,14 @@ namespace Impl
 {
 namespace Adx2
 {
+constexpr uint32 g_itemPoolSize = 8192;
+constexpr uint32 g_cueConnectionPoolSize = 8192;
+constexpr uint32 g_parameterConnectionPoolSize = 512;
+constexpr uint32 g_parameterToStateConnectionPoolSize = 256;
+constexpr uint32 g_platformConnectionPoolSize = 256;
+constexpr uint32 g_snapshotConnectionPoolSize = 128;
+constexpr uint32 g_genericConnectionPoolSize = 512;
+
 //////////////////////////////////////////////////////////////////////////
 EItemType TagToType(char const* const szTag)
 {
@@ -160,6 +169,27 @@ CImpl::CImpl()
 	, m_localizedAssetsPath(m_assetsPath)
 	, m_szUserSettingsFile("%USER%/audiocontrolseditor_adx2.user")
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Item Pool");
+	CItem::CreateAllocator(g_itemPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Cue Connection Pool");
+	CCueConnection::CreateAllocator(g_cueConnectionPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Parameter Connection Pool");
+	CParameterConnection::CreateAllocator(g_parameterConnectionPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Parameter To State Connection Pool");
+	CParameterToStateConnection::CreateAllocator(g_parameterToStateConnectionPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Platform Connection Pool");
+	CPlatformConnection::CreateAllocator(g_platformConnectionPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Snapshot Connection Pool");
+	CSnapshotConnection::CreateAllocator(g_snapshotConnectionPoolSize);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Generic Connection Pool");
+	CGenericConnection::CreateAllocator(g_genericConnectionPoolSize);
+
 	gEnv->pAudioSystem->GetImplInfo(m_implInfo);
 	m_implName = m_implInfo.name.c_str();
 	m_implFolderName = CryAudio::Impl::Adx2::s_szImplFolderName;
@@ -172,6 +202,14 @@ CImpl::~CImpl()
 {
 	Clear();
 	DestroyDataPanel();
+
+	CItem::FreeMemoryPool();
+	CCueConnection::FreeMemoryPool();
+	CParameterConnection::FreeMemoryPool();
+	CParameterToStateConnection::FreeMemoryPool();
+	CPlatformConnection::FreeMemoryPool();
+	CSnapshotConnection::FreeMemoryPool();
+	CGenericConnection::FreeMemoryPool();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -268,14 +306,14 @@ bool CImpl::IsSystemTypeSupported(EAssetType const assetType) const
 
 	switch (assetType)
 	{
-	case EAssetType::Trigger:
-	case EAssetType::Parameter:
-	case EAssetType::Switch:
-	case EAssetType::State:
-	case EAssetType::Environment:
-	case EAssetType::Preload:
-	case EAssetType::Setting:
-	case EAssetType::Folder:
+	case EAssetType::Trigger:     // Intentional fall-through.
+	case EAssetType::Parameter:   // Intentional fall-through.
+	case EAssetType::Switch:      // Intentional fall-through.
+	case EAssetType::State:       // Intentional fall-through.
+	case EAssetType::Environment: // Intentional fall-through.
+	case EAssetType::Preload:     // Intentional fall-through.
+	case EAssetType::Setting:     // Intentional fall-through.
+	case EAssetType::Folder:      // Intentional fall-through.
 	case EAssetType::Library:
 		isSupported = true;
 		break;
@@ -344,12 +382,12 @@ EAssetType CImpl::ImplTypeToAssetType(IItem const* const pIItem) const
 
 		switch (implType)
 		{
-		case EItemType::Cue:
+		case EItemType::Cue: // Intentional fall-through.
 		case EItemType::Snapshot:
 			assetType = EAssetType::Trigger;
 			break;
-		case EItemType::AisacControl:
-		case EItemType::Category:
+		case EItemType::AisacControl: // Intentional fall-through.
+		case EItemType::Category:     // Intentional fall-through.
 		case EItemType::GameVariable:
 			assetType = EAssetType::Parameter;
 			break;
@@ -378,9 +416,9 @@ EAssetType CImpl::ImplTypeToAssetType(IItem const* const pIItem) const
 }
 
 //////////////////////////////////////////////////////////////////////////
-ConnectionPtr CImpl::CreateConnectionToControl(EAssetType const assetType, IItem const* const pIItem)
+IConnection* CImpl::CreateConnectionToControl(EAssetType const assetType, IItem const* const pIItem)
 {
-	ConnectionPtr pConnection = nullptr;
+	IConnection* pIConnection = nullptr;
 	auto const pItem = static_cast<CItem const* const>(pIItem);
 
 	if (pItem != nullptr)
@@ -389,45 +427,45 @@ ConnectionPtr CImpl::CreateConnectionToControl(EAssetType const assetType, IItem
 
 		if (type == EItemType::Cue)
 		{
-			pConnection = std::make_shared<CCueConnection>(pItem->GetId());
+			pIConnection = static_cast<IConnection*>(new CCueConnection(pItem->GetId()));
 		}
 		else if ((type == EItemType::AisacControl) || (type == EItemType::Category) || (type == EItemType::GameVariable))
 		{
 			if ((assetType == EAssetType::Parameter) || (assetType == EAssetType::Environment))
 			{
-				pConnection = std::make_shared<CParameterConnection>(pItem->GetId());
+				pIConnection = static_cast<IConnection*>(new CParameterConnection(pItem->GetId()));
 			}
 			else if (assetType == EAssetType::State)
 			{
 				float const value = (type == EItemType::Category) ? CryAudio::Impl::Adx2::s_defaultCategoryVolume : CryAudio::Impl::Adx2::s_defaultStateValue;
-				pConnection = std::make_shared<CParameterToStateConnection>(pItem->GetId(), type, value);
+				pIConnection = static_cast<IConnection*>(new CParameterToStateConnection(pItem->GetId(), type, value));
 			}
 			else
 			{
-				pConnection = std::make_shared<CBaseConnection>(pItem->GetId());
+				pIConnection = static_cast<IConnection*>(new CGenericConnection(pItem->GetId()));
 			}
 		}
 		else if ((type == EItemType::Binary) || (type == EItemType::DspBusSetting))
 		{
-			pConnection = std::make_shared<CPlatformConnection>(pItem->GetId());
+			pIConnection = static_cast<IConnection*>(new CPlatformConnection(pItem->GetId()));
 		}
 		else if (type == EItemType::Snapshot)
 		{
-			pConnection = std::make_shared<CSnapshotConnection>(pItem->GetId());
+			pIConnection = static_cast<IConnection*>(new CSnapshotConnection(pItem->GetId()));
 		}
 		else
 		{
-			pConnection = std::make_shared<CBaseConnection>(pItem->GetId());
+			pIConnection = static_cast<IConnection*>(new CGenericConnection(pItem->GetId()));
 		}
 	}
 
-	return pConnection;
+	return pIConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ConnectionPtr CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType const assetType)
+IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType const assetType)
 {
-	ConnectionPtr pConnectionPtr = nullptr;
+	IConnection* pIConnection = nullptr;
 
 	if (pNode != nullptr)
 	{
@@ -468,12 +506,11 @@ ConnectionPtr CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType co
 						cueActionType = CCueConnection::EActionType::Resume;
 					}
 
-					auto const pConnection = std::make_shared<CCueConnection>(pItem->GetId(), cueSheetName, cueActionType);
-					pConnectionPtr = pConnection;
+					pIConnection = static_cast<IConnection*>(new CCueConnection(pItem->GetId(), cueSheetName, cueActionType));
 				}
 				break;
-			case EItemType::AisacControl:
-			case EItemType::Category:
+			case EItemType::AisacControl: // Intentional fall-through.
+			case EItemType::Category:     // Intentional fall-through.
 			case EItemType::GameVariable:
 				{
 					if ((assetType == EAssetType::Parameter) || (assetType == EAssetType::Environment))
@@ -483,16 +520,15 @@ ConnectionPtr CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType co
 						pNode->getAttr(CryAudio::Impl::Adx2::s_szMutiplierAttribute, mult);
 						pNode->getAttr(CryAudio::Impl::Adx2::s_szShiftAttribute, shift);
 
-						auto const pConnection = std::make_shared<CParameterConnection>(pItem->GetId(), mult, shift);
-						pConnectionPtr = pConnection;
+						auto const pParameterConnection = new CParameterConnection(pItem->GetId(), mult, shift);
+						pIConnection = static_cast<IConnection*>(pParameterConnection);
 					}
 					else if (assetType == EAssetType::State)
 					{
 						float value = (type == EItemType::Category) ? CryAudio::Impl::Adx2::s_defaultCategoryVolume : CryAudio::Impl::Adx2::s_defaultStateValue;
 						pNode->getAttr(CryAudio::Impl::Adx2::s_szValueAttribute, value);
 
-						auto const pConnection = std::make_shared<CParameterToStateConnection>(pItem->GetId(), type, value);
-						pConnectionPtr = pConnection;
+						pIConnection = static_cast<IConnection*>(new CParameterToStateConnection(pItem->GetId(), type, value));
 					}
 				}
 				break;
@@ -524,7 +560,7 @@ ConnectionPtr CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType co
 								pSelectorLabelItem = CreatePlaceholderItem(childName, EItemType::SelectorLabel, pItem);
 							}
 
-							pConnectionPtr = std::make_shared<CBaseConnection>(pSelectorLabelItem->GetId());
+							pIConnection = static_cast<IConnection*>(new CGenericConnection(pSelectorLabelItem->GetId()));
 						}
 					}
 					else
@@ -535,7 +571,7 @@ ConnectionPtr CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType co
 				break;
 			case EItemType::Bus:
 				{
-					pConnectionPtr = std::make_shared<CBaseConnection>(pItem->GetId());
+					pIConnection = static_cast<IConnection*>(new CGenericConnection(pItem->GetId()));
 				}
 				break;
 			case EItemType::Snapshot:
@@ -543,28 +579,28 @@ ConnectionPtr CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType co
 					int changeoverTime = CryAudio::Impl::Adx2::s_defaultChangeoverTime;
 					pNode->getAttr(CryAudio::Impl::Adx2::s_szTimeAttribute, changeoverTime);
 
-					pConnectionPtr = std::make_shared<CSnapshotConnection>(pItem->GetId(), changeoverTime);
+					pIConnection = static_cast<IConnection*>(new CSnapshotConnection(pItem->GetId(), changeoverTime));
 				}
 				break;
-			case EItemType::Binary:
+			case EItemType::Binary: // Intentional fall-through.
 			case EItemType::DspBusSetting:
 				{
-					pConnectionPtr = std::make_shared<CPlatformConnection>(pItem->GetId());
+					pIConnection = static_cast<IConnection*>(new CPlatformConnection(pItem->GetId()));
 				}
 				break;
 			}
 		}
 	}
 
-	return pConnectionPtr;
+	return pIConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
-XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, EAssetType const assetType)
+XmlNodeRef CImpl::CreateXMLNodeFromConnection(IConnection const* const pIConnection, EAssetType const assetType)
 {
 	XmlNodeRef pNode = nullptr;
 
-	auto const pItem = static_cast<CItem* const>(GetItem(pConnection->GetID()));
+	auto const pItem = static_cast<CItem const*>(GetItem(pIConnection->GetID()));
 
 	if (pItem != nullptr)
 	{
@@ -576,7 +612,7 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, E
 		case EItemType::Cue:
 			{
 				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
-				auto const pCueConnection = static_cast<const CCueConnection*>(pConnection.get());
+				auto const pCueConnection = static_cast<CCueConnection const*>(pIConnection);
 
 				if (pCueConnection != nullptr)
 				{
@@ -604,15 +640,15 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, E
 				}
 			}
 			break;
-		case EItemType::AisacControl:
-		case EItemType::Category:
+		case EItemType::AisacControl: // Intentional fall-through.
+		case EItemType::Category:     // Intentional fall-through.
 		case EItemType::GameVariable:
 			{
 				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
 
 				if ((assetType == EAssetType::Parameter) || (assetType == EAssetType::Environment))
 				{
-					auto const pParamConnection = static_cast<CParameterConnection const*>(pConnection.get());
+					auto const pParamConnection = static_cast<CParameterConnection const*>(pIConnection);
 
 					if (pParamConnection != nullptr)
 					{
@@ -629,7 +665,7 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, E
 				}
 				else if (assetType == EAssetType::State)
 				{
-					auto const pStateConnection = static_cast<CParameterToStateConnection const*>(pConnection.get());
+					auto const pStateConnection = static_cast<CParameterToStateConnection const*>(pIConnection);
 
 					if (pStateConnection != nullptr)
 					{
@@ -655,7 +691,7 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, E
 				}
 			}
 			break;
-		case EItemType::DspBusSetting:
+		case EItemType::DspBusSetting: // Intentional fall-through.
 		case EItemType::Bus:
 			{
 				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
@@ -665,7 +701,7 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, E
 			{
 				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
 
-				auto const pSnapshotConnection = static_cast<CSnapshotConnection const*>(pConnection.get());
+				auto const pSnapshotConnection = static_cast<CSnapshotConnection const*>(pIConnection);
 
 				if (pSnapshotConnection != nullptr)
 				{
@@ -693,26 +729,21 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(ConnectionPtr const pConnection, E
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::EnableConnection(ConnectionPtr const pConnection, bool const isLoading)
+void CImpl::EnableConnection(IConnection const* const pIConnection, bool const isLoading)
 {
-	auto const pItem = static_cast<CItem* const>(GetItem(pConnection->GetID()));
+	auto const pItem = static_cast<CItem*>(GetItem(pIConnection->GetID()));
 
 	if (pItem != nullptr)
 	{
 		++m_connectionsByID[pItem->GetId()];
 		pItem->SetFlags(pItem->GetFlags() | EItemFlags::IsConnected);
-
-		if ((m_pDataPanel != nullptr) && !isLoading)
-		{
-			m_pDataPanel->OnConnectionAdded();
-		}
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DisableConnection(ConnectionPtr const pConnection, bool const isLoading)
+void CImpl::DisableConnection(IConnection const* const pIConnection, bool const isLoading)
 {
-	auto const pItem = static_cast<CItem* const>(GetItem(pConnection->GetID()));
+	auto const pItem = static_cast<CItem*>(GetItem(pIConnection->GetID()));
 
 	if (pItem != nullptr)
 	{
@@ -726,12 +757,13 @@ void CImpl::DisableConnection(ConnectionPtr const pConnection, bool const isLoad
 		}
 
 		m_connectionsByID[pItem->GetId()] = connectionCount;
-
-		if ((m_pDataPanel != nullptr) && !isLoading)
-		{
-			m_pDataPanel->OnConnectionRemoved();
-		}
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::DestructConnection(IConnection const* const pIConnection)
+{
+	delete pIConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
