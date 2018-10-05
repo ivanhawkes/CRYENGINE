@@ -1,25 +1,27 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#include <StdAfx.h>
+#include "StdAfx.h"
+#include "QMainToolBarManager.h"
 
+#include "LevelEditor/LevelFileUtils.h"
+#include "QT/QtMainFrame.h"
+
+#include <CryIcon.h>
+
+#include <Commands/QCommandAction.h>
+#include <Commands/CustomCommand.h>
+#include <Util/UserDataUtil.h>
+#include <FilePathUtil.h>
+#include <QtUtil.h>
+
+#include <CryString/CryPath.h>
+#include <CrySystem/IProjectManager.h>
+
+#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QToolBar>
 #include <QToolButton>
-#include <QDir>
-
-#include "LevelEditor/LevelFileUtils.h"
-#include "QT/QtMainFrame.h"
-#include "QMainToolBarManager.h"
-#include "QtUtil.h"
-#include "Commands/QCommandAction.h"
-#include "Commands/CustomCommand.h"
-#include <CryIcon.h>
-#include <Util/UserDataUtil.h>
-#include <FilePathUtil.h>
-
-#include <CrySystem/IProjectManager.h>
-#include <CryString/CryPath.h>
 
 namespace Private_ToolbarManager
 {
@@ -355,17 +357,17 @@ QMainToolBarManager::~QMainToolBarManager()
 		disconnect(connection);
 }
 
-void QMainToolBarManager::AddToolBar(const QString& name, const std::shared_ptr<QToolBarDesc> toolBar)
+void QMainToolBarManager::AddToolBar(const QString& name, const std::shared_ptr<QToolBarDesc>& pToolBar)
 {
-	m_ToolBarsDesc[name] = toolBar;
+	m_ToolBarsDesc[name] = pToolBar;
 	SaveToolBar(name);
-	CreateMainFrameToolBar(name, toolBar);
+	CreateMainFrameToolBar(name, pToolBar);
 }
 
-void QMainToolBarManager::UpdateToolBar(const std::shared_ptr<QToolBarDesc> toolBar)
+void QMainToolBarManager::UpdateToolBar(const std::shared_ptr<QToolBarDesc>& pToolBar)
 {
-	SaveToolBar(toolBar->GetName());
-	CreateMainFrameToolBar(toolBar->GetName(), toolBar);
+	SaveToolBar(pToolBar->GetName());
+	CreateMainFrameToolBar(pToolBar->GetName(), pToolBar);
 }
 
 void QMainToolBarManager::RemoveToolBar(const QString& name)
@@ -494,17 +496,17 @@ void QMainToolBarManager::CreateMainFrameToolBars()
 	}
 }
 
-void QMainToolBarManager::UpdateToolBarOnDisk(const QString& name, const std::shared_ptr<QToolBarDesc> toolBarDesc) const
+void QMainToolBarManager::UpdateToolBarOnDisk(const QString& name, const std::shared_ptr<QToolBarDesc>& pToolBarDesc) const
 {
 	QVariantMap toDisk;
 	toDisk["version"] = Private_ToolbarManager::s_version;
-	toDisk["toolBar"] = toolBarDesc->ToVariant();
+	toDisk["toolBar"] = pToolBarDesc->ToVariant();
 
 	QJsonDocument doc(QJsonDocument::fromVariant(toDisk));
 	UserDataUtil::Save(PathUtil::Make(Private_ToolbarManager::szUserToolbarsPath, QtUtil::ToConstCharPtr(name), ".json").c_str(), doc.toJson());
 }
 
-void QMainToolBarManager::CreateMainFrameToolBar(const QString& name, const std::shared_ptr<QToolBarDesc> toolBarDesc)
+void QMainToolBarManager::CreateMainFrameToolBar(const QString& name, const std::shared_ptr<QToolBarDesc>& pToolBarDesc)
 {
 	// Check if the toolbar already exists on the mainframe
 	QString toolBarObjectName = name + "ToolBar";
@@ -523,7 +525,7 @@ void QMainToolBarManager::CreateMainFrameToolBar(const QString& name, const std:
 		pToolBar->clear();
 	}
 
-	CreateToolBar(toolBarDesc, pToolBar);
+	CreateToolBar(pToolBarDesc, pToolBar);
 
 	if (bToolBarExists)
 		return;
@@ -532,9 +534,9 @@ void QMainToolBarManager::CreateMainFrameToolBar(const QString& name, const std:
 	pToolBar->setVisible(false);
 }
 
-void QMainToolBarManager::CreateToolBar(const std::shared_ptr<QToolBarDesc> toolBarDesc, QToolBar* pToolBar)
+void QMainToolBarManager::CreateToolBar(const std::shared_ptr<QToolBarDesc>& pToolBarDesc, QToolBar* pToolBar)
 {
-	for (std::shared_ptr<QItemDesc> pItemDesc : toolBarDesc->GetItems())
+	for (std::shared_ptr<QItemDesc> pItemDesc : pToolBarDesc->GetItems())
 	{
 		switch (pItemDesc->GetType())
 		{

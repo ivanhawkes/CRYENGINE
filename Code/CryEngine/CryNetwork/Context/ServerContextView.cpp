@@ -1010,10 +1010,10 @@ void CServerContextView::UnbindObject(SNetObjectID nID)
 		SContextViewObject& cvo = m_objects[nID.id];
 		if (cvo.predictionHandle && cvo.spawnState == eSS_Unspawned)
 		{
-			SRemoveStaticObject rso;
-			rso.id = cvo.predictionHandle;
+			SRemovePredictedObject rpo;
+			rpo.id = cvo.predictionHandle;
 			m_pPendingUnbinds->insert(std::make_pair(nID, lk));
-			CClientContextView::SendUnbindPredictedObjectWith(rso, Parent());
+			CClientContextView::SendUnbindPredictedObjectWith(rpo, Parent());
 		}
 		else
 		{
@@ -1259,12 +1259,13 @@ void CServerContextView::OnWitnessDeclared()
 
 void CServerContextView::RemoveStaticEntity(EntityId id)
 {
+#ifndef PURE_CLIENT
 	class CRemoveStaticObjectMessage : public INetMessage, private SRemoveStaticObject
 	{
 	public:
-		CRemoveStaticObjectMessage(const SNetMessageDef* pDef, EntityId id) : INetMessage(pDef)
+		CRemoveStaticObjectMessage(const SNetMessageDef* pDef, IEntitySystem::StaticEntityNetworkIdentifier id) : INetMessage(pDef)
 		{
-			this->id = id;
+			this->staticId = id;
 		}
 
 		EMessageSendResult WritePayload(TSerialize ser, uint32, uint32)
@@ -1288,5 +1289,10 @@ void CServerContextView::RemoveStaticEntity(EntityId id)
 		if (IsObjectBound(objId))
 			return;
 
-	Parent()->NetAddSendable(new CRemoveStaticObjectMessage(CClientContextView::RemoveStaticObject, id), 0, NULL, NULL);
+	const IEntitySystem::StaticEntityNetworkIdentifier staticId = gEnv->pEntitySystem->GetStaticEntityNetworkId(id);
+	Parent()->NetAddSendable(new CRemoveStaticObjectMessage(CClientContextView::RemoveStaticObject, staticId), 0, NULL, NULL);
+#else
+	// Calling RemoveStaticEntity on PURE_CLIENT is not supported. If happens - check settings for eNOE_RemoveStaticEntity.
+	NET_ASSERT(false);
+#endif
 }

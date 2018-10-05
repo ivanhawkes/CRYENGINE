@@ -142,8 +142,8 @@ public:
 	QMainToolBarManager(CEditorMainFrame* pMainFrame = nullptr);
 	~QMainToolBarManager();
 
-	void                                                AddToolBar(const QString& name, const std::shared_ptr<QToolBarDesc> );
-	void                                                UpdateToolBar(const std::shared_ptr<QToolBarDesc> toolBar);
+	void                                                AddToolBar(const QString& name, const std::shared_ptr<QToolBarDesc>& pToolBar);
+	void                                                UpdateToolBar(const std::shared_ptr<QToolBarDesc>& pToolBar);
 	void                                                RemoveToolBar(const QString& name);
 
 	const QMap<QString, std::shared_ptr<QToolBarDesc>>& GetToolBars() const             { return m_ToolBarsDesc; }
@@ -151,14 +151,14 @@ public:
 
 	QVariantMap                                         ToVariant(const CCommand* pCommand) const;
 	void                                                CreateMainFrameToolBars();
-	void                                                CreateMainFrameToolBar(const QString& name, const std::shared_ptr<QToolBarDesc> toolBarDesc);
-	void                                                CreateToolBar(const std::shared_ptr<QToolBarDesc> toolBarDesc, QToolBar* pToolBar);
+	void                                                CreateMainFrameToolBar(const QString& name, const std::shared_ptr<QToolBarDesc>& pToolBarDesc);
+	void                                                CreateToolBar(const std::shared_ptr<QToolBarDesc>& pToolBarDesc, QToolBar* pToolBar);
 
 protected:
 	void SaveToolBar(const QString& name) const;
 	void LoadAll();
 	void LoadToolBarsFromDir(const QString& dirPath);
-	void UpdateToolBarOnDisk(const QString& name, const std::shared_ptr<QToolBarDesc> toolBarDesc) const;
+	void UpdateToolBarOnDisk(const QString& name, const std::shared_ptr<QToolBarDesc>& toolBarDesc) const;
 
 	void OnCVarActionDestroyed(ICVar* pCVar, QAction* pObject);
 	void OnCVarChanged(ICVar* pCVar);
