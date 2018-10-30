@@ -143,18 +143,18 @@ bool CContactRaycastPinger::Update(Vec3& position, Vec3& normal)
 ILINE bool InitializePoseAlignerBipedHuman(PoseAligner::CPose& pose, IEntity& entity, ICharacterInstance& character)
 {
 	IDefaultSkeleton& rIDefaultSkeleton = character.GetIDefaultSkeleton();
-	int jointIndexRoot = rIDefaultSkeleton.GetJointIDByName("Bip01 Pelvis");
+	int jointIndexRoot = rIDefaultSkeleton.GetJointIDByName("Hips");
 	if (jointIndexRoot < 0)
 		return false;
-	int jointIndexFrontLeft = rIDefaultSkeleton.GetJointIDByName("Bip01 planeTargetLeft");
+	int jointIndexFrontLeft = rIDefaultSkeleton.GetJointIDByName("LeftFootIKTarget");
 	if (jointIndexFrontLeft < 0)
 		return false;
-	int jointIndexFrontRight = rIDefaultSkeleton.GetJointIDByName("Bip01 planeTargetRight");
+	int jointIndexFrontRight = rIDefaultSkeleton.GetJointIDByName("RightFootIKTarget");
 	if (jointIndexFrontRight < 0)
 		return false;
 
-	int jointIndexLeftBlend = rIDefaultSkeleton.GetJointIDByName("Bip01 planeWeightLeft");
-	int jointIndexRightBlend = rIDefaultSkeleton.GetJointIDByName("Bip01 planeWeightRight");
+	int jointIndexLeftBlend = rIDefaultSkeleton.GetJointIDByName("LeftFootIKWeight");
+	int jointIndexRightBlend = rIDefaultSkeleton.GetJointIDByName("RightFootIKWeight");
 
 	if (!pose.Initialize(entity, &character, jointIndexRoot))
 		return false;
