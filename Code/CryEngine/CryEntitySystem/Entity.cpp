@@ -36,7 +36,9 @@
 #include <CryGame/IGameFramework.h>
 
 // enable this to check nan's on position updates... useful for debugging some weird crashes
+#if !defined(_RELEASE)
 #define ENABLE_NAN_CHECK
+#endif
 
 #ifdef ENABLE_NAN_CHECK
 	#define CHECKQNAN_FLT(x) \
@@ -185,7 +187,7 @@ bool CEntity::SendEventInternal(const SEntityEvent& event)
 	const uint8 firstEventIndex = static_cast<uint8>(countTrailingZeros64(mask)); /* Index of the first set bit in mask */ \
 	const uint8 lastUsedEventIndex = static_cast<uint8>(std::numeric_limits<EntityEventMask>::digits - static_cast<uint8>(countLeadingZeros64(mask)));  /* Index of the last set bit in mask */ \
 	const uint8 lastEventIndex = min(lastUsedEventIndex, CEntity::GetEntityEventIndex(Cry::Entity::EEvent::LastNonPerformanceCritical)); /* Index of the last usable set bit in mask, perf critical events don't matter */ \
-	for (uint8 i = firstEventIndex; i < lastEventIndex; i += static_cast<uint8>(countTrailingZeros64(mask >> (i + 1)) + 1)) /* Iterate through the set events, skip past segments that are set to 0 - faster than check inside since majority of events will have the majority of mask bits set to 0 */ \
+	for (uint8 i = firstEventIndex; i <= lastEventIndex; i += static_cast<uint8>(countTrailingZeros64(mask >> (i + 1)) + 1)) /* Iterate through the set events, skip past segments that are set to 0 - faster than check inside since majority of events will have the majority of mask bits set to 0 */ \
 	
 
 /////////////////////////////////////////////////////////////////////////
@@ -1390,9 +1392,6 @@ void CEntity::LoadComponent(Serialization::IArchive& archive, uint8*& pComponent
 void CEntity::SaveComponent(Serialization::IArchive& archive, IEntityComponent& component)
 {
 	// Load component Type GUID
-	CryGUID typeGUID;
-	CryGUID componentGUID;
-	CryGUID parentGUID;
 	EntityComponentFlags componentFlags;
 	CryTransform::CTransformPtr pTransform;
 
@@ -2455,6 +2454,7 @@ Matrix34 CEntity::GetSlotLocalTM(int nSlot, bool bRelativeToParent) const
 //////////////////////////////////////////////////////////////////////////
 void CEntity::SetSlotLocalTM(int nSlot, const Matrix34& localTM, EntityTransformationFlagsMask transformReasons)
 {
+#if defined(USE_CRY_ASSERT)
 	Vec3 col0 = localTM.GetColumn(0);
 	Vec3 col1 = localTM.GetColumn(1);
 	Vec3 col2 = localTM.GetColumn(2);
@@ -2464,6 +2464,7 @@ void CEntity::SetSlotLocalTM(int nSlot, const Matrix34& localTM, EntityTransform
 	CHECKQNAN_VEC(col1);
 	CHECKQNAN_VEC(col2);
 	CHECKQNAN_VEC(col3);
+#endif
 
 	m_render.SetSlotLocalTM(nSlot, localTM, transformReasons);
 }

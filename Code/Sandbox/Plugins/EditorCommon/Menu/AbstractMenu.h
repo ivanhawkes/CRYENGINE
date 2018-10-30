@@ -4,6 +4,7 @@
 
 #include "EditorCommonAPI.h"
 
+#include <CryCore/smartptr.h>
 #include <CryString/CryString.h>
 #include <CrySandbox/CrySignal.h>
 
@@ -44,6 +45,8 @@ public:
 			int    m_section;
 			string m_name;
 		};
+
+		virtual ~IWidgetBuilder() {}
 
 		//! Adds this action to widget. Does not take ownership of the action.
 		virtual void AddAction(QAction* pAction) {}

@@ -3,17 +3,23 @@
 #include "QThumbnailView.h"
 
 #include <qevent.h> // contains sub events
-#include <QListView>
+#include <QAbstractButton>
+#include <QAction>
+#include <QApplication>
 #include <QBoxLayout>
-#include <QDrag>
-#include <QStyledItemDelegate>
-#include <QDateTime>
 #include <QButtonGroup>
+#include <QDateTime>
+#include <QDrag>
+#include <QListView>
+#include <QStyledItemDelegate>
+#include <QToolButton>
 
 #include "QtUtil.h"
 #include "EditorFramework/Events.h"
 #include "EditorFramework/PersonalizationManager.h"
 #include "DragDrop.h"
+#include "Menu/AbstractMenu.h"
+#include <CryIcon.h>
 
 namespace Private_QThumbnailView
 {
@@ -88,6 +94,7 @@ public:
 		QStyledItemDelegate::paint(painter, option, index);
 	}
 
+protected:
 	void DrawThumbnail(const QStyleOptionViewItem& option, const QModelIndex& index, QPainter* painter, const QVariant& v) const
 	{
 		const QWidget* widget = option.widget;
@@ -96,79 +103,117 @@ public:
 		QStyleOptionViewItem viewOpt(option);
 		initStyleOption(&viewOpt, index);
 
-		// Check if the model provides color categorization
-		QVariant vc = index.data(QThumbnailsView::s_ThumbnailColorRole);
 		const QRect& iconRect = style->subElementRect(QStyle::SE_ItemViewItemDecoration, &viewOpt, widget);
-		if (vc.isValid() && vc.type() == QVariant::Color)
-		{
-			const QColor color = vc.value<QColor>();
 
-			DrawThumbnailBackground(index, color, painter, iconRect);
+		DrawThumbnailBackground(index, painter, iconRect);
 
-			viewOpt.icon = qvariant_cast<QIcon>(v);
-			style->drawControl(QStyle::CE_ItemViewItem, &viewOpt, painter, widget);
-
-			// Draw vertical box left to the item icon.
-			{
-				painter->fillRect(iconRect.x(), iconRect.y(), 4, iconRect.height(), color);
-			}
-		}
-		else
-		{
-			viewOpt.icon = qvariant_cast<QIcon>(v);
-			style->drawControl(QStyle::CE_ItemViewItem, &viewOpt, painter, widget);
-		}
-
+		viewOpt.icon = qvariant_cast<QIcon>(v);
+		style->drawControl(QStyle::CE_ItemViewItem, &viewOpt, painter, widget);
+		
+		DrawThumbnailColorBar(index, painter, iconRect);
 		DrawThumbmailAdditionalIcons(index, iconRect, painter);
+	}
+
+	void DrawThumbnailBackground(const QModelIndex &index, QPainter* painter, const QRect& iconRect) const
+	{
+		QVariant vc = index.data(QThumbnailsView::s_ThumbnailBackgroundColorRole);
+		DrawRect(vc, painter, iconRect);
+	}
+
+	void DrawThumbnailColorBar(const QModelIndex &index, QPainter* painter, const QRect &iconRect) const
+	{
+		// Draw vertical box left to the item icon.
+		QVariant vc = index.data(QThumbnailsView::s_ThumbnailColorRole);
+		DrawRect(vc, painter, QRect(iconRect.x(), iconRect.y(), 4, iconRect.height()));
+
+	}
+
+	void DrawRect(QVariant &v, QPainter* painter, const QRect &rect) const
+	{
+		if (v.isValid() && v.type() == QVariant::Color)
+		{
+			const QColor color = v.value<QColor>();
+			painter->fillRect(rect, color);
+		}
 	}
 
 	void DrawThumbmailAdditionalIcons(const QModelIndex& index, const QRect& iconRect, QPainter* painter) const
 	{
 		QVariant vi = index.data(QThumbnailsView::s_ThumbnailIconsRole);
-		if (vi.isValid() && vi.type() == QVariant::List)
+		if (!vi.isValid() || vi.type() != QVariant::List)
 		{
-			const int iconSize = iconRect.width() >= 64 ? 16 : 8;
-			QVariantList varIcons = vi.value<QVariantList>();
-			int iconX = iconRect.right() - iconSize + 1;
-			int iconY = iconRect.y();
-			for (QVariant& vIcon : varIcons)
-			{
-				if (vIcon.isValid() && vIcon.type() == QVariant::Icon)
-				{
-					QIcon icon = qvariant_cast<QIcon>(vIcon);
-					painter->drawPixmap(iconX, iconY, icon.pixmap(iconSize, iconSize));
-				}
-				iconX -= iconSize;
-				if (iconX + 1 < iconRect.x())
-				{
-					iconX = iconRect.right() - iconSize + 1;
-					iconY += iconSize;
-					if (iconY + iconSize > iconRect.bottom() + 1)
-					{
-						return;
-					}
-				}
-			}
+			return;
 		}
-	}
 
-	void DrawThumbnailBackground(const QModelIndex &index, const QColor &color, QPainter* painter, const QRect& iconRect) const
-	{
-		// Draw a tinted background for the thumbnail by the model request.
-		const QVariant vb = index.data(QThumbnailsView::s_ThumbnailTintedBackgroundRole);
-		if (vb.isValid() && vb.type() == QVariant::Bool && vb.toBool())
+		QVariantList varIcons = vi.value<QVariantList>();
+		if (varIcons.isEmpty())
 		{
-			const float lightnessFactor = 0.75f;
-			const float saturationFactor = 0.125f;
+			return;
+		}
 
-			const QColor hslColor = color.toHsl();
-			const QColor backgroundColor = QColor::fromHslF(
-				hslColor.hslHueF(),
-				hslColor.hslSaturationF() * saturationFactor,
-				hslColor.lightnessF() * lightnessFactor,
-				hslColor.alphaF());
+		const int iconSize = iconRect.width() >= 64 ? 16 : 8;
 
-			painter->fillRect(iconRect, backgroundColor);
+		constexpr int positionCount = 4;
+		CRY_ASSERT(positionCount == SSubIcon::EPosition::BottomRight + 1);
+
+		QPoint point[positionCount];
+		QPoint step[positionCount];
+
+		point[SSubIcon::EPosition::TopRight] = QPoint(iconRect.x() + iconRect.width() - iconSize, iconRect.y());
+		point[SSubIcon::EPosition::TopLeft] = QPoint(iconRect.x(), iconRect.y());
+		point[SSubIcon::EPosition::BottomLeft] = QPoint(iconRect.x(), iconRect.y() + iconRect.height() - iconSize);
+		point[SSubIcon::EPosition::BottomRight] = QPoint(iconRect.x() + iconRect.width() - iconSize, iconRect.y() + iconRect.height() - iconSize);
+
+		step[SSubIcon::EPosition::TopRight] = QPoint(-iconSize, 0);
+		step[SSubIcon::EPosition::TopLeft] = QPoint(0, iconSize);
+		step[SSubIcon::EPosition::BottomLeft] = QPoint(iconSize, 0);
+		step[SSubIcon::EPosition::BottomRight] = QPoint(0, -iconSize);
+
+		for (QVariant& vIcon : varIcons)
+		{
+			if (!vIcon.isValid())
+			{
+				continue;
+			}
+
+			QIcon icon;
+			int positionIndex = static_cast<int>(SSubIcon::EPosition::TopRight);
+
+			if (vIcon.canConvert<SSubIcon>())
+			{
+				const SSubIcon subIcon = vIcon.value<SSubIcon>();
+				icon = subIcon.icon;
+				positionIndex = static_cast<int>(subIcon.position);
+			}
+			else if (vIcon.type() == QVariant::Icon)
+			{
+				icon = qvariant_cast<QIcon>(vIcon);
+			}
+			else
+			{ 
+				continue;
+			}
+
+			// Find a free spot starting from the desired corner in CCW direction. 
+			// The search can turn round corners if there is no space in the current line.
+			for(int i = 0; i <= positionCount; ++i)
+			{
+				if (i == positionCount)
+				{
+					return;
+				}
+
+				if (iconRect.translated(-step[positionIndex]).contains(point[positionIndex]))
+				{
+					break;
+				}
+
+				positionIndex = ++positionIndex % positionCount;
+			}
+
+			painter->drawPixmap(point[positionIndex], icon.pixmap(iconSize, iconSize));
+
+			point[positionIndex] += step[positionIndex];
 		}
 	}
 
@@ -403,6 +448,11 @@ void QThumbnailsView::ScrollToRow(const QModelIndex& indexInRow, QAbstractItemVi
 	}
 }
 
+QAbstractItemView* QThumbnailsView::GetInternalView()
+{
+	return m_listView;
+}
+
 void QThumbnailsView::AppendPreviewSizeActions(CAbstractMenu& menu)
 {
 	for (int i = 0; i < m_numOfPreviewSizes; ++i)
@@ -495,7 +545,7 @@ void QThumbnailsView::OnModelReset()
 
 void QThumbnailsView::OnPreviewSizeButtonClicked(int value)
 {
-	SetItemSize(QSize(value,value));
+	SetItemSize(QSize(value, value));
 	SaveState();
 }
 

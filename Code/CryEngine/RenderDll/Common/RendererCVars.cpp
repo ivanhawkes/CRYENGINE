@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 #include "RendererCVars.h"
 #include "Renderer.h"
+#include <CrySystem/CryVersion.h>
 #include <Cry3DEngine/I3DEngine.h>
 #include <Cry3DEngine/ITimeOfDay.h>
 #include "GraphicsPipeline/DebugRenderTargets.h"
@@ -3165,7 +3166,7 @@ const CCVarUpdateRecorder::SUpdateRecord* CCVarUpdateRecorder::GetCVar(const cha
 {
 	for (auto& cvar : m_updatedCVars[gRenDev->GetRenderThreadID()])
 	{
-		if (cry_strcmp(cvar.name, cvarName) == 0)
+		if (cry_stricmp(cvar.name, cvarName) == 0)
 			return &cvar;
 	}
 

@@ -135,7 +135,13 @@ void CREWaterVolume::mfCenter(Vec3& vCenter, CRenderObject* pObj, const SRenderi
 		vCenter += pObj->GetMatrix(passInfo).GetTranslation();
 }
 
-bool CREWaterVolume::Compile(CRenderObject* pObj,CRenderView *pRenderView, bool updateInstanceDataOnly)
+void CREWaterVolume::mfGetBBox(Vec3& vMins, Vec3& vMaxs) const
+{
+	vMins = m_pParams->m_WSBBox.min;
+	vMaxs = m_pParams->m_WSBBox.max;
+}
+
+bool CREWaterVolume::Compile(CRenderObject* pObj, uint64 objFlags, uint16 elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly)
 {
 	if (!m_pCompiledObject)
 	{
@@ -171,13 +177,14 @@ bool CREWaterVolume::Compile(CRenderObject* pObj,CRenderView *pRenderView, bool 
 
 	// NOTE: workaround for tessellation for water.
 	//       FOB_ALLOW_TESSELLATION is forcibly added in CRenderer::EF_AddEf_NotVirtual() even if shader doesn't have domain and hull shaders.
-	pObj->m_ObjFlags &= ~FOB_ALLOW_TESSELLATION;
+	objFlags &= ~FOB_ALLOW_TESSELLATION;
 
 	// create PSOs which match to specific material.
 	const InputLayoutHandle vertexFormat = EDefaultInputLayouts::P3F_C4B_T2F;
 	SGraphicsPipelineStateDescription psoDescription(
 	  pObj,
-	  this,
+	  objFlags,
+	  elmFlags,
 	  shaderItem,
 	  TTYPE_GENERAL, // set as default, this may be overwritten in CreatePipelineStates().
 	  vertexFormat,

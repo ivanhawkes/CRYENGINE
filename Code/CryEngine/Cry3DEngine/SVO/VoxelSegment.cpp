@@ -165,8 +165,13 @@ CVoxStreamEngine::~CVoxStreamEngine()
 void CVoxStreamEngine::DecompressVoxStreamItem(const SVoxStreamItem item)
 {
 	item.pObj->StreamAsyncOnComplete(0, 0);
+
+#if defined(USE_CRY_ASSERT)
 	const bool ret = m_arrForSyncCallBack.enqueue(item);
 	CRY_ASSERT_MESSAGE(ret, "CVoxStreamEngine::m_arrForSyncCallBack is not big enough.");
+#else
+	m_arrForSyncCallBack.enqueue(item);
+#endif
 }
 
 void CVoxStreamEngine::ProcessSyncCallBacks()
@@ -489,8 +494,6 @@ void CVoxelSegment::FreeBrickLayers()
 {
 	for (auto& it : m_objLayerMap)
 	{
-		ObjectLayerIdType nLayerId = it.first;
-
 		SVoxBrick& voxData = it.second;
 
 		for (int s = 0; s < GetSubSetsNum(); s++)
@@ -723,8 +726,6 @@ void CVoxelSegment::CropVoxTexture(int threadId, bool bCompSurfDist)
 
 	for (auto& it : m_objLayerMap)
 	{
-		ObjectLayerIdType nLayerId = it.first;
-
 		SVoxBrick& voxData = it.second;
 
 		for (int x = 0; x < SVO_VOX_BRICK_MAX_SIZE; x++)
@@ -765,8 +766,6 @@ void CVoxelSegment::CropVoxTexture(int threadId, bool bCompSurfDist)
 	{
 		for (auto& it : m_objLayerMap)
 		{
-			ObjectLayerIdType nLayerId = it.first;
-
 			SVoxBrick& voxDataIn = it.second;
 
 			SVoxBrick voxTemp;
@@ -1385,8 +1384,6 @@ void CVoxelSegment::VoxelizeMeshes(int threadId, bool bUseMT)
 		CheckAllocateBrick(m_voxData.pData[s], m_vCropTexSize.x * m_vCropTexSize.y * m_vCropTexSize.z, true);
 	}
 
-	Vec3 vBoxCenter = m_pNode->m_nodeBox.GetCenter();
-
 	// voxelize node tris
 	if ((m_nodeTrisAllMerged.Count() || Cry3DEngineBase::GetCVars()->e_svoTI_Troposphere_Subdivide) && m_voxData.pData[SVoxBrick::OPA3D] && m_pTrisInArea && pNodeTrisXYZ)
 	{
@@ -1898,7 +1895,7 @@ bool CVoxelSegment::CheckCollectObjectsForVoxelization(const AABB& cloudBoxWS, P
 
 	if (bThisIsAreaParent || bThisIsLowLodNode)
 	{
-		if (bAllowStartStreaming && bThisIsAreaParent)
+		if (bAllowStartStreaming && bThisIsAreaParent && gEnv->IsEditor())
 		{
 			// check or activate or build procedural vegetation in the area
 			if (!GetTerrain()->CheckUpdateProcObjectsInArea(AABB(cloudBoxWS.min - Vec3(2.f, 2.f, 32.f), cloudBoxWS.max + Vec3(2.f)), m_bExportMode))
@@ -1935,6 +1932,10 @@ bool CVoxelSegment::CheckCollectObjectsForVoxelization(const AABB& cloudBoxWS, P
 							continue;
 
 					if (pNode->GetGIMode() != IRenderNode::eGM_StaticVoxelization)
+						continue;
+
+					// skip run-time procedural vegetation (voxelize only offline-procedural)
+					if ((pNode->GetRenderNodeType() == eERType_Vegetation) && (pNode->GetRndFlags() & ERF_PROCEDURAL) && !((CVegetation*)pNode)->GetStatObjGroup().offlineProcedural)
 						continue;
 
 					float maxViewDist = pNode->GetBBox().GetRadius() * GetCVars()->e_ViewDistRatio;
@@ -2079,7 +2080,7 @@ void CVoxelSegment::FindTrianglesForVoxelization(PodArray<int>*& rpNodeTrisXYZ)
 		//		PodArray<SRayHitTriangle> allTrisInArea;
 		//	allTrisInArea.PreAllocate(4000);
 
-		float startTimeAll = GetCurAsyncTimeSec();
+		//float startTimeAll = GetCurAsyncTimeSec();
 		//		PrintMessage("VoxelizeMeshes: starting triangle search for node id %d (size=%d)", m_nId, (int)GetBoxSize());
 
 		SSuperMesh superMesh;
@@ -2094,8 +2095,7 @@ void CVoxelSegment::FindTrianglesForVoxelization(PodArray<int>*& rpNodeTrisXYZ)
 			//float startTime = GetCurAsyncTimeSec();
 
 			CTerrain* pTerrain = GetTerrain();
-			int worldSize = pTerrain->GetTerrainSize();
-			int S = (int)max(2.f, pTerrain->GetHeightMapUnitSize());
+			int S = (int)max(1.f, pTerrain->GetHeightMapUnitSize());
 
 			if (bThisIsLowLodNode)
 				S *= 4;

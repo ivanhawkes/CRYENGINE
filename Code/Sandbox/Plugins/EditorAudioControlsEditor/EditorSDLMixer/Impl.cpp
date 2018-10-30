@@ -27,6 +27,31 @@ constexpr uint32 g_parameterConnectionPoolSize = 256;
 constexpr uint32 g_stateConnectionPoolSize = 256;
 
 //////////////////////////////////////////////////////////////////////////
+void CountConnections(EAssetType const assetType)
+{
+	switch (assetType)
+	{
+	case EAssetType::Trigger:
+		{
+			++g_connections.triggers;
+			break;
+		}
+	case EAssetType::Parameter:
+		{
+			++g_connections.parameters;
+			break;
+		}
+	case EAssetType::State:
+		{
+			++g_connections.switchStates;
+			break;
+		}
+	default:
+		break;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
 CImpl::CImpl()
 	: m_pDataPanel(nullptr)
 	, m_assetAndProjectPath(AUDIO_SYSTEM_DATA_ROOT "/" +
@@ -34,6 +59,23 @@ CImpl::CImpl()
 	                        "/"
 	                        + string(CryAudio::s_szAssetsFolderName))
 	, m_localizedAssetsPath(m_assetAndProjectPath)
+{
+}
+
+//////////////////////////////////////////////////////////////////////////
+CImpl::~CImpl()
+{
+	Clear();
+	DestroyDataPanel();
+
+	CItem::FreeMemoryPool();
+	CEventConnection::FreeMemoryPool();
+	CParameterConnection::FreeMemoryPool();
+	CStateConnection::FreeMemoryPool();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::Initialize(SImplInfo& implInfo, Platforms const& platforms)
 {
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "SDL Mixer ACE Item Pool");
 	CItem::CreateAllocator(g_itemPoolSize);
@@ -47,21 +89,11 @@ CImpl::CImpl()
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "SDL Mixer ACE State Connection Pool");
 	CStateConnection::CreateAllocator(g_stateConnectionPoolSize);
 
-	gEnv->pAudioSystem->GetImplInfo(m_implInfo);
-	m_implName = m_implInfo.name.c_str();
-	m_implFolderName = CryAudio::Impl::SDL_mixer::s_szImplFolderName;
-}
+	CryAudio::SImplInfo systemImplInfo;
+	gEnv->pAudioSystem->GetImplInfo(systemImplInfo);
+	m_implName = systemImplInfo.name.c_str();
 
-//////////////////////////////////////////////////////////////////////////
-CImpl::~CImpl()
-{
-	Clear();
-	DestroyDataPanel();
-
-	CItem::FreeMemoryPool();
-	CEventConnection::FreeMemoryPool();
-	CParameterConnection::FreeMemoryPool();
-	CStateConnection::FreeMemoryPool();
+	SetImplInfo(implInfo);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -82,31 +114,24 @@ void CImpl::DestroyDataPanel()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::Reload(bool const preserveConnectionStatus /*= true*/)
+void CImpl::Reload(SImplInfo& implInfo)
 {
 	Clear();
-	SetLocalizedAssetsPath();
+	SetImplInfo(implInfo);
 
 	CProjectLoader(m_assetAndProjectPath, m_localizedAssetsPath, m_rootItem, m_itemCache, *this);
 
-	if (preserveConnectionStatus)
+	for (auto const& connection : m_connectionsByID)
 	{
-		for (auto const& connection : m_connectionsByID)
+		if (connection.second > 0)
 		{
-			if (connection.second > 0)
-			{
-				auto const pItem = static_cast<CItem* const>(GetItem(connection.first));
+			auto const pItem = static_cast<CItem* const>(GetItem(connection.first));
 
-				if (pItem != nullptr)
-				{
-					pItem->SetFlags(pItem->GetFlags() | EItemFlags::IsConnected);
-				}
+			if (pItem != nullptr)
+			{
+				pItem->SetFlags(pItem->GetFlags() | EItemFlags::IsConnected);
 			}
 		}
-	}
-	else
-	{
-		m_connectionsByID.clear();
 	}
 
 	if (m_pDataPanel != nullptr)
@@ -132,7 +157,7 @@ IItem* CImpl::GetItem(ControlId const id) const
 CryIcon const& CImpl::GetItemIcon(IItem const* const pIItem) const
 {
 	auto const pItem = static_cast<CItem const* const>(pIItem);
-	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer.");
+	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer during %s", __FUNCTION__);
 	return GetTypeIcon(pItem->GetType());
 }
 
@@ -140,31 +165,8 @@ CryIcon const& CImpl::GetItemIcon(IItem const* const pIItem) const
 QString const& CImpl::GetItemTypeName(IItem const* const pIItem) const
 {
 	auto const pItem = static_cast<CItem const* const>(pIItem);
-	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer.");
+	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer during %s", __FUNCTION__);
 	return TypeToString(pItem->GetType());
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool CImpl::IsSystemTypeSupported(EAssetType const assetType) const
-{
-	bool isSupported = false;
-
-	switch (assetType)
-	{
-	case EAssetType::Trigger:   // Intentional fall-through.
-	case EAssetType::Parameter: // Intentional fall-through.
-	case EAssetType::Switch:    // Intentional fall-through.
-	case EAssetType::State:     // Intentional fall-through.
-	case EAssetType::Folder:    // Intentional fall-through.
-	case EAssetType::Library:
-		isSupported = true;
-		break;
-	default:
-		isSupported = false;
-		break;
-	}
-
-	return isSupported;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -528,6 +530,44 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(IConnection const* const pIConnect
 			}
 			break;
 		}
+		CountConnections(assetType);
+	}
+
+	return pNode;
+}
+
+//////////////////////////////////////////////////////////////////////////
+XmlNodeRef CImpl::SetDataNode(char const* const szTag)
+{
+	XmlNodeRef pNode = GetISystem()->CreateXmlNode(szTag);
+	bool hasConnections = false;
+
+	if (g_connections.triggers > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::SDL_mixer::s_szTriggersAttribute, g_connections.triggers);
+		hasConnections = true;
+	}
+
+	if (g_connections.parameters > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::SDL_mixer::s_szParametersAttribute, g_connections.parameters);
+		hasConnections = true;
+	}
+
+	if (g_connections.switchStates > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::SDL_mixer::s_szSwitchStatesAttribute, g_connections.switchStates);
+		hasConnections = true;
+	}
+
+	if (!hasConnections)
+	{
+		pNode = nullptr;
+	}
+	else
+	{
+		// Reset connection count for next library.
+		ZeroStruct(g_connections);
 	}
 
 	return pNode;
@@ -556,7 +596,7 @@ void CImpl::DisableConnection(IConnection const* const pIConnection, bool const 
 
 		if (connectionCount < 1)
 		{
-			CRY_ASSERT_MESSAGE(connectionCount >= 0, "Connection count is < 0");
+			CRY_ASSERT_MESSAGE(connectionCount >= 0, "Connection count is < 0 during %s", __FUNCTION__);
 			connectionCount = 0;
 			pItem->SetFlags(pItem->GetFlags() & ~EItemFlags::IsConnected);
 		}
@@ -572,20 +612,20 @@ void CImpl::DestructConnection(IConnection const* const pIConnection)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::OnAboutToReload()
+void CImpl::OnBeforeReload()
 {
 	if (m_pDataPanel != nullptr)
 	{
-		m_pDataPanel->OnAboutToReload();
+		m_pDataPanel->OnBeforeReload();
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::OnReloaded()
+void CImpl::OnAfterReload()
 {
 	if (m_pDataPanel != nullptr)
 	{
-		m_pDataPanel->OnReloaded();
+		m_pDataPanel->OnAfterReload();
 	}
 }
 
@@ -626,6 +666,23 @@ void CImpl::Clear()
 
 	m_itemCache.clear();
 	m_rootItem.Clear();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetImplInfo(SImplInfo& implInfo)
+{
+	SetLocalizedAssetsPath();
+
+	implInfo.name = m_implName.c_str();
+	implInfo.folderName = CryAudio::Impl::SDL_mixer::s_szImplFolderName;
+	implInfo.projectPath = m_assetAndProjectPath.c_str();
+	implInfo.assetsPath = m_assetAndProjectPath.c_str();
+	implInfo.localizedAssetsPath = m_localizedAssetsPath.c_str();
+	implInfo.flags = (
+		EImplInfoFlags::SupportsTriggers |
+		EImplInfoFlags::SupportsParameters |
+		EImplInfoFlags::SupportsSwitches |
+		EImplInfoFlags::SupportsStates);
 }
 
 //////////////////////////////////////////////////////////////////////////

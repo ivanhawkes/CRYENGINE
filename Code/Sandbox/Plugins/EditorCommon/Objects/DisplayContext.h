@@ -2,8 +2,8 @@
 
 #pragma once
 
-#include <CryMath/Cry_Color.h>
-#include <CryMath/Cry_Geo.h>
+#include "EditorCommonAPI.h"
+#include <CryMath/Cry_Math.h>
 #include <CryRenderer/IRenderer.h>
 
 class CCamera;
@@ -229,6 +229,8 @@ private:
 	//! Matrix stack.
 	Matrix34 m_matrixStack[32];
 	int      m_previousMatrixIndex[32];
+
+	Matrix34 m_statObjWorldMatrix;
 
 	// Display Helper Sizes
 	const int                displayHelperSizeLarge = 32;

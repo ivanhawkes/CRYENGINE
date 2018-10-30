@@ -6,9 +6,9 @@
 // EditorCommon.
 #include <Controls/QuestionDialog.h>
 #include <FileDialogs/EngineFileDialog.h>
-#include <FilePathUtil.h>
-#include <QViewport.h>
 #include <Notifications/NotificationCenter.h>
+#include <PathUtils.h>
+#include <QViewport.h>
 #include <ThreadingUtils.h>
 
 // EditorQt.
@@ -18,10 +18,11 @@
 #include <CrySystem/IProjectManager.h>
 #include <CryRenderer/IRenderAuxGeom.h>
 
+#include <QApplication>
 #include <QDir>
-#include <QTextStream>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
+#include <QTextStream>
 
 void LogPrintf(const char* szFormat, ...);
 

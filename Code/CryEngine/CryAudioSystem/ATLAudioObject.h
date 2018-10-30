@@ -110,7 +110,9 @@ public:
 	void                           SetImplDataPtr(Impl::IObject* const pImplData) { m_pImplData = pImplData; }
 	Impl::IObject*                 GetImplDataPtr() const                         { return m_pImplData; }
 
-	CObjectTransformation const&   GetTransformation()                            { return m_transformation; }
+	CObjectTransformation const&   GetTransformation() const                      { return m_transformation; }
+
+	bool                           IsActive() const;
 
 	// Flags / Properties
 	EObjectFlags GetFlags() const { return m_flags; }
@@ -150,7 +152,6 @@ private:
 
 	void ReportFinishedTriggerInstance(ObjectTriggerStates::iterator const& iter);
 	void PushRequest(SRequestData const& requestData, SRequestUserData const& userData);
-	bool HasActiveData(CATLAudioObject const* const pAudioObject) const;
 	bool ExecuteDefaultTrigger(ControlId const id);
 
 	ObjectStandaloneFileMap m_activeStandaloneFiles;

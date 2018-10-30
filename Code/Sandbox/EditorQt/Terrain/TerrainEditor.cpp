@@ -10,10 +10,11 @@
 #include "CryEdit.h"
 #include "MinimapPanel.h"
 #include "TerrainDialog.h"
-#include "TerrainTexture.h"
+#include "TerrainMoveTool.h"
 #include "TerrainTexturePainter.h"
 
 #include <Commands/QCommandAction.h>
+#include <EditorFramework/Events.h>
 
 extern CCryEditApp theApp;
 
@@ -26,15 +27,6 @@ CTerrainDialog* GetTerrainDialog()
 	if (!g_terrainDialog)
 		g_terrainDialog = new CTerrainDialog();
 	return g_terrainDialog;
-}
-
-CTerrainTextureDialog* g_terrainLayers = nullptr;
-
-CTerrainTextureDialog* GetTerrainLayers()
-{
-	if (!g_terrainLayers)
-		g_terrainLayers = new CTerrainTextureDialog();
-	return g_terrainLayers;
 }
 
 // Terrain Functions
@@ -65,36 +57,22 @@ void PyExportTerrainAreaWithObjects() { GetTerrainDialog()->OnExportTerrainAreaW
 void PyReloadTerrain()                { GetTerrainDialog()->OnReloadTerrain(); }
 void PySelectTerrain()                { GetIEditorImpl()->GetLevelEditorSharedState()->SetEditMode(CLevelEditorSharedState::EditMode::SelectArea); }
 
-// Layer Functions
-void PyImportLayers()      { GetTerrainLayers()->OnImport(); }
-void PyExportLayers()      { GetTerrainLayers()->OnExport(); }
-void PyRefineTiles()       { GetTerrainLayers()->OnRefineTerrainTextureTiles(); }
-void PyNewLayer()          { GetTerrainLayers()->OnLayersNewItem(); }
-void PyDeleteLayer()       { GetTerrainLayers()->OnLayersDeleteItem(); }
-void PyMoveLayerToTop()    { GetTerrainLayers()->OnMoveLayerToTop(); }
-void PyMoveLayerUp()       { GetTerrainLayers()->OnLayersMoveItemUp(); }
-void PyMoveLayerDown()     { GetTerrainLayers()->OnLayersMoveItemDown(); }
-void PyMoveLayerToBottom() { GetTerrainLayers()->OnMoveLayerToBottom(); }
-void PyDuplicateLayer()    { GetTerrainLayers()->OnDuplicateItem(); }
-
-void PyFloodLayer()
+void SetTerrainTool(CRuntimeClass* pToolClass)
 {
-	CLevelEditorSharedState* pLevelEditor = GetIEditorImpl()->GetLevelEditorSharedState();
-	CEditTool* pTool = pLevelEditor->GetEditTool();
-	if (!pTool || !pTool->IsKindOf(RUNTIME_CLASS(CTerrainTexturePainter)))
-	{
-		pTool = new CTerrainTexturePainter();
-		pLevelEditor->SetEditTool(pTool);
-	}
+	auto pLevelEditorState = GetIEditorImpl()->GetLevelEditorSharedState();
+	auto pCurrentTool = pLevelEditorState->GetEditTool();
 
-	if (pTool && pTool->IsKindOf(RUNTIME_CLASS(CTerrainTexturePainter)))
-	{
-		CTerrainTexturePainter* pPainterTool = (CTerrainTexturePainter*)pTool;
-		pPainterTool->Action_StopUndo();
-		pPainterTool->Action_Flood();
-		pPainterTool->Action_StopUndo();
-	}
+	if (pCurrentTool && pCurrentTool->GetRuntimeClass() == pToolClass)
+		return;
+
+	CEditTool* pTerrainTool = (CEditTool*)pToolClass->CreateObject();
+
+	if (!pTerrainTool)
+		return;
+
+	pLevelEditorState->SetEditTool(pTerrainTool);
 }
+
 }
 
 REGISTER_VIEWPANE_FACTORY(CTerrainEditor, "Terrain Editor", "Tools", true)
@@ -192,11 +170,6 @@ REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyGenerateTerrain, terrain, generate_terrai
                                      "terrain.generate_terrain()");
 REGISTER_EDITOR_COMMAND_TEXT(terrain, generate_terrain, "Generate Terrain...");
 
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyRefineTiles, terrain, refine_tiles,
-                                     "Splits the tiles into smaller tiles.",
-                                     "terrain.refine_tiles()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, refine_tiles, "Refine Terrain Texture Tiles");
-
 REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyTerrainTextureDialog, terrain, terrain_texture_dialog,
                                      "Shows dialog for terrain texture modifying.",
                                      "terrain.terrain_texture_dialog()");
@@ -237,59 +210,16 @@ REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PySelectTerrain, terrain, select_terrain,
                                      "terrain.select_terrain()");
 REGISTER_EDITOR_COMMAND_TEXT(terrain, select_terrain, "Select Terrain");
 
-// Layers commands
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyImportLayers, terrain, import_layers,
-                                     "Imports terrain layers.",
-                                     "terrain.import_layers()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, import_layers, "Import Layers...");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyExportLayers, terrain, export_layers,
-                                     "Exports the layers from the current terrain.",
-                                     "terrain.export_layers()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, export_layers, "Export Layers...");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyNewLayer, terrain, create_layer,
-                                     "Creates a new layer.",
-                                     "terrain.create_layer()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, create_layer, "Create Layer");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyDeleteLayer, terrain, delete_layer,
-                                     "Deletes the selected layer.",
-                                     "terrain.delete_layer()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, delete_layer, "Delete Layer");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyDuplicateLayer, terrain, duplicate_layer,
-                                     "Duplicates the selected layer.",
-                                     "terrain.duplicate_layer()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, duplicate_layer, "Duplicate Layer");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyMoveLayerToTop, terrain, move_layer_to_top, "Moves selected layer to top", "terrain.move_layer_to_top()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, move_layer_to_top, "Move to Top");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyMoveLayerUp, terrain, move_layer_up, "Moves selected layer by one slot up.", "terrain.move_layer_up()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, move_layer_up, "Move Layer Up");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyMoveLayerDown, terrain, move_layer_down, "Moves selected layer by one slot down.", "terrain.move_layer_down()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, move_layer_down, "Move Layer Down");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyMoveLayerToBottom, terrain, move_layer_to_bottom, "Moves selected layer to bottom", "terrain.move_layer_to_bottom()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, move_layer_to_bottom, "Move to Bottom");
-
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyFloodLayer, terrain, flood_layer,
-                                     "Floods the selected layer over the all terrain.",
-                                     "terrain.flood_layer()");
-REGISTER_EDITOR_COMMAND_TEXT(terrain, flood_layer, "Flood Layer");
-
 CTerrainEditor::CTerrainEditor(QWidget* parent)
 {
 	setAttribute(Qt::WA_DeleteOnClose);
-	QTabWidget* p_Tabs = new QTabWidget(this);
-	SetContent(p_Tabs);
-	p_Tabs->setTabsClosable(false);
+	m_pTabWidget = new QTabWidget(this);
+	SetContent(m_pTabWidget);
+	m_pTabWidget->setTabsClosable(false);
 
-	p_Tabs->addTab(new QTerrainSculptPanel(), "Sculpt");
-	p_Tabs->addTab(new QTerrainLayerPanel(), "Paint");
-	p_Tabs->addTab(new QMinimapPanel(), "Mini Map");
+	m_sculptTabIdx = m_pTabWidget->addTab(new QTerrainSculptPanel(), "Sculpt");
+	m_paintTabIdx = m_pTabWidget->addTab(new QTerrainLayerPanel(), "Paint");
+	m_pTabWidget->addTab(new QMinimapPanel(), "Mini Map");
 
 	InitTerrainMenu();
 	InstallReleaseMouseFilter(this);
@@ -316,11 +246,6 @@ QVariantMap CTerrainEditor::GetLayout() const
 		state.insert("layerView", pLayerView->GetState());
 	}
 	return state;
-}
-
-CTerrainTextureDialog* CTerrainEditor::GetTextureLayerEditor()
-{
-	return GetTerrainLayers();
 }
 
 void CTerrainEditor::InitTerrainMenu()
@@ -398,7 +323,7 @@ void CTerrainEditor::InitTerrainMenu()
 	pLayerMenu->AddAction(GetAction("terrain.create_layer"));
 	pLayerMenu->AddAction(GetAction("terrain.delete_layer"));
 	pLayerMenu->AddAction(GetAction("terrain.duplicate_layer"));
-	
+
 	int sec = pLayerMenu->GetNextEmptySection();
 	pLayerMenu->AddAction(GetAction("terrain.move_layer_to_top"), sec);
 	pLayerMenu->AddAction(GetAction("terrain.move_layer_up"), sec);
@@ -407,4 +332,68 @@ void CTerrainEditor::InitTerrainMenu()
 
 	sec = pLayerMenu->GetNextEmptySection();
 	pLayerMenu->AddAction(GetAction("terrain.flood_layer"), sec);
+
+	CAbstractMenu* pToolsMenu = GetRootMenu()->CreateMenu(tr("Tools"), 0);
+	pToolsMenu->AddAction(GetAction("terrain.flatten_tool"), sec);
+	pToolsMenu->AddAction(GetAction("terrain.smooth_tool"), sec);
+	pToolsMenu->AddAction(GetAction("terrain.raise_lower_tool"), sec);
+	pToolsMenu->AddAction(GetAction("terrain.duplicate_tool"), sec);
+	pToolsMenu->AddAction(GetAction("terrain.make_holes_tool"), sec);
+	pToolsMenu->AddAction(GetAction("terrain.fill_holes_tool"), sec);
+	pToolsMenu->AddAction(GetAction("terrain.paint_texture_tool"), sec);
+
+	ForceRebuildMenu();
+}
+
+void CTerrainEditor::customEvent(QEvent* pEvent)
+{
+	CDockableEditor::customEvent(pEvent);
+
+	if (!pEvent->isAccepted() && pEvent->type() == SandboxEvent::Command)
+	{
+		CommandEvent* pCommandEvent = static_cast<CommandEvent*>(pEvent);
+		const string& command = pCommandEvent->GetCommand();
+
+		int switchTabIdx = -1;
+		if (command == "terrain.flatten_tool")
+		{
+			switchTabIdx = m_sculptTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CFlattenTool));
+		}
+		else if (command == "terrain.smooth_tool")
+		{
+			switchTabIdx = m_sculptTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CSmoothTool));
+		}
+		else if (command == "terrain.raise_lower_tool")
+		{
+			switchTabIdx = m_sculptTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CRiseLowerTool));
+		}
+		else if (command == "terrain.duplicate_tool")
+		{
+			switchTabIdx = m_sculptTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CTerrainMoveTool));
+		}
+		else if (command == "terrain.make_holes_tool")
+		{
+			switchTabIdx = m_sculptTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CMakeHolesTool));
+		}
+		else if (command == "terrain.fill_holes_tool")
+		{
+			switchTabIdx = m_sculptTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CFillHolesTool));
+		}
+		else if (command == "terrain.paint_texture_tool")
+		{
+			switchTabIdx = m_paintTabIdx;
+			SetTerrainTool(RUNTIME_CLASS(CTerrainTexturePainter));
+		}
+
+		if (switchTabIdx > -1)
+		{
+			m_pTabWidget->setCurrentIndex(switchTabIdx);
+		}
+	}
 }

@@ -21,7 +21,9 @@
 // CRY_ASSERT_TRACE(expression,("This should never happen because parameter %d named %s is %f",iParameter,szParam,fValue));
 //-----------------------------------------------------------------------------------------------------
 
-	#if defined(USE_CRY_ASSERT)
+#if defined(USE_CRY_ASSERT)
+
+extern const char* g_moduleNames[];		// defined in CryAssert_impl.h
 
 enum class ECryAssertLevel
 {

@@ -1984,7 +1984,6 @@ int CPhysicalWorld::GetEntitiesAround(const Vec3 &ptmin,const Vec3 &ptmax, CPhys
 									if (!pGridEnt->IsPlaceholder() && pentTrg->m_nParts) {
 										COverlapChecker Overlapper;
 										box bbox[2]; 
-										primitive *pgeom = bbox+1;
 										bbox[0].Basis.SetIdentity(); bbox[0].bOriented = 0; 
 										bbox[0].center = (ptmin+ptmax)*0.5f; bbox[0].size = (ptmax-ptmin)*0.5f;
 										const geom& part = pentTrg->m_parts[0];
@@ -2918,13 +2917,9 @@ NO_INLINE void TrackThunkUsageFree(int thunk)
 #define TrackThunkUsageFree(thunk)
 #endif // CAPTURE_REPLAY_LOG
 
-#if defined(__GNUC__)
-#if __GNUC__ >= 4 && __GNUC__MINOR__ < 7
-	#pragma GCC diagnostic ignored "-Woverflow"
-#else
+#if defined(CRY_COMPILER_GCC)
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Woverflow"
-#endif
 #endif
 void CPhysicalWorld::DetachEntityGridThunks(CPhysicalPlaceholder *pobj)
 {
@@ -2936,14 +2931,8 @@ void CPhysicalWorld::DetachEntityGridThunks(CPhysicalPlaceholder *pobj)
 			ithunk_next = m_gthunks[ithunk].inextOwned;
 			iprev=m_gthunks[ithunk].iprev; inext=m_gthunks[ithunk].inext;
 			m_gthunks[ithunk].pent = 0;
-#if defined(__clang__)
-	#pragma clang diagnostic push
-	#pragma clang diagnostic ignored "-Wconstant-conversion"
-#endif
-			m_gthunks[ithunk].inext=m_gthunks[ithunk].iprev = -1;
-#if defined(__clang__)
-	#pragma clang diagnostic pop
-#endif
+			m_gthunks[ithunk].inext=m_gthunks[ithunk].iprev = ~0ull;
+
 			m_gthunks[inext].iprev = iprev & -(int)inext>>31;
 			m_gthunks[inext].bFirstInCell = m_gthunks[ithunk].bFirstInCell;
 			if (m_gthunks[ithunk].bFirstInCell) {
@@ -2960,12 +2949,8 @@ void CPhysicalWorld::DetachEntityGridThunks(CPhysicalPlaceholder *pobj)
 		pobj->m_iGThunk0 = 0;
 	}
 }
-#if defined(__GNUC__)
-#if __GNUC__ >= 4 && __GNUC__MINOR__ < 7
-	#pragma GCC diagnostic error "-Woverflow"
-#else
+#if defined(CRY_COMPILER_GCC)
 	#pragma GCC diagnostic pop
-#endif
 #endif
 
 void CPhysicalWorld::SortThunks()
@@ -3594,7 +3579,6 @@ void CPhysicalWorld::SimulateExplosion(pe_explosion *pexpl, IPhysicalEntity **pS
 	geom_world_data gwd,gwd1;
 	box bboxPart,bbox;
 	sphere sphExpl;
-	CPhysicalPlaceholder **pSkipPcs = (CPhysicalPlaceholder**)pSkipEnts;
 	CPhysicalEntity *pGridRef = &g_StaticPhysicalEntity;
 	pe_explosion explLoc = *pexpl;
 	for(i=0;i<nSkipEnts;i++) if (pSkipEnts[i] && GetGrid(pSkipEnts[i])!=GetGrid(pGridRef))
@@ -4339,7 +4323,7 @@ static void CreateTriMesh(CTriMesh& gtrimesh, primitives::triangle* tri)
 
 float CPhysicalWorld::PrimitiveWorldIntersection(const SPWIParams &pp, WriteLockCond *pLockContactsExp, const char *pNameTag)
 {
-	int i,j,j1,ncont,nents,iActive=0;
+	int i,j,j1,ncont,nents=0;
 	int iCaller = get_iCaller(1);
 	Vec3 BBox[2],sz,mask[2]={ Vec3(ZERO),Vec3(ZERO) };
 	box bbox;
@@ -4518,7 +4502,6 @@ int CPhysicalWorld::RayTraceEntity(IPhysicalEntity *pient, Vec3 origin,Vec3 dir,
 		return 0;
 
 	int i,ncont;
-	Vec3 BBox[2],sz;
 	box bbox;
 	WriteLock lock(m_lockCaller[get_iCaller()]);
 	Vec3 pos;
@@ -4641,7 +4624,7 @@ void CPhysicalWorld::GetMemoryStatistics(ICrySizer *pSizer)
 /*#if CRY_PLATFORM_WINDOWS
 	static char *sec_ids[] = { ".text",".textbss",".data",".idata" };
 	static char *sec_names[] = { "code section","code section","data section","data section" };
-	_IMAGE_DOS_HEADER *pMZ = (_IMAGE_DOS_HEADER*)GetModuleHandle("CryPhysics.dll");
+	_IMAGE_DOS_HEADER *pMZ = (_IMAGE_DOS_HEADER*)CryGetModuleHandle(CryLibraryDefName("CryPhysics");
 	_IMAGE_NT_HEADERS *pPE = (_IMAGE_NT_HEADERS*)((char*)pMZ+pMZ->e_lfanew);
 	IMAGE_SECTION_HEADER *sections = IMAGE_FIRST_SECTION(pPE);
 	for(i=0;i<pPE->FileHeader.NumberOfSections;i++) for(j=0;j<CRY_ARRAY_COUNT(sec_ids);j++)
@@ -4924,7 +4907,7 @@ void CPhysicalWorld::PumpLoggedEvents()
 
 	for(pClient=m_pEventClients[EventPhysPostPump::id][1]; pClient; pClient=pClient->next) {
 		BLOCK_PROFILER(pClient->ticks);
-		int bContinue = pClient->OnEvent(NULL);
+		pClient->OnEvent(NULL);
 	}
 
 #ifndef PHYS_FUNC_PROFILER_DISABLED
@@ -5090,18 +5073,14 @@ void CPhysicalWorld::RemoveExplosionShape(int id)
 
 // disable overflow warning
 
-#if defined(__clang__)
+#if CRY_COMPILER_CLANG
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winteger-overflow"
 #endif
 
-#if defined(__GNUC__)
-#if __GNUC__ >= 4 && __GNUC__MINOR__ < 7
-        #pragma GCC diagnostic ignored "-Woverflow"
-#else
+#if defined(CRY_COMPILER_GCC)
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Woverflow"
-#endif
 #endif
 IGeometry *CPhysicalWorld::GetExplosionShape(float size,int idmat, float &scale, int &bCreateConstraint)
 {
@@ -5134,15 +5113,11 @@ IGeometry *CPhysicalWorld::GetExplosionShape(float size,int idmat, float &scale,
 	bCreateConstraint = m_pExpl[i-1].bCreateConstraint;
 	return m_pExpl[i-1].pGeom;
 }
-#if defined(__clang__)
+#if CRY_COMPILER_CLANG
 #pragma clang diagnostic pop
 #endif
-#if defined(__GNUC__)
-#if __GNUC__ >= 4 && __GNUC__MINOR__ < 7
-        #pragma GCC diagnostic error "-Woverflow"
-#else
+#if defined(CRY_COMPILER_GCC)
 	#pragma GCC diagnostic pop
-#endif
 #endif
 
 int CPhysicalWorld::SetWaterManagerParams(pe_params *params)

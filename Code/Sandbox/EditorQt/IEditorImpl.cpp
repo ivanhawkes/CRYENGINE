@@ -4,6 +4,7 @@
 #include "IEditorImpl.h"
 
 #include "AI/AIManager.h"
+#include "Commands/CommandManager.h"
 #include "Commands/PolledKeyManager.h"
 #include "Commands/PythonManager.h"
 #include "CustomActions/CustomActionsEditorManager.h"
@@ -19,6 +20,7 @@
 #include "Material/MaterialFXGraphMan.h"
 #include "Material/MaterialManager.h"
 #include "Objects/ObjectLayerManager.h"
+#include "Objects/ObjectManager.h"
 #include "Objects/PrefabObject.h"
 #include "Particles/ParticleManager.h"
 #include "Prefabs/PrefabManager.h"
@@ -48,6 +50,7 @@
 #include "Mission.h"
 #include "ObjectCreateTool.h"
 #include "PhysTool.h"
+#include "PluginManager.h"
 #include "ResourceSelectorHost.h"
 #include "SurfaceInfoPicker.h"
 #include "ViewManager.h"
@@ -59,19 +62,19 @@
 // EditorCommon
 #include <AssetSystem/AssetManager.h>
 #include <AssetSystem/Browser/AssetModel.h>
+#include <ConfigurationManager.h>
+#include <EditorCommonInit.h>
 #include <EditorFramework/BroadcastManager.h>
 #include <EditorFramework/PersonalizationManager.h>
 #include <EditorFramework/Preferences.h>
 #include <EditorFramework/TrayArea.h>
 #include <Gizmos/GizmoManager.h>
+#include <ISourceControl.h>
 #include <LevelEditor/Tools/ObjectMode.h>
 #include <Notifications/NotificationCenterImpl.h>
+#include <PathUtils.h>
 #include <Preferences/GeneralPreferences.h>
 #include <Preferences/ViewportPreferences.h>
-#include <ConfigurationManager.h>
-#include <EditorCommonInit.h>
-#include <FilePathUtil.h>
-#include <ISourceControl.h>
 #include <UIEnumsDatabase.h>
 
 #include <CrySandbox/CryInterop.h>
@@ -83,6 +86,7 @@ LINK_SYSTEM_LIBRARY("version.lib")
 #ifdef _RELEASE
 	#undef _RELEASE
 #endif
+#include <CryInput/IInput.h>
 #include <CryCore/CrtDebugStats.h>
 
 static CCryEditDoc * theDocument;

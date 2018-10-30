@@ -1,15 +1,16 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include <StdAfx.h>
-#include "FilePathUtil.h"
+#include "PathUtils.h"
+
 #include "QtUtil.h"
-#include <IEditor.h>
-#include <CrySystem/File/ICryPak.h>
 #include <CryString/CryPath.h>
+#include <CrySystem/File/ICryPak.h>
 #include <CrySystem/IProjectManager.h>
+#include <IEditor.h>
 #include <QDirIterator>
 
-namespace Private_FilePathUtil
+namespace Private_PathUtils
 {
 
 //! SplitIndexedName removes the trailing integer of a string. The resulting string is called the 'stem'.
@@ -46,134 +47,28 @@ static void SplitIndexedName(const string& name, string& stem, int& num)
 	stem = name.substr(0, i);
 }
 
-} // namespace Private_FilePathUtil
+string MatchPathSegmentsToPathOnFileSystem(const string& path, const string& rootFolder, const std::vector<string>& segments)
+{
+	QDir dir = QDir(QtUtil::ToQString(rootFolder));
+	string finalPath = rootFolder;
+	for (int i = 0; i < segments.size(); ++i)
+	{
+		const auto entries = dir.entryList({ QtUtil::ToQString(segments[i]) }, QDir::Dirs | QDir::Files);
+		if (entries.empty())
+		{
+			CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "path %s doesn't exist on the file system", path);
+			return "";
+		}
+		finalPath = PathUtil::Make(finalPath, QtUtil::ToString(entries[0]));
+		dir = QDir(QtUtil::ToQString(finalPath));
+	}
+	return finalPath;
+}
+
+} // namespace Private_PathUtils
 
 namespace PathUtil
 {
-
-bool Remove(const char* szPath)
-{
-	QFileInfo info(szPath);
-
-	if (info.isDir())
-		return RemoveDirectory(szPath);
-	else
-		return RemoveFile(szPath);
-}
-
-bool RemoveFile(const char* szFilePath)
-{
-	return QFile::remove(szFilePath);
-}
-
-bool MoveFileAllowOverwrite(const char* szOldFilePath, const char* szNewFilePath)
-{
-	if (QFile::rename(szOldFilePath, szNewFilePath))
-	{
-		return true;
-	}
-
-	// Try to overwrite existing file.
-	return QFile::remove(szNewFilePath) && QFile::rename(szOldFilePath, szNewFilePath);
-}
-
-EDITOR_COMMON_API bool CopyFileAllowOverwrite(const char* szSourceFilePath, const char* szDestinationFilePath)
-{
-	GetISystem()->GetIPak()->MakeDir(GetDirectory(szDestinationFilePath));
-
-	if (QFile::copy(szSourceFilePath, szDestinationFilePath))
-	{
-		return true;
-	}
-
-	// Try to overwrite existing file.
-	return QFile::remove(szDestinationFilePath) && QFile::copy(szSourceFilePath, szDestinationFilePath);
-}
-
-bool RemoveDirectory(const char* szPath, bool bRecursive /* = true*/)
-{
-	QDir dir(szPath);
-
-	if (!bRecursive)
-	{
-		const QString dirName = dir.dirName();
-		if (dir.cdUp())
-		{
-			CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "Unable to remove directory: %s", szPath);
-			return false;
-		}
-
-		if (dir.remove(dirName))
-			return true;
-	}
-
-	if (dir.removeRecursively())
-		return true;
-
-	CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "Unable to remove directory: %s", szPath);
-	return false;
-}
-
-EDITOR_COMMON_API bool MakeFileWritable(const char* szFilePath)
-{
-	QFile f(QtUtil::ToQString(szFilePath));
-	return f.setPermissions(f.permissions() | QFileDevice::WriteOwner);
-}
-
-// The pak should be opened.
-void Unpak(const char* szArchivePath, const char* szDestPath, std::function<void(float)> progress)
-{
-	const string pakFolder = PathUtil::GetDirectory(szArchivePath);
-
-	float progressValue = 0; //(0, 1);
-	std::vector<char> buffer(1 << 24);
-
-	std::stack<string> stack;
-	stack.push("");
-	while (!stack.empty())
-	{
-		const CryPathString mask = PathUtil::Make(stack.top(), "*");
-		const CryPathString folder = stack.top();
-		stack.pop();
-
-		GetISystem()->GetIPak()->ForEachArchiveFolderEntry(szArchivePath, mask, [szDestPath, &pakFolder, &stack, &folder, &buffer, &progressValue, progress](const ICryPak::ArchiveEntryInfo& entry)
-			{
-				const CryPathString path(PathUtil::Make(folder.c_str(), entry.szName));
-				if (entry.bIsFolder)
-				{
-				  stack.push(path);
-				  return;
-				}
-
-				ICryPak* const pPak = GetISystem()->GetIPak();
-				FILE* file = pPak->FOpen(PathUtil::Make(pakFolder, path), "rbx");
-				if (!file)
-				{
-				  return;
-				}
-
-				if (!pPak->MakeDir(PathUtil::Make(szDestPath, folder)))
-				{
-				  return;
-				}
-
-				buffer.resize(pPak->FGetSize(file));
-				const size_t numberOfBytesRead = pPak->FReadRawAll(buffer.data(), buffer.size(), file);
-				pPak->FClose(file);
-
-				CryPathString destPath(PathUtil::Make(szDestPath, path));
-				QFile destFile(QtUtil::ToQString(destPath.c_str()));
-				destFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
-				destFile.write(buffer.data(), numberOfBytesRead);
-
-				if (progress)
-				{
-				  progressValue = std::min(1.0f, progressValue + 0.01f);
-				  progress(progressValue);
-				}
-			});
-	}
-}
 
 string GetAudioLocalizationFolder()
 {
@@ -290,6 +185,11 @@ string GetGameProjectAssetsPath()
 	return gEnv->pSystem->GetIProjectManager()->GetCurrentAssetDirectoryAbsolute();
 }
 
+string GetGameProjectAssetsRelativePath()
+{
+	return gEnv->pSystem->GetIProjectManager()->GetCurrentAssetDirectoryRelative();
+}
+
 string GetCurrentPlatformFolder()
 {
 #ifdef CRY_PLATFORM_WINDOWS
@@ -329,7 +229,7 @@ string GetDirectory(const string& filepath)
 
 string GetUniqueName(const string& templateName, const std::vector<string>& otherNames)
 {
-	using namespace Private_FilePathUtil;
+	using namespace Private_PathUtils;
 
 	struct EqualNoCase
 	{
@@ -373,7 +273,7 @@ string GetUniqueName(const string& templateName, const std::vector<string>& othe
 	return string();
 }
 
-EDITOR_COMMON_API string GetUniqueName(const string& fileName, const string& folderPath)
+string GetUniqueName(const string& fileName, const string& folderPath)
 {
 	std::vector<string> resultSet;
 	const string absFolder = PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), folderPath);
@@ -449,7 +349,7 @@ string AbsolutePathToGamePath(const string& path)
 	return AbsoluteToRelativePath(path, GetGameProjectAssetsPath());
 }
 
-EDITOR_COMMON_API QString ToUnixPath(const QString& path)
+QString ToUnixPath(const QString& path)
 {
 	if (path.indexOf('\\') != -1)
 	{
@@ -508,23 +408,6 @@ string ToGamePath(const char* path)
 		return AbsolutePathToGamePath(fixedPath);
 }
 
-bool FileExists(const string& path)
-{
-	QFileInfo inf(QtUtil::ToQString(path));
-	return inf.exists() && inf.isFile();
-}
-
-bool FolderExists(const string& path)
-{
-	QFileInfo inf(QtUtil::ToQString(path));
-	return inf.exists() && inf.isDir();
-}
-
-bool IsFileInPakOnly(const string& path)
-{
-	return !FileExists(path) && GetISystem()->GetIPak()->IsFileExist(PathUtil::AbsolutePathToGamePath(path), ICryPak::eFileLocation_InPak);
-}
-
 bool IsValidFileName(const QString& name)
 {
 	if (name.isEmpty())
@@ -543,6 +426,46 @@ bool IsValidFileName(const QString& name)
 	}
 
 	return true;
+}
+
+//! Adjust the path to follow CryPak casing rules.
+template<typename TString>
+typename std::enable_if<detail::IsValidStringType<TString>::value, TString>::type
+inline /*TString*/ AdjustCasingImpl(const char* szPath)
+{
+	ICryPak* const pPak = GetIEditor()->GetSystem()->GetIPak();
+	char szAdjustedPath[ICryPak::g_nMaxPath];
+	pPak->AdjustFileName(szPath, szAdjustedPath, ICryPak::FLAGS_FOR_WRITING | ICryPak::FLAGS_PATH_REAL);
+	return PathUtil::ToUnixPath(TString(szAdjustedPath));
+}
+
+string AdjustCasing(const string& path)
+{
+	return AdjustCasingImpl<string>(path.c_str());
+}
+
+CryPathString AdjustCasing(const char* szPath)
+{
+	return AdjustCasingImpl<CryPathString>(szPath);
+}
+
+CryPathString AdjustCasing(const CryPathString& path)
+{
+	return AdjustCasingImpl<CryPathString>(path.c_str());
+}
+
+string MatchGamePathToCaseOnFileSystem(const string& path)
+{
+	return PathUtil::ToGamePath(Private_PathUtils::MatchPathSegmentsToPathOnFileSystem(path,
+		PathUtil::GetGameFolder(), PathUtil::SplitIntoSegments(path)));
+}
+
+string MatchAbsolutePathToCaseOnFileSystem(const string& path)
+{
+	std::vector<string> pathSegments = PathUtil::SplitIntoSegments(path);
+	string rootFolder = pathSegments[0] + '/';
+	pathSegments.erase(pathSegments.begin());
+	return Private_PathUtils::MatchPathSegmentsToPathOnFileSystem(path, rootFolder, pathSegments);
 }
 
 }

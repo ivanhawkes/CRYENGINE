@@ -30,8 +30,8 @@ class CRenderView;
 struct IRenderNode;
 struct IRenderMesh;
 
-#define MAX_REND_SHADERS                      4096
-#define MAX_REND_SHADER_RES                   16384
+#define MAX_REND_SHADERS                      (1U << 12)
+#define MAX_REND_SHADER_RES                   (1U << 14)
 
 struct CRY_ALIGN(32) SRendItem
 {
@@ -51,31 +51,54 @@ struct CRY_ALIGN(32) SRendItem
 	CRenderElement* pElem;
 	//uint32 nStencRef  : 8;
 
-	static float EncodeDistanceSortingValue(CRenderObject* pObj)
+	static uint32 EncodeObjFlagsValue(uint64 objFlags)
 	{
-		return pObj->m_fDistance + pObj->m_fSort;
+		return uint32(objFlags) & (0xFFFF0000 & FOB_SORT_MASK);
 	}
 
-	static uint32 EncodeObjFlagsSortingValue(CRenderObject* pObj)
+	static uint16 EncodePriorityIntegerValue(CRenderObject* pObj)
 	{
-		return (pObj->m_ObjFlags & ~0xFFFF) + (pObj->m_nSort & 0xFFFF);
+		return uint16(pObj->m_nSort);
 	}
 
-	static bool TestObjFlagsSortingValue(uint32 nFlag, uint32 sortingValue)
+	static uint16 EncodeDistanceIntegerValue(float fDistance)
 	{
-		return (nFlag & sortingValue) != 0;
+		return HalfFlip(CryConvertFloatToHalf(std::min(fDistance, 65504.0f)));
 	}
 
-	static inline void ExtractShaderItem(uint32 nVal, SShaderItem& sh)
+	static float EncodeCustomDistanceSortingValue(CRenderObject* pObj, float fDistance)
 	{
-		CShader* pShader = (CShader*)(CShaderMan::s_pContainer->m_RList[CBaseResource::RListIndexFromId((nVal >> 20) & (MAX_REND_SHADERS - 1))]);
+		int nRenderAlways = pObj->m_pRenderNode->GetRndFlags() & ERF_RENDER_ALWAYS;
+		float comp = fDistance + pObj->m_fSort;
+		return nRenderAlways ? std::numeric_limits<float>::lowest() + comp : comp;
+	}
+
+	static float EncodeDistanceSortingValue(CRenderObject* pObj, float fDistance)
+	{
+		return fDistance + pObj->m_fSort;
+	}
+
+	static uint32 EncodeObjFlagsSortingValue(CRenderObject* pObj, uint64 objFlags, float fDistance)
+	{
+		return EncodeObjFlagsValue(objFlags) + EncodeDistanceIntegerValue(fDistance);
+	}
+
+	static uint32 EncodeObjFlagsSortingValue(CRenderObject* pObj, uint64 objFlags)
+	{
+		return EncodeObjFlagsValue(objFlags) + EncodePriorityIntegerValue(pObj);
+	}
+
+	static inline void ExtractShaderItem(uint32 value, SShaderItem& sh)
+	{
+		uint32 nShaderId = (value >> 20) & (MAX_REND_SHADERS - 1);
+		CShader* pShader = (CShader*)(CShaderMan::s_pContainer->m_RList[CBaseResource::RListIndexFromId(nShaderId)]);
 		sh.m_pShader = static_cast<IShader*>(pShader);
-		uint32 nTechnique = (nVal & 0x3f);
+		uint32 nTechnique = ((value >> 14) & 0x3f);
 		if (nTechnique == 0x3f)
 			nTechnique = -1;
 		sh.m_nTechnique = nTechnique;
-		int nRes = (nVal >> 6) & (MAX_REND_SHADER_RES - 1);
-		sh.m_pShaderResources = (IRenderShaderResources*)((nRes) ? CShader::s_ShaderResources_known[nRes] : nullptr);
+		int nResID = (value) & (MAX_REND_SHADER_RES - 1);
+		sh.m_pShaderResources = (IRenderShaderResources*)((nResID) ? CShader::s_ShaderResources_known[nResID] : nullptr);
 	}
 
 	static inline uint32 PackShaderItem(const SShaderItem& shaderItem)
@@ -84,9 +107,18 @@ struct CRY_ALIGN(32) SRendItem
 		uint32 nShaderId = ((CShader*)shaderItem.m_pShader)->mfGetID();
 		assert(nResID < CShader::s_ShaderResources_known.size());
 		assert(nShaderId != 0);
-		uint32 value = (nResID << 6) | (nShaderId << 20) | (shaderItem.m_nTechnique & 0x3f);
+		uint32 value = (nShaderId << 20) | ((shaderItem.m_nTechnique & 0x3f) << 14) | (nResID);
 		return value;
 	}
+
+	/////////////////////////////////////////////////////////////////////
+
+	static inline bool TestIndividualObjFlag(uint32 objFlag, uint32 objIncludeFilter)
+	{
+		return ((objFlag & objIncludeFilter) != 0);
+	}
+
+	/////////////////////////////////////////////////////////////////////
 
 	// Sort by SortVal member of RI
 	static void mfSortPreprocess(SRendItem* First, int Num);
@@ -95,7 +127,8 @@ struct CRY_ALIGN(32) SRendItem
 	// Sort by light
 	static void mfSortByLight(SRendItem* First, int Num, bool bSort, const bool bIgnoreRePtr, bool bSortDecals);
 	// Special sorting for ZPass (compromise between depth and batching)
-	static void mfSortForZPass(SRendItem* First, int Num);
+	static void mfSortForZPass(SRendItem* First, int Num, bool bZPre);
+	static void mfSortForDepthPass(SRendItem* First, int Num);
 };
 
 //==================================================================
@@ -165,14 +198,14 @@ enum EBatchFlags
 {
 	FB_GENERAL         = 0x1,
 	FB_TRANSPARENT     = 0x2,
-	FB_SKIN            = 0x4,
+	// UNUSED          = 0x4,
 	FB_Z               = 0x8,
 	FB_BELOW_WATER     = 0x10,
 	FB_ZPREPASS        = 0x20,
 	FB_PREPROCESS      = 0x40,
 	FB_MOTIONBLUR      = 0x80,
 	FB_POST_3D_RENDER  = 0x100,
-	FB_MULTILAYERS     = 0x200,
+	// UNUSED          = 0x200,
 	FB_COMPILED_OBJECT = 0x400,
 	FB_CUSTOM_RENDER   = 0x800,
 	FB_RESOLVE_FULL    = 0x1000,

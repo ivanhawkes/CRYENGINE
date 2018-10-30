@@ -9,6 +9,9 @@
 #include "AssetSystem/Browser/AssetTooltip.h"
 #include "PreviewToolTip.h"
 #include "FileDialogs/EngineFileDialog.h"
+#include "PathUtils.h"
+#include <IEditor.h>
+#include <QFileInfo>
 
 namespace Private_AssetSelector
 {
@@ -211,8 +214,8 @@ SStaticAssetSelectorEntry::SStaticAssetSelectorEntry(const char* typeName, const
 
 SStaticAssetSelectorEntry::SStaticAssetSelectorEntry(const char* typeName, const std::vector<string>& typeNames)
 	: SStaticResourceSelectorEntry(typeName, Private_AssetSelector::SelectAsset, Private_AssetSelector::ValidateAsset, Private_AssetSelector::EditAsset, "", false)
+	, assetTypeNames(typeNames)
 {
-	assetTypeNames = typeNames;
 	isAsset = true;
 }
 

@@ -1,11 +1,16 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 #pragma once
 
+class CAbstractMenu;
 class QListView;
+class QPrecisionSlider;
+class QButtonGroup;
 
 #include "ProxyModels/ItemModelAttribute.h"
 #include <EditorFramework/StateSerializable.h>
+#include <CrySandbox/CrySignal.h>
 #include "QAdvancedTreeView.h"
+#include <QTimer>
 
 //! Extends and specializes a QListView to behave as a thumbnail view (see windows explorer for inspiration)
 //! All items have the same size, default is 64x64 pixels. Set ItemSize and Spacing, the rest should work out of the box
@@ -14,6 +19,25 @@ class QListView;
 class EDITOR_COMMON_API QThumbnailsView : public QWidget, public IStateSerializable
 {
 	Q_OBJECT;
+
+public:
+	//! Item model with s_ThumbnailIconsRole may return a list of additional icons, where each element of the list should be QIcon or SSubIcon.
+	//! SSubIcon allows to assign the position of the icon in thumbnail. All regular QIcon elements will have a TopRight position.
+	// \sa QThumbnailsView::s_ThumbnailIconsRole
+	// \sa QThumbnailsView::SetModel(QAbstractItemModel* model)
+	struct SSubIcon
+	{
+		enum EPosition
+		{
+			TopRight,
+			TopLeft,
+			BottomLeft,
+			BottomRight
+		};
+
+		QIcon icon;
+		EPosition position;
+	};
 public:
 	//! Pass an internal view to be used as the list view or let it be set as a regular QListView();
 	QThumbnailsView(QListView* pInternalView = nullptr, bool showSizeButtons = true, QWidget* parent = nullptr);
@@ -45,7 +69,7 @@ public:
 	void ScrollToRow(const QModelIndex& indexInRow, QAbstractItemView::ScrollHint scrollHint = QAbstractItemView::EnsureVisible);
 
 	//! Use to configure the internal view if necessary
-	QAbstractItemView* GetInternalView() { return m_listView; }
+	QAbstractItemView* GetInternalView();
 
 	void AppendPreviewSizeActions(CAbstractMenu& menu);
 
@@ -57,10 +81,10 @@ public:
 	static constexpr int s_ThumbnailRole = Qt::UserRole + 2562;
 	//! Return QColor if model provides categorization of thumbnails by color.
 	static constexpr int s_ThumbnailColorRole = s_ThumbnailRole + 1;
-	//! Return true to view the thumbnail on top of the background slightly tinted with color from s_ThumbnailColorRole.
-	static constexpr int s_ThumbnailTintedBackgroundRole = s_ThumbnailColorRole + 1;
+	//! Return QColor to view the thumbnail on top of the colored background.
+	static constexpr int s_ThumbnailBackgroundColorRole = s_ThumbnailColorRole + 1;
 	//! Return a list of icons that need to be drawn on top of the thumbnail.
-	static constexpr int s_ThumbnailIconsRole = s_ThumbnailTintedBackgroundRole + 1;
+	static constexpr int s_ThumbnailIconsRole = s_ThumbnailBackgroundColorRole + 1;
 
 	virtual QVariantMap GetState() const override;
 	virtual void        SetState(const QVariantMap& state) override;
@@ -96,3 +120,5 @@ private:
 	bool			  m_restoreSelection;
 	std::vector<CAdvancedPersistentModelIndex> m_selectedBackup;
 };
+
+Q_DECLARE_METATYPE(QThumbnailsView::SSubIcon);

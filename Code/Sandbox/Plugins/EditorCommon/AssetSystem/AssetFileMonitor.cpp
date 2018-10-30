@@ -2,11 +2,13 @@
 
 #include "StdAfx.h"
 #include "AssetFileMonitor.h"
+
+#include "AssetSystem/AssetManager.h"
 #include "Loader/AssetLoaderBackgroundTask.h"
 #include "Loader/AssetLoaderHelpers.h"
-#include "AssetSystem/AssetManager.h"
-#include "FilePathUtil.h"
+#include "PathUtils.h"
 #include "QtUtil.h"
+#include <IEditor.h>
 
 #include <CrySystem/File/ICryPak.h>
 #include <CryString/CryPath.h>
@@ -60,7 +62,6 @@ void CAssetFileMonitor::OnFileChange(const char* szFilename, EChangeType changeT
 			return true;
 		});
 		break;
-	case IFileChangeListener::eChangeType_Created:
 	case IFileChangeListener::eChangeType_Modified:
 	case IFileChangeListener::eChangeType_RenamedNewName:
 		m_fileQueue.ProcessItemAsync(assetPath, [](const string& assetPath)
@@ -98,13 +99,14 @@ void CAssetFileMonitor::RemoveAsset(const string& assetPath)
 
 void CAssetFileMonitor::LoadAsset(const string& assetPath)
 {
-	CAsset* const pAsset = AssetLoader::CAssetFactory::LoadAssetFromXmlFile(assetPath);
+	CAssetPtr pAsset = AssetLoader::CAssetFactory::LoadAssetFromXmlFile(assetPath);
 	if (!pAsset)
 	{
-		CryWarning(VALIDATOR_MODULE_ASSETS, VALIDATOR_WARNING, "%s: Cannot load asset '%s'.\n", __FUNCTION__, assetPath.c_str());
+		CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "%s: Cannot load asset '%s'", __FUNCTION__, assetPath.c_str());
 		return;
 	}
-	CAssetManager::GetInstance()->MergeAssets({ pAsset });
+
+	CAssetManager::GetInstance()->MergeAssets({ pAsset.ReleaseOwnership() });
 }
 
 CAssetFileMonitor::CAssetFileMonitor()

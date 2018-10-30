@@ -10,6 +10,7 @@
 #include <QPoint>
 #include <QStaticText>
 #include <QStyleOptionViewItem>
+#include <QTimer>
 
 #include "DrawingPrimitives/Ruler.h"
 
@@ -389,7 +390,7 @@ class CTimelineTracks : public QWidget
 {
 	Q_OBJECT
 public:
-	CTimelineTracks(QWidget* widget) : QWidget(widget) {}
+	CTimelineTracks(QWidget* widget) : QWidget(widget), m_timeline(nullptr) {}
 	void ConnectToTimeline(CTimeline* timeline) { m_timeline = timeline; }
 
 private:

@@ -2,7 +2,18 @@
 #include <StdAfx.h>
 #include "Editor.h"
 
+#include "BroadcastManager.h"
+#include "Controls/SaveChangesDialog.h"
 #include "Events.h"
+#include "ICommandManager.h"
+#include "Menu/AbstractMenu.h"
+#include "Menu/MenuBarUpdater.h"
+#include "Menu/MenuWidgetBuilders.h"
+#include "PathUtils.h"
+#include "PersonalizationManager.h"
+#include "QtUtil.h"
+
+#include <IEditor.h>
 
 #include <QDesktopServices>
 #include <QFile>
@@ -10,16 +21,6 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QCloseEvent>
-
-#include "PersonalizationManager.h"
-#include "ICommandManager.h"
-#include "Controls/SaveChangesDialog.h"
-#include "Menu/AbstractMenu.h"
-#include "Menu/MenuWidgetBuilders.h"
-#include "Menu/MenuBarUpdater.h"
-
-#include "QtUtil.h"
-#include "FilePathUtil.h"
 
 namespace Private_EditorFramework
 {
@@ -175,6 +176,11 @@ void CEditor::InitMenuDesc()
 		                  )
 		);
 
+}
+
+void CEditor::ForceRebuildMenu()
+{
+	m_pMenu->Build(MenuWidgetBuilders::CMenuBuilder(m_pPaneMenu));
 }
 
 void CEditor::SetContent(QWidget* content)

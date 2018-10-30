@@ -2,11 +2,20 @@
 
 #pragma once
 
-#include <CryCore/ToolsHelpers/GuidUtil.h>
-#include <CryExtension/CryGUID.h>
+#include "EditorCommonAPI.h"
 
-class CPakFile;
+#include <CryCore/ToolsHelpers/GuidUtil.h>
+#include <CrySystem/XML/IXml.h>
+#include <CryExtension/CryGUID.h>
+#include <CryCore/functor.h>
+#include <CryCore/smartptr.h>
+#include <map>
+#include <set>
+
+struct IObjectManager;
 class IGuidProvider;
+class CBaseObject;
+class CPakFile;
 
 typedef std::map<CryGUID, CryGUID> TGUIDRemap;
 
@@ -78,8 +87,6 @@ public:
 
 	bool         IsReconstructingPrefab() const     { return (m_nFlags & eObjectLoader_ReconstructPrefabs) != 0; }
 	bool         IsSavingInPrefab() const           { return (m_nFlags & eObjectLoader_SavingInPrefabLib) != 0; }
-	void         SetShouldResetInternalMembers(bool reset);
-	bool         ShouldResetInternalMembers() const { return (m_nFlags & eObjectLoader_ResetInternalMembers) != 0; }
 	bool         IsLoadingToCurrentLayer() const    { return (m_nFlags & eObjectLoader_LoadToCurrentLayer) != 0; }
 
 private:
@@ -129,7 +136,6 @@ private:
 	enum EObjectLoaderFlags
 	{
 		eObjectLoader_ReconstructPrefabs   = 0x0001, // If the loading is for reconstruction from prefab.
-		eObjectLoader_ResetInternalMembers = 0x0002, // In case we are deserializing and we would like to wipe all previous state
 		eObjectLoader_SavingInPrefabLib    = 0x0004, // We are serializing in the prefab library (used to omit some not needed attributes of objects)
 		eObjectLoader_LoadToCurrentLayer   = 0x0008  // If true new loaded objects will be added to current instead of saved layer.
 	};

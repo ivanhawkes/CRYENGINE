@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "EditorCommonAPI.h"
 #include "IDataBaseManager.h"
 #include "ObjectEvent.h"
 #include "IPlugin.h"
@@ -33,8 +34,9 @@ class EDITOR_COMMON_API CObjectClassDesc : public IClassDesc, public IDataBaseMa
 {
 public:
 	CObjectClassDesc()
+		: m_nTextureIcon(0)
+		, bRegistered(false)
 	{
-		m_nTextureIcon = 0;
 	}
 
 	//! Release class description.

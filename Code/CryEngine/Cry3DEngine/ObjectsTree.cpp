@@ -73,8 +73,6 @@ void COctreeNode::CheckManageVegetationSprites(float fNodeDistance, int nMaxFram
 	if ((uint32)m_nManageVegetationsFrameId >= iMainFrameId - nMaxFrames && !passInfo.IsZoomInProgress())
 		return;
 
-	C3DEngine* p3DEngine = Get3DEngine();
-
 	m_fNodeDistance = fNodeDistance;
 	m_nManageVegetationsFrameId = iMainFrameId;
 
@@ -113,7 +111,7 @@ void COctreeNode::CheckManageVegetationSprites(float fNodeDistance, int nMaxFram
 		float fSwitchRange = min(fSpriteSwitchDist * GetCVars()->e_LodTransitionSpriteDistRatio, GetCVars()->e_LodTransitionSpriteMinDist);
 		float fLodTransitionDistband = 1.f;
 
-		const auto pTempData = pObj->m_pTempData.load();
+		const auto pTempData = pObj->m_pTempData;
 		if (pObj->m_pSpriteInfo)
 		{
 			CStatObj* pStatObj = vegetGroup.GetStatObj();
@@ -316,9 +314,6 @@ void COctreeNode::CompileObjects(ERNListType eListType)
 	}
 
 	float fObjMaxViewDistance = 0;
-
-	CObjManager* pObjManager = GetObjManager();
-
 	auto renderFlagsAllObjects = m_renderFlags;
 
 	if (eListType != eRNListType_DecalsAndRoads)
@@ -541,9 +536,6 @@ void COctreeNode::UpdateStaticInstancing()
 						UnlinkObject(ii.pRNode);
 						LinkObject(ii.pRNode, eERType_Vegetation, false);
 					}
-
-					CStatObj* pStatObj = ii.pRNode->GetStatObj();
-					const StatInstGroup& vegetGroup = ii.pRNode->GetStatObjGroup();
 
 					(*pInsts)[i].m_Matrix = ii.nodeMatrix;
 
@@ -1451,7 +1443,7 @@ bool COctreeNode::GetShadowCastersTimeSliced(IRenderNode* pIgnoreNode, ShadowMap
 								}
 							}
 						}
-						else if (ICharacterInstance* pCharacter = pNode->GetEntityCharacter())
+						else if (pNode->GetEntityCharacter() != nullptr)
 						{
 							bCanRender = GetCVars()->e_ShadowsCacheRenderCharacters != 0;
 						}
@@ -1681,8 +1673,6 @@ void COctreeNode::StreamingCheckUnload(const SRenderingPassInfo& passInfo, PodAr
 
 	static int nCurNodeId = -1;
 
-	const float fMaxViewDistance = Get3DEngine()->GetMaxViewDistance();
-
 	for (int t = 0; t < nMaxTestsPerFrame && m_arrStreamedInNodes.Count(); t++)
 	{
 		nCurNodeId++;
@@ -1807,16 +1797,6 @@ bool COctreeNode::UpdateStreamingPriority(PodArray<COctreeNode*>& arrRecursion, 
 
 			IF (pObj->m_dwRndFlags & ERF_HIDDEN, 0)
 				continue;
-
-#ifdef _DEBUG
-			const char* szName = pObj->GetName();
-			const char* szClassName = pObj->GetEntityClassName();
-
-			if (pObj->GetRndFlags() & ERF_SELECTED)
-			{
-				int selected = 1;
-			}
-#endif // _DEBUG
 
 			pObj->FillBBox(objBox);
 
@@ -2000,7 +1980,6 @@ void COctreeNode::BuildLoadingDatas(PodArray<SOctreeLoadObjectsData>* pQueue, by
 
 bool COctreeNode::StreamLoad(uint8* pData, int nDataSize, std::vector<IStatObj*>* pStatObjTable, std::vector<IMaterial*>* pMatTable, EEndian eEndian, AABB* pBox)
 {
-	int64 ticks = CryGetTicks();
 	if (m_streamComplete)
 		return false;
 
@@ -2555,6 +2534,16 @@ void COctreeNode::RenderContentJobEntry(int nRenderMask, Vec3 vAmbColor, uint32 
 	}
 #endif
 
+	{
+		// NOTE: There's an extremely low chance of contention on this lock:
+		// Due to one-pass-traversal we have a strong guarantee that each octree
+		// node can only be processed by one thread at a time for a given traversal.
+		// Currently only vis area octree traversal can overlap with general 
+		// octree traversal. 
+		CRY_PROFILE_FUNCTION_WAITING(PROFILE_3DENGINE);
+		m_renderLock.Lock();
+	}
+
 	PodArray<SRenderLight*>* pAffectingLights = GetAffectingLights(passInfo);
 
 	SSectorTextureSet* pTerrainTexInfo = NULL;
@@ -2573,7 +2562,7 @@ void COctreeNode::RenderContentJobEntry(int nRenderMask, Vec3 vAmbColor, uint32 
 			{
 				for (IRenderNode* pObj = m_arrObjects[nListId].m_pFirstNode; pObj; pObj = pObj->m_pNext)
 				{
-					if (auto pTempData = pObj->m_pTempData.load())
+					if (auto pTempData = pObj->m_pTempData)
 					{
 						// Invalidate objects where terrain texture is used
 						if (pTempData->userData.bTerrainColorWasUsed)
@@ -2602,6 +2591,8 @@ void COctreeNode::RenderContentJobEntry(int nRenderMask, Vec3 vAmbColor, uint32 
 	{
 		GetObjManager()->RemoveCullJobProducer();
 	}
+
+	m_renderLock.Unlock();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2866,7 +2857,6 @@ void COctreeNode::RenderCommonObjects(TDoublyLinkedList<IRenderNode>* lstObjects
 {
 	FUNCTION_PROFILER_3DENGINE;
 
-	CVars* pCVars = GetCVars();
 	AABB objBox;
 	const Vec3 vCamPos = passInfo.GetCamera().GetPosition();
 
@@ -3009,8 +2999,6 @@ void COctreeNode::InsertObject(IRenderNode* pObj, const AABB& objBox, const floa
 	const float fViewDistRatioVegetation = GetCVars()->e_ViewDistRatioVegetation;
 	const float fWSMaxViewDist = pObj->m_fWSMaxViewDist;
 	const bool bTypeRoad = (eType == eERType_Road);
-
-	Vec3 vObjectCentre = vObjCenter;
 
 	while (true)
 	{
@@ -3169,12 +3157,8 @@ void COctreeNode::UpdateObjects(IRenderNode* pObj)
 	FUNCTION_PROFILER_3DENGINE;
 
 	float fObjMaxViewDistance = 0;
-	size_t numCasters = 0;
-	CObjManager* pObjManager = GetObjManager();
-
 	auto nFlags = pObj->GetRndFlags();
 	EERType eRType = pObj->GetRenderNodeType();
-	float WSMaxViewDist = pObj->GetMaxViewDist();
 
 	IF (nFlags & ERF_HIDDEN, 0)
 		return;
@@ -3231,7 +3215,6 @@ void COctreeNode::UpdateObjects(IRenderNode* pObj)
 	}
 
 	bool bUpdateParentShadowFlags = false;
-	bool bUpdateParentOcclusionFlags = false;
 
 	// fill shadow casters list
 	const bool bHasPerObjectShadow = GetCVars()->e_ShadowsPerObject && Get3DEngine()->GetPerObjectShadow(pObj);
@@ -3433,12 +3416,6 @@ void CObjManager::RenderBrush(CBrush* pEnt, PodArray<SRenderLight*>* pAffectingL
 {
 
 	//	FUNCTION_PROFILER_3DENGINE;
-	const CVars* pCVars = GetCVars();
-
-#ifdef _DEBUG
-	const char* szName = pEnt->GetName();
-	const char* szClassName = pEnt->GetEntityClassName();
-#endif // _DEBUG
 
 #if !defined(_RELEASE)
 	if (GetCVars()->e_CoverageBufferShowOccluder)

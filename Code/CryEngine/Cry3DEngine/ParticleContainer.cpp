@@ -101,7 +101,10 @@ void CParticleContainer::OnEffectChange()
 	m_nEnvFlags = m_pParams->nEnvFlags;
 
 	// Update existing particle history arrays if needed.
+#if CRY_PLATFORM_DESKTOP
 	int nPrevSteps = m_nHistorySteps;
+#endif
+
 	m_nHistorySteps = m_pParams->GetTailSteps();
 
 	// Do not use coverage buffer culling for 'draw near' or 'on top' particles
@@ -789,7 +792,7 @@ void CParticleContainer::Render(SRendParams const& RenParams, SPartRenderParams 
 
 		pOD->m_LightVolumeId = PRParams.m_nDeferredLightVolumeId;
 
-		if (const auto pTempData = GetMain().m_pTempData.load())
+		if (const auto pTempData = GetMain().m_pTempData)
 			*((Vec4f*)&pOD->m_fTempVars[0]) = Vec4f(pTempData->userData.vEnvironmentProbeMults);
 		else
 			*((Vec4f*)&pOD->m_fTempVars[0]) = Vec4f(1.0f, 1.0f, 1.0f, 1.0f);

@@ -19,6 +19,7 @@
 #include <CryExtension/CryCreateClassInstance.h>
 #include <CryMono/IMonoRuntime.h>
 #include <CryGame/IGameStartup.h>
+#include <CryFont/IFont.h>
 
 #if (CRY_PLATFORM_APPLE || CRY_PLATFORM_LINUX || CRY_PLATFORM_ANDROID) && !defined(DEDICATED_SERVER)
 	#include <dlfcn.h>
@@ -34,21 +35,22 @@
 	#include <algorithm>
 #endif
 
-#include <CryNetwork/INetwork.h>
 #include <Cry3DEngine/I3DEngine.h>
 #include <CryAISystem/IAISystem.h>
-#include <CryRenderer/IRenderer.h>
-#include <CrySystem/File/ICryPak.h>
-#include <CryMovie/IMovieSystem.h>
+#include <CryAnimation/ICryAnimation.h>
+#include <CryAudio/IAudioSystem.h>
 #include <CryEntitySystem/IEntitySystem.h>
 #include <CryInput/IInput.h>
-#include <CrySystem/ILog.h>
-#include <CryAudio/IAudioSystem.h>
-#include <CryAnimation/ICryAnimation.h>
-#include <CryScriptSystem/IScriptSystem.h>
-#include <CrySystem/ICmdLine.h>
-#include <CrySystem/IProcess.h>
+#include <CryMovie/IMovieSystem.h>
+#include <CryNetwork/INetwork.h>
+#include <CryPhysics/IPhysics.h>
 #include <CryReflection/Framework.h>
+#include <CryRenderer/IRenderer.h>
+#include <CryScriptSystem/IScriptSystem.h>
+#include <CrySystem/File/ICryPak.h>
+#include <CrySystem/ICmdLine.h>
+#include <CrySystem/ILog.h>
+#include <CrySystem/IProcess.h>
 #include <CryUDR/InterfaceIncludes.h>
 
 #include "CryPak.h"
@@ -128,6 +130,9 @@
 #endif
 
 #include "WindowsConsole.h"
+#include "CmdLine.h"
+#include "CPUDetect.h"
+#include "UserAnalytics/UserAnalyticsSystem.h"
 
 #if CRY_PLATFORM_WINDOWS
 extern LONG WINAPI CryEngineExceptionFilterWER(struct _EXCEPTION_POINTERS* pExceptionPointers);
@@ -493,7 +498,7 @@ static void CmdIgnoreAssertsFromModule(IConsoleCmdArgs* pArgs)
 {
 	if (gEnv && gEnv->pSystem && pArgs->GetArgCount() == 2)
 	{
-		wstring requestedModule = CryStringUtils::UTF8ToWStr(pArgs->GetArg(1));
+		string requestedModule = pArgs->GetArg(1);
 
 		for (uint32 i = 0; i < eCryM_Num; ++i)
 		{
@@ -1962,21 +1967,34 @@ bool CSystem::InitFileSystem(const SSystemInitParams& startupParams)
 #endif
 	}
 
-	// Load value of sys_game_folder from system.cfg into the sys_project console variable
-	ILoadConfigurationEntrySink* pCVarsWhiteListConfigSink = GetCVarsWhiteListConfigSink();
-#if CRY_PLATFORM_ANDROID && !defined(ANDROID_OBB)
-	string path = string(CryGetProjectStoragePath()) + "/system.cfg";
-	LoadConfiguration(path.c_str(), pCVarsWhiteListConfigSink, eLoadConfigInit, ELoadConfigurationFlags::SuppressConfigNotFoundWarning);
-#else
-	LoadConfiguration("%ENGINEROOT%/system.cfg", pCVarsWhiteListConfigSink, eLoadConfigInit, ELoadConfigurationFlags::SuppressConfigNotFoundWarning);
-#endif
-
 	// Now set up the log
 	InitLog(startupParams);
 
 	LogVersion();
 
 	((CCryPak*)m_env.pCryPak)->SetLog(m_env.pLog);
+
+	ILoadConfigurationEntrySink* pCVarsWhiteListConfigSink = GetCVarsWhiteListConfigSink();
+#if CRY_PLATFORM_ANDROID && !defined(ANDROID_OBB)
+	string path = string(CryGetProjectStoragePath()) + "/system.cfg";
+#else
+	string path = "%ENGINEROOT%/system.cfg";
+#endif
+
+#if defined(USE_RUNTIME_CVAR_OVERRIDES)
+	// We load the runtime CVar overrides before system.cfg
+	if (m_env.pConsole != nullptr)
+	{
+		const bool result = static_cast<CXConsole*>(m_env.pConsole)->ParseCVarOverridesFile(path);
+		if (!result)
+		{
+			CryMessageBox("Error: Failed to parse the runtime CVar overrides file, look for assert failure.", "ERROR", EMessageBox::eMB_Error);
+		}
+	}
+#endif
+
+	// Load value of sys_game_folder from system.cfg into the sys_project console variable
+	LoadConfiguration(path.c_str(), pCVarsWhiteListConfigSink, eLoadConfigInit, ELoadConfigurationFlags::SuppressConfigNotFoundWarning);
 
 	const char* szConfigPakPath = "%ENGINEROOT%/config.pak";
 	m_env.pCryPak->OpenPack(szConfigPakPath);
@@ -2540,7 +2558,7 @@ void CSystem::OpenLanguageAudioPak(char const* const szLanguage)
 		pakFilePath = PathUtil::AddSlash(g_cvars.sys_build_folder->GetString()) + string(PathUtil::GetGameFolder()) + CRY_NATIVE_PATH_SEPSTR + localizedPath;
 	}
 
-	if (!m_env.pCryPak->IsFileExist(pakFilePath) || !m_env.pCryPak->OpenPack(bindingRoot.c_str(), pakFilePath))
+	if (!m_env.pCryPak->OpenPack(bindingRoot.c_str(), pakFilePath))
 	{
 		// make sure the localized language is found - not really necessary, for TC
 		CryLogAlways("Localized language content(%s) not available or modified from the original installation.", szLanguage);
@@ -2902,12 +2920,13 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 	InlineInitializationProcessing("CSystem::Init PlatformOS");
 
 	{
-		m_FrameProfileSystem.Init();
-
 		//////////////////////////////////////////////////////////////////////////
 		// File system, must be very early
 		//////////////////////////////////////////////////////////////////////////
 		InitFileSystem(startupParams);
+
+		m_FrameProfileSystem.Init();
+
 		//////////////////////////////////////////////////////////////////////////
 		InlineInitializationProcessing("CSystem::Init InitFileSystem");
 

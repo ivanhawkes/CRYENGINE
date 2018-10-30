@@ -277,7 +277,7 @@ void CCharacterRenderNode::SetCharacter(ICharacterInstance* pCharacter)
 //////////////////////////////////////////////////////////////////////////
 void CCharacterRenderNode::OffsetPosition(const Vec3& delta)
 {
-	if (const auto pTempData = m_pTempData.load()) pTempData->OffsetPosition(delta);
+	if (m_pTempData) m_pTempData->OffsetPosition(delta);
 	m_matrix.SetTranslation(m_matrix.GetTranslation() + delta);
 	m_cachedBoundsLocal = m_cachedBoundsWorld = AABB(0.0f);
 }
@@ -343,8 +343,6 @@ void CCharacterRenderNode::PrecacheCharacterCollect(const float fImportance, ICh
 		minLod = max(minLod, 1);
 		nLod = 1;
 	}
-
-	SFrameLodInfo lodParam = gEnv->p3DEngine->GetFrameLodInfo();
 
 	IAttachmentManager* pAttMan = pCharacter->GetIAttachmentManager();
 	ICharacterInstance* pCharInstance = pAttMan->GetSkelInstance();

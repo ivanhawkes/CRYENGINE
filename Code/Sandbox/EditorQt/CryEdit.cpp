@@ -31,9 +31,10 @@
 
 #include <Util/IndexedFiles.h>
 
-#include <Notifications/NotificationCenter.h>
-#include <FilePathUtil.h>
+#include <FileUtils.h>
 #include <ModelViewport.h>
+#include <Notifications/NotificationCenter.h>
+#include <PathUtils.h>
 #include <QFullScreenWidget.h>
 
 #include <CrySandbox/IEditorGame.h>
@@ -1081,11 +1082,6 @@ CCryEditApp::ECreateLevelResult CCryEditApp::CreateLevel(const string& levelName
 	GetIEditorImpl()->GetDocument()->InitEmptyLevel(resolution, unitSize, bUseTerrain);
 	CProgressNotification notification("Creating Level", QtUtil::ToQString(levelName));
 
-	if (bUseTerrain)
-	{
-		GetIEditorImpl()->GetTerrainManager()->SetTerrainSize(resolution, unitSize);
-	}
-
 	// Save the document to this folder
 	GetIEditorImpl()->GetDocument()->SetPathName(filename.GetBuffer());
 
@@ -1135,7 +1131,12 @@ CCryEditApp::ECreateLevelResult CCryEditApp::CreateLevel(const string& levelName
 
 CCryEditDoc* CCryEditApp::LoadLevel(const char* lpszFileName)//this path is a pak file path but make this more robust
 {
-	CCryEditDoc* doc = 0;
+	CCryEditDoc* pDoc = GetIEditorImpl()->GetDocument();
+	if (pDoc && pDoc->IsLevelBeingLoaded())
+	{
+		return nullptr;
+	}
+
 	if (GetIEditorImpl()->GetLevelIndependentFileMan()->PromptChangedFiles() && GetIEditorImpl()->GetDocument()->CanClose())
 	{
 		CProgressNotification notification("Loading Level", QString(lpszFileName));
@@ -1143,24 +1144,22 @@ CCryEditDoc* CCryEditApp::LoadLevel(const char* lpszFileName)//this path is a pa
 		// that tweak incomplete object state.
 		GetIEditorImpl()->EnableAcceleratos(false);
 
-		string newPath = PathUtil::AbsolutePathToCryPakPath(lpszFileName);
-		PathUtil::ToUnixPath(newPath.GetBuffer());
-
-		doc = GetIEditorImpl()->GetDocument();
-		if (doc)
+		if (pDoc)
 		{
-			delete doc;
+			delete pDoc;
 		}
-		doc = new CCryEditDoc;
-		doc->OnOpenDocument(newPath);
+		pDoc = new CCryEditDoc;
 
-		// Reenable accelerators here
+		const string newPath = PathUtil::AbsolutePathToCryPakPath(lpszFileName);
+		pDoc->OnOpenDocument(newPath);
+
+		// Re-enable accelerators here
 		GetIEditorImpl()->EnableAcceleratos(true);
 
-		doc->SetLastLoadedLevelName(newPath);
+		pDoc->SetLastLoadedLevelName(newPath);
 	}
 
-	return doc;
+	return pDoc;
 }
 
 void CCryEditApp::OnResourcesReduceworkingset()
@@ -1354,7 +1353,7 @@ CRY_TEST(EditorCreateLevelTest, editor = true, game = false, timeout = 60.f)
 	{
 		char szFullPathBuf[ICryPak::g_nMaxPath];
 		const char* szFullPath = gEnv->pCryPak->AdjustFileName("examplelevel", szFullPathBuf, ICryPak::FOPEN_ONDISK);
-		PathUtil::RemoveDirectory(szFullPath);
+		FileUtils::RemoveDirectory(szFullPath);
 
 		gEnv->pCryPak->RemoveFile("examplelevel.level.cryasset");
 	};

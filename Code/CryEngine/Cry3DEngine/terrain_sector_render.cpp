@@ -481,13 +481,13 @@ void CTerrainNode::DrawArray(const SRenderingPassInfo& passInfo)
 			for (int p = 0; p < 3; p++)
 			{
 				if (SSurfaceType* pSurf = m_lstSurfaceTypeInfo[i].pSurfaceType)
-					if (IMaterial* pMat = pSurf->GetMaterialOfProjection(szProj[p]))
+					if (pSurf->GetMaterialOfProjection(szProj[p]) != nullptr)
 					{
 						pSurf->fMaxMatDistanceZ = float(GetFloatCVar(e_TerrainDetailMaterialsViewDistZ) * Get3DEngine()->m_fTerrainDetailMaterialsViewDistRatio);
 						pSurf->fMaxMatDistanceXY = float(GetFloatCVar(e_TerrainDetailMaterialsViewDistXY) * Get3DEngine()->m_fTerrainDetailMaterialsViewDistRatio);
 
 						if (m_arrfDistance[passInfo.GetRecursiveLevel()] < pSurf->GetMaxMaterialDistanceOfProjection(szProj[p]))
-							if (IRenderMesh* pMesh = m_lstSurfaceTypeInfo[i].arrpRM[p])
+							if (m_lstSurfaceTypeInfo[i].arrpRM[p] != nullptr)
 							{
 								bDrawDetailLayersXYZ[p == 2] = true;
 							}
@@ -551,15 +551,18 @@ void CTerrainNode::DrawArray(const SRenderingPassInfo& passInfo)
 										// every draw call uses custom constants (at least surface type id and direction of projection) so we have to duplicate render object
 										pDetailObj = GetRenderer()->EF_DuplicateRO(pDetailObj, passInfo);
 
+										// make sure layers are properly sorted
+										pDetailObj->m_fSort = (float)pSurf->ucThisSurfaceTypeId;
+
 										pMesh->AddRenderElements(pMat, pDetailObj, passInfo, EFSLIST_TERRAINLAYER, 1);
 									}
 								}
 							}
+						}
 					}
 				}
 			}
 	}
-}
 }
 
 // update data in video buffer
@@ -772,8 +775,6 @@ bool CTerrainNode::RenderSector(const SRenderingPassInfo& passInfo)
 {
 	FUNCTION_PROFILER_3DENGINE;
 
-	STerrainNodeLeafData* pLeafData = GetLeafData();
-
 	IRenderMesh* pRenderMesh = (m_nTreeLevel >= GetCVars()->e_TerrainMeshInstancingMinLod) ? GetSharedRenderMesh() : GetLeafData()->m_pRenderMesh;
 
 	bool bDetailLayersReady = passInfo.IsShadowPass() ||
@@ -793,9 +794,9 @@ bool CTerrainNode::RenderSector(const SRenderingPassInfo& passInfo)
 
 	if (pRenderMesh && GetCVars()->e_TerrainDrawThisSectorOnly < 2 && bDetailLayersReady)
 	{
-			DrawArray(passInfo);
-			return true;
-		}
+		DrawArray(passInfo);
+		return true;
+	}
 
 	if (passInfo.GetRecursiveLevel())
 		if (pRenderMesh)
@@ -885,7 +886,6 @@ void CTerrainNode::BuildIndices_Wrapper(SRenderingPassInfo passInfo)
 	// don't try to create terrain data if an allocation failed
 	if (pUpdateTerrainTempData->m_StripsInfo.idx_array.MemorySize() == 0) return;
 
-	STerrainNodeLeafData* pLeafData = GetLeafData();
 	BuildIndices(pUpdateTerrainTempData->m_StripsInfo, passInfo);
 }
 
@@ -898,8 +898,6 @@ void CTerrainNode::BuildVertices_Wrapper()
 	STerrainNodeLeafData* pLeafData = GetLeafData();
 	if (!pLeafData)
 		return;
-
-	_smart_ptr<IRenderMesh>& pRenderMesh = pLeafData->m_pRenderMesh;
 
 	int sectorSize = CTerrain::GetSectorSize() << m_nTreeLevel;
 	const int meshDim = int(float(CTerrain::GetSectorSize()) / CTerrain::GetHeightMapUnitSize());
@@ -1374,7 +1372,6 @@ void CTerrainNode::AppendTrianglesFromObjects(const int nOriginX, const int nOri
 			pRM->LockForThreadAccess();
 
 			int nPosStride = 0, nTangsStride = 0;
-			int nInds = pRM->GetIndicesCount();
 			const byte* pPos = pRM->GetPosPtr(nPosStride, FSL_READ);
 			vtx_idx* pInds = pRM->GetIndexPtr(FSL_READ);
 			byte* pTangs = pRM->GetTangentPtr(nTangsStride, FSL_READ);
@@ -1560,7 +1557,7 @@ void CTerrainNode::SetVertexSurfaceType(float x, float y, float stepSize, CTerra
 {
 	SSurfaceTypeItem st = pTerrain->GetSurfaceTypeItem(x, y);
 
-	if(!GetCVars()->e_TerrainDetailMaterialsWeightedBlending)
+	if (!GetCVars()->e_TerrainDetailMaterialsWeightedBlending)
 		st = st.GetDominatingSurfaceType();
 
 	if (st.GetHole())

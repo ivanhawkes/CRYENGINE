@@ -14,9 +14,8 @@ CVcaParameter::CVcaParameter(
 	uint32 const id,
 	float const multiplier,
 	float const shift,
-	char const* const szName,
 	FMOD::Studio::VCA* const vca)
-	: CParameter(id, multiplier, shift, szName, EParameterType::VCA)
+	: CBaseParameter(id, multiplier, shift, EParameterType::VCA)
 	, m_vca(vca)
 {
 }

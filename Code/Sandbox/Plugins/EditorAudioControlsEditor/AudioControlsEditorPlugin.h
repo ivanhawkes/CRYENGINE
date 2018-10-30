@@ -7,17 +7,11 @@
 
 #include "AssetsManager.h"
 
-namespace CryAudio
-{
-struct IObject;
-} // namespace CryAudio
-
 namespace ACE
 {
 class CImplementationManager;
 extern CAssetsManager g_assetsManager;
 extern CImplementationManager g_implementationManager;
-extern Platforms g_platforms;
 
 enum class EReloadFlags : CryAudio::EnumFlagsType
 {
@@ -26,15 +20,19 @@ enum class EReloadFlags : CryAudio::EnumFlagsType
 	ReloadImplData = BIT(1),
 	ReloadScopes = BIT(2),
 	SendSignals = BIT(3),
-	SetPlatforms = BIT(4),
-	BackupConnections = BIT(5), };
+	BackupConnections = BIT(4), };
 CRY_CREATE_ENUM_FLAG_OPERATORS(EReloadFlags);
 
 class CAudioControlsEditorPlugin final : public IPlugin, public ISystemEventListener
 {
 public:
 
-	explicit CAudioControlsEditorPlugin();
+	CAudioControlsEditorPlugin(CAudioControlsEditorPlugin const&) = delete;
+	CAudioControlsEditorPlugin(CAudioControlsEditorPlugin&&) = delete;
+	CAudioControlsEditorPlugin& operator=(CAudioControlsEditorPlugin const&) = delete;
+	CAudioControlsEditorPlugin& operator=(CAudioControlsEditorPlugin&&) = delete;
+
+	CAudioControlsEditorPlugin();
 	virtual ~CAudioControlsEditorPlugin() override;
 
 	// IPlugin
@@ -49,10 +47,10 @@ public:
 	static void       StopTriggerExecution();
 	static EErrorCode GetLoadingErrorMask() { return s_loadingErrorMask; }
 
-	static CCrySignal<void()> SignalAboutToLoad;
-	static CCrySignal<void()> SignalLoaded;
-	static CCrySignal<void()> SignalAboutToSave;
-	static CCrySignal<void()> SignalSaved;
+	static CCrySignal<void()> SignalOnBeforeLoad;
+	static CCrySignal<void()> SignalOnAfterLoad;
+	static CCrySignal<void()> SignalOnBeforeSave;
+	static CCrySignal<void()> SignalOnAfterSave;
 
 private:
 
@@ -60,11 +58,9 @@ private:
 	virtual void OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam) override;
 	// ~ISystemEventListener
 
-	void        InitPlatforms();
 	static void ReloadImplData(EReloadFlags const flags);
 
 	static FileNames           s_currentFilenames;
-	static CryAudio::IObject*  s_pIAudioObject;
 	static CryAudio::ControlId s_audioTriggerId;
 
 	static EErrorCode          s_loadingErrorMask;

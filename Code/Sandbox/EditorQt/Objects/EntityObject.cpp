@@ -330,7 +330,6 @@ void CEntityObject::Done()
 	UnloadScript();
 
 	ReleaseEventTargets();
-	RemoveAllEntityLinks();
 
 	for (CListenerSet<IEntityObjectListener*>::Notifier notifier(m_listeners); notifier.IsValid(); notifier.Next())
 	{
@@ -2658,9 +2657,9 @@ void CEntityObject::Display(CObjectRenderHelper& objRenderHelper)
 
 	if (m_pHelperMesh && dc.showMesh)
 	{
-		Matrix34 tm(wtm);
+		m_statObjWorldMatrix = wtm;
 		float sz = m_helperScale * gGizmoPreferences.helperScale;
-		tm.ScaleColumn(Vec3(sz, sz, sz));
+		m_statObjWorldMatrix.ScaleColumn(Vec3(sz, sz, sz));
 
 		SRendParams rp;
 
@@ -2681,9 +2680,9 @@ void CEntityObject::Display(CObjectRenderHelper& objRenderHelper)
 		rp.AmbientColor = ColorF(color[0], color[1], color[2], 1);
 		rp.dwFObjFlags |= FOB_TRANS_MASK;
 		rp.fAlpha = 1;
-		rp.pMatrix = &tm;
+		rp.pMatrix = &m_statObjWorldMatrix;
 
-		m_pHelperMesh->Render(rp, objRenderHelper.GetPassInfo());
+		objRenderHelper.GetPassInfo().GetIRenderView()->InjectAuxiliaryStatObject(rp, m_pHelperMesh);
 	}
 
 	if (IsSelected())

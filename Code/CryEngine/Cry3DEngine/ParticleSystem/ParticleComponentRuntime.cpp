@@ -58,6 +58,48 @@ const CParticleContainer& CParticleComponentRuntime::GetParentContainer() const
 void CParticleComponentRuntime::Initialize()
 {
 	m_container.SetUsedData(m_pComponent->GetUseData());
+	if (m_pComponent->OnPreRun.size())
+		PreRun();
+}
+
+void CParticleComponentRuntime::Clear()
+{
+	m_container.Clear();
+	RemoveAllSubInstances();
+	m_deltaTime = -1.0f;
+}
+
+void CParticleComponentRuntime::PreRun()
+{
+	if (GetGpuRuntime())
+		return;
+
+	Clear();
+	m_deltaTime = ComponentParams().m_stableTime;
+
+	AddInstances();
+
+	static const uint MaxSamples = 16;
+	TDynArray<SSpawnEntry> spawnEntries;
+	GetComponent()->SpawnParticles(*this, spawnEntries);
+	uint numParticles = 0;
+	for (auto& spawn : spawnEntries)
+	{
+		numParticles += spawn.m_count;
+		spawn.m_count = min(spawn.m_count, MaxSamples);
+	}
+	m_container.AddParticles(spawnEntries);
+	UpdateNewBorns();
+	m_container.ResetSpawnedParticles();
+
+	CalculateBounds();
+	m_pEmitter->UpdatePhysEnv();
+
+	UpdateParticles();
+	CalculateBounds();
+
+	m_pComponent->OnPreRun(*this, numParticles);
+	Clear();
 }
 
 void CParticleComponentRuntime::UpdateAll()
@@ -265,6 +307,8 @@ void CParticleComponentRuntime::RemoveParticles()
 	TParticleIdArray removeIds(MemHeap());
 	removeIds.reserve(numParticles);
 
+	GetComponent()->KillParticles(*this);
+
 	for (auto particleId : FullRange())
 	{
 		const float normalAge = normAges.Load(particleId);
@@ -422,13 +466,13 @@ void CParticleComponentRuntime::CalculateBounds()
 
 	IVec3Stream positions = m_container.GetIVec3Stream(EPVF_Position);
 	IFStream sizes = m_container.GetIFStream(EPDT_Size);
-	const floatv fMin = ToFloatv(std::numeric_limits<float>::max());
-	const floatv fMax = ToFloatv(-std::numeric_limits<float>::max());
 	const Slope<float> slope = ComponentParams().m_physicalSizeSlope;
 
 	SUpdateRange range = m_container.GetFullRange();
 
 #ifdef CRY_PFX2_USE_SSE
+	const floatv fMin = ToFloatv(std::numeric_limits<float>::max());
+	const floatv fMax = ToFloatv(-std::numeric_limits<float>::max());
 	Vec3v bbMin = Vec3v(fMin, fMin, fMin);
 	Vec3v bbMax = Vec3v(fMax, fMax, fMax);
 
@@ -539,7 +583,7 @@ void CParticleComponentRuntime::DebugStabilityCheck()
 	{
 		for (auto particleId : SpawnedRange())
 		{
-			TParticleId parentId = parentIds.Load(particleId);
+			parentIds.Load(particleId);
 			CRY_PFX2_ASSERT(parentIds.Load(particleId) != gInvalidId);      // recently spawn particles are not supposed to be orphan
 		}
 	}
@@ -586,7 +630,7 @@ pfx2::TParticleHeap& CParticleComponentRuntime::MemHeap()
 
 float CParticleComponentRuntime::DeltaTime() const
 {
-	return m_pEmitter->GetDeltaTime();
+	return m_deltaTime >= 0.0f ? m_deltaTime : m_pEmitter->GetDeltaTime();
 }
 
 }

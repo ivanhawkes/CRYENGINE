@@ -41,8 +41,12 @@
 #include "ClipVolumeManager.h"
 #include <Cry3DEngine/ITimeOfDay.h>
 #include <CrySystem/Scaleform/IScaleformHelper.h>
+#include <CrySystem/CryVersion.h>
 #include <CryGame/IGameFramework.h>
 #include <CryAnimation/ICryAnimation.h>
+#ifdef ENABLE_LW_PROFILERS
+	#include <CryAnimation/IAttachment.h>
+#endif
 #include <CryAISystem/IAISystem.h>
 #include <CryCore/Platform/IPlatformOS.h>
 #include <CryGame/IGame.h>
@@ -839,10 +843,6 @@ void C3DEngine::RenderWorld(const int nRenderFlags, const SRenderingPassInfo& pa
 		return;
 	}
 
-#ifdef ENABLE_LW_PROFILERS
-	int64 renderStart = CryGetTicks();
-#endif
-
 	if (passInfo.IsGeneralPass())
 	{
 		if (GetCVars()->e_ScreenShot)
@@ -1625,6 +1625,21 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed() && JobManager::InvokeAsJob("CheckOcclusion"))
 		m_pObjManager->BeginOcclusionCulling(passInfo);
 
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// Add auxiliary stat objects
+	////////////////////////////////////////////////////////////////////////////////////////
+	if (!passInfo.IsRecursivePass())
+	{
+		const auto &auxStatObjs = passInfo.GetIRenderView()->GetAuxiliaryStatObjects();
+		if (auxStatObjs.size())
+		{
+			CRY_PROFILE_REGION(PROFILE_RENDERER, "auxiliaryStatObjects");
+			for (auto &obj : auxStatObjs)
+				obj.second->Render(obj.first, passInfo);
+		}
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Collect shadow passes
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -1900,13 +1915,13 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed() && JobManager::InvokeAsJob("CheckOcclusion"))
 		m_pObjManager->EndOcclusionCulling();
 
-		// release shadow views (from now only renderer owns it)
-		for (const auto& pair : shadowFrustums)
-		{
-			auto &shadowFrustum = pair.first;
-			CRY_ASSERT(shadowFrustum->pOnePassShadowView);
-			shadowFrustum->pOnePassShadowView.reset();
-		}
+	// release shadow views (from now only renderer owns it)
+	for (const auto& pair : shadowFrustums)
+	{
+		auto &shadowFrustum = pair.first;
+		CRY_ASSERT(shadowFrustum->pOnePassShadowView);
+		shadowFrustum->pOnePassShadowView.reset();
+	}
 }
 
 void C3DEngine::ResetCoverageBufferSignalVariables()
@@ -2028,7 +2043,7 @@ void C3DEngine::RenderSkyBox(IMaterial* pMat, const SRenderingPassInfo& passInfo
 			m_pREHDRSky->m_moonTexId = m_nNightMoonTexId;
 
 			// add sky dome to render list
-			passInfo.GetIRenderView()->AddRenderObject(m_pREHDRSky, pMat->GetShaderItem(), pObj, passInfo, EFSLIST_GENERAL, 1);
+			passInfo.GetIRenderView()->AddRenderObject(m_pREHDRSky, pMat->GetShaderItem(), pObj, passInfo, EFSLIST_GENERAL, 0);
 
 			// get sky lighting parameter.
 			const SSkyLightRenderParams* pSkyParams = m_pSkyLightManager->GetRenderParams();
@@ -2041,9 +2056,9 @@ void C3DEngine::RenderSkyBox(IMaterial* pMat, const SRenderingPassInfo& passInfo
 		}
 	}
 	// skybox
-	else
+	else if (m_pRESky && pMat)
 	{
-		if (pMat && m_pRESky && GetCVars()->e_SkyBox)
+		if (GetCVars()->e_SkyBox)
 		{
 			CRenderObject* pObj = passInfo.GetIRenderView()->AllocateTemporaryRenderObject();
 			if (!pObj)
@@ -2057,7 +2072,7 @@ void C3DEngine::RenderSkyBox(IMaterial* pMat, const SRenderingPassInfo& passInfo
 			m_pRESky->m_fSkyBoxStretching = m_fSkyBoxStretching;
 			m_pRESky->m_fSkyBoxAngle = DEG2RAD(m_fSkyBoxAngle);
 
-			passInfo.GetIRenderView()->AddRenderObject(m_pRESky, pMat->GetShaderItem(), pObj, passInfo, EFSLIST_GENERAL, 1);
+			passInfo.GetIRenderView()->AddRenderObject(m_pRESky, pMat->GetShaderItem(), pObj, passInfo, EFSLIST_GENERAL, 0);
 		}
 	}
 
@@ -2161,7 +2176,6 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 	const int iDisplayResolutionY = pAux->GetCamera().GetViewSurfaceZ();
 	const float fDisplayMarginRes = 5.0f;
 	const float fDisplayMarginNormX = (float)fDisplayMarginRes / (float)iDisplayResolutionX;
-	const float fDisplayMarginNormY = (float)fDisplayMarginRes / (float)iDisplayResolutionY;
 	Vec2 overscanBorderNorm = Vec2(0.0f, 0.0f);
 	gEnv->pRenderer->EF_Query(EFQ_OverscanBorders, overscanBorderNorm);
 
@@ -3115,6 +3129,13 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 	CSvoManager::OnDisplayInfo(fTextPosX, fTextPosY, fTextStepY, DISPLAY_INFO_SCALE);
 	#endif
 
+	if (GetCVars()->e_ProcVegetation == 2 || m_supportOfflineProceduralVegetation)
+	{
+		int objectsNum = 0, maxNodesNum = 0;
+		int nodesNum = GetTerrain()->GetActiveProcObjNodesCount(objectsNum, maxNodesNum);
+		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "ProcVeg: sectors: %d / %d, instances: %d", nodesNum, maxNodesNum, objectsNum);
+	}
+
 	#undef MAX_PHYS_TIME
 	#undef TICKS_TO_MS
 	#undef CONVY
@@ -3347,13 +3368,6 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 		                     "GetDistanceToSectorWithWater() = %.2f", m_pTerrain->GetDistanceToSectorWithWater());
 	}
 
-	if (GetCVars()->e_ProcVegetation == 2)
-	{
-		int objectsNum = 0;
-		int nodesNum = GetTerrain()->GetActiveProcObjNodesCount(objectsNum);
-		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "ProcVeg: sectors num: %d, objects num: %d", nodesNum, objectsNum);
-	}
-
 	if (GetCVars()->e_MergedMeshesDebug)
 	{
 		if (m_pMergedMeshesManager->PoolOverFlow())
@@ -3441,7 +3455,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 			if (pRenderTexture && gEnv->pRenderer)
 			{
 				// TODO: relative/normalized coordinate system in screen-space
-				float vpWidth = (float)gEnv->pRenderer->GetOverlayWidth(), vpHeight = (float)gEnv->pRenderer->GetOverlayHeight();
+				//float vpWidth = (float)gEnv->pRenderer->GetOverlayWidth(), vpHeight = (float)gEnv->pRenderer->GetOverlayHeight();
 				float iconWidth = (float)nIconSize /* / vpWidth * 800.0f */;
 				float iconHeight = (float)nIconSize /* / vpHeight * 600.0f */;
 				IRenderAuxImage::Draw2dImage(

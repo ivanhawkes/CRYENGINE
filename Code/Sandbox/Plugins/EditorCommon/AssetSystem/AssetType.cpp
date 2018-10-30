@@ -9,11 +9,14 @@
 #include "AssetSystem/EditableAsset.h"
 #include "AssetSystem/Loader/AssetLoaderHelpers.h"
 #include "AssetSystem/Loader/Metadata.h"
-#include "FilePathUtil.h"
+#include "FileUtils.h"
+#include "PathUtils.h"
 
 #include <CryString/StringUtils.h>
+#include <IEditor.h>
 #include <QFile>
-
+#include <QFileInfo>
+#include <QDir>
 
 namespace Private_AssetType
 {
@@ -81,9 +84,9 @@ static bool CopyAssetFile(const string& oldFilename, const string& newFilename)
 class CAssetMetadata : public INewAsset
 {
 public:
-	CAssetMetadata(const CAssetType& type, const char* szMetadataFile)
+	CAssetMetadata(const CAssetType& type, const char* szMetadataFile, const char* szName)
 		: m_metadataFile(szMetadataFile)
-		, m_name(AssetLoader::GetAssetName(szMetadataFile))
+		, m_name(szName)
 		, m_folder(PathUtil::GetDirectory(m_metadataFile))
 	{
 		m_metadata.type = type.GetTypeName();
@@ -195,19 +198,21 @@ bool CAssetType::Create(const char* szFilepath, const void* pTypeSpecificParamet
 		return false;
 	}
 
-	ICryPak* const pIPak = GetISystem()->GetIPak();
-	if (!pIPak->MakeDir(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), PathUtil::GetPathWithoutFilename(szFilepath)).c_str()))
+	const CryPathString adjustedFilepath = PathUtil::AdjustCasing(szFilepath);
+
+	ICryPak* const pPak = GetISystem()->GetIPak();
+	if (!pPak->MakeDir(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), PathUtil::GetPathWithoutFilename(adjustedFilepath)).c_str()))
 	{
 		return false;
 	}
 
-	CAssetMetadata metadata(*this, szFilepath);
+	CAssetMetadata metadata(*this, adjustedFilepath, AssetLoader::GetAssetName(szFilepath));
 	if (!OnCreate(metadata, pTypeSpecificParameter))
 	{
 		return false;
 	}
 
-	CAssetPtr const pNewAsset = AssetLoader::CAssetFactory::CreateFromMetadata(szFilepath, metadata.GetMetadata());
+	CAssetPtr const pNewAsset = AssetLoader::CAssetFactory::CreateFromMetadata(adjustedFilepath, metadata.GetMetadata());
 
 	CEditableAsset editAsset(*pNewAsset);
 	if (!editAsset.WriteToFile())
@@ -261,7 +266,7 @@ std::vector<CAsset*> CAssetType::Import(const string& sourceFilePath, const stri
 	return pAssetImporter->Import({ GetTypeName() }, ctx);
 }
 
-std::vector<string> CAssetType::GetAssetFiles(const CAsset& asset, bool includeSourceFile, bool makeAbsolute /* = false*/) const
+std::vector<string> CAssetType::GetAssetFiles(const CAsset& asset, bool includeSourceFile, bool makeAbsolute /* = false*/, bool includeThumbnail /*= true*/) const
 {
 	std::vector<string> files;
 	files.reserve(asset.GetFilesCount() + 3);
@@ -270,7 +275,7 @@ std::vector<string> CAssetType::GetAssetFiles(const CAsset& asset, bool includeS
 		files.emplace_back(asset.GetFile(i));
 	}
 	files.emplace_back(asset.GetMetadataFile());
-	if (HasThumbnail())
+	if (includeThumbnail && HasThumbnail())
 	{
 		files.emplace_back(asset.GetThumbnailPath());
 	}
@@ -301,7 +306,7 @@ bool CAssetType::IsInPakOnly(const CAsset& asset) const
 	std::vector<string> filepaths(GetAssetFiles(asset, false, true));
 	for (string& path : filepaths)
 	{
-		if (PathUtil::IsFileInPakOnly(path))
+		if (FileUtils::IsFileInPakOnly(path))
 		{
 			return true;
 		}

@@ -33,8 +33,11 @@
 #include "CVarListProcessor.h"
 #include "NetworkCVars.h"
 #include "CryActionCVars.h"
+#include <CryRenderer/IRenderAuxGeom.h>
 #include <CryNetwork/INetwork.h>
 #include <CryCore/Platform/IPlatformOS.h>
+#include <CrySystem/CryVersion.h>
+#include <CrySystem/IManualFrameStepController.h>
 
 // context establishment tasks
 #include <CryNetwork/NetHelpers.h>
@@ -1716,7 +1719,7 @@ void CGameContext::GetMemoryUsage(ICrySizer* s) const
 
 static ILINE bool IsDX11()
 {
-	ERenderType renderType = gEnv->pRenderer->GetRenderType();
+	//ERenderType renderType = gEnv->pRenderer->GetRenderType();
 	return true;//renderType == eRT_DX11;	// marcio: in this context, we assume DX11 for Crysis2, so immersiveness can work
 }
 

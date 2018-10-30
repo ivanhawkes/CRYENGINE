@@ -195,25 +195,8 @@ enum class EPlatform
 
 
 // define Read Write Barrier macro needed for lockless programming
-#if defined(__arm__)
-/**
- * (ARMv7) Full memory barriar.
- *
- * None of GCC 4.6/4.8 or clang 3.3/3.4 have a builtin intrinsic for ARM's ldrex/strex or dmb
- * instructions.  This is a placeholder until supplied by the toolchain.
- */
-static inline void __dmb()
-{
-	// The linux kernel uses "dmb ish" to only sync with local monitor (arch/arm/include/asm/barrier.h):
-	//#define dmb(option) __asm__ __volatile__ ("dmb " #option : : : "memory")
-	//#define smp_mb()        dmb(ish)
-	__asm__ __volatile__ ("dmb ish" : : : "memory");
-}
-
-	#define READ_WRITE_BARRIER { __dmb(); }
-#else
-	#define READ_WRITE_BARRIER
-#endif
+// Old ARMv7 memory barrier.
+#define READ_WRITE_BARRIER
 //////////////////////////////////////////////////////////////////////////
 
 //! default stack size for threads, currently only used on pthread platforms
@@ -229,7 +212,7 @@ static inline void __dmb()
 	#define SIMPLE_THREAD_STACK_SIZE_KB (32)
 #endif
 
-#if defined(__GNUC__)
+#if defined(CRY_COMPILER_CLANG) || defined(CRY_COMPILER_GCC)
 	#define DLL_EXPORT __attribute__ ((visibility("default")))
 	#define DLL_IMPORT __attribute__ ((visibility("default")))
 #else
@@ -544,7 +527,7 @@ struct NoMove
 template<class TDerived>
 struct ZeroInit
 {
-#if defined(__clang__) || defined(__GNUC__)
+#if CRY_COMPILER_CLANG || CRY_COMPILER_GCC
 	bool __dummy;             //!< Dummy var to create non-zero size, ensuring proper placement in TDerived.
 #endif
 
@@ -658,23 +641,6 @@ enum ETriState
 	eTS_maybe
 };
 
-// Include MultiThreading support.
-#include <CryThreading/CryThread.h>
-
-// Include most commonly used STL headers.
-// They end up in precompiled header and make compilation faster.
-#include <memory>
-#include <vector>
-#include <list>
-#include <map>
-#include <set>
-#include <deque>
-#include <stack>
-#include <algorithm>
-#include <functional>
-#include <iterator>
-#include <CryMemory/STLAlignedAlloc.h>
-
 // In RELEASE disable printf and fprintf
 #if defined(_RELEASE) && !CRY_PLATFORM_DESKTOP && !defined(RELEASE_LOGGING)
 	#undef printf
@@ -703,12 +669,6 @@ enum ETriState
   typedef std::shared_ptr<const name> name ## ConstPtr; \
   typedef std::weak_ptr<name> name ##         WeakPtr;  \
   typedef std::weak_ptr<const name> name ##   ConstWeakPtr;
-
-// Include array.
-#include <CryCore/Containers/CryArray.h>
-
-// Include static auto registration function
-#include <CryCore/StaticInstanceList.h>
 
 #ifdef _WINDOWS_
 	#error windows.h should not be included through any headers within platform.h

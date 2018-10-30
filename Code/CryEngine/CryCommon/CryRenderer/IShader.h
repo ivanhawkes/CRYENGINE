@@ -1718,13 +1718,11 @@ enum EShaderTechniqueID
 
 //! EFSLIST_ lists.
 //! \note Declaration order/index value has no explicit meaning.
-//! If you change this, you must also update SEF_ListDG::GetDescription.
-enum ERenderListID
+enum ERenderListID : uint8
 {
 	EFSLIST_INVALID = 0,             //!< Don't use, internally used.
-	EFSLIST_PREPROCESS,              //!< Pre-process items.
+
 	EFSLIST_GENERAL,                 //!< Opaque ambient_light+shadow passes.
-	EFSLIST_ZPREPASS,                //!< Items that are rendered into the z-prepass.
 	EFSLIST_TERRAINLAYER,            //!< Unsorted terrain layers.
 	EFSLIST_SHADOW_GEN,              //!< Shadow map generation.
 	EFSLIST_DECAL,                   //!< Opaque or transparent decals.
@@ -1736,7 +1734,6 @@ enum ERenderListID
 	EFSLIST_AFTER_HDRPOSTPROCESS,    //!< After hdr post-processing screen effects.
 	EFSLIST_AFTER_POSTPROCESS,       //!< After post-processing screen effects.
 	EFSLIST_SHADOW_PASS,             //!< Shadow mask generation (usually from from shadow maps).
-	EFSLIST_SKIN,                    //!< Skin rendering pre-process.
 	EFSLIST_HALFRES_PARTICLES,       //!< Half resolution particles.
 	EFSLIST_PARTICLES_THICKNESS,     //!< Particles thickness passes.
 	EFSLIST_LENSOPTICS,              //!< Lens-optics processing.
@@ -1746,10 +1743,14 @@ enum ERenderListID
 	EFSLIST_NEAREST_OBJECTS,         //!< Nearest objects.
 	EFSLIST_FORWARD_OPAQUE,          //!< Forward opaque pass objects.
 	EFSLIST_FORWARD_OPAQUE_NEAREST,  //!< Nearest forward opaque pass objects.
-	EFSLIST_CUSTOM,                  //!< Custom scene pass.
-	EFSLIST_HIGHLIGHT,               //!< Candidate for selection objects
 	EFSLIST_DEBUG_HELPER,            //!< Debug helper render items.
 	EFSLIST_SKY,                     //!< Sky elements
+
+	// Implicit lists which the renderer clones render-elements into conditionally
+	EFSLIST_PREPROCESS,              //!< Pre-process items.
+	EFSLIST_ZPREPASS,                //!< Items that are rendered into the z-prepass.
+	EFSLIST_CUSTOM,                  //!< Custom scene pass.
+	EFSLIST_HIGHLIGHT,               //!< Candidate for selection objects
 
 	EFSLIST_NUM
 };
@@ -1841,7 +1842,7 @@ enum ERenderListID
 #define EF2_HASALPHABLEND          0x4000000
 #define EF2_ZPREPASS               0x8000000
 #define EF2_VERTEXCOLORS           0x10000000
-#define EF2_SKINPASS               0x20000000
+// UNUSED                          0x20000000
 #define EF2_HW_TESSELLATION        0x40000000
 #define EF2_ALPHABLENDSHADOWS      0x80000000
 
@@ -1929,6 +1930,11 @@ struct SShaderItem
 			return false;
 		return true;
 	}
+
+	inline bool IsEmissive   () const { return (m_pShaderResources && m_pShaderResources->IsEmissive()); }
+	inline bool IsAlphaTested() const { return (m_pShaderResources && m_pShaderResources->IsAlphaTested()); }
+	inline bool IsVegetation () const { return (m_pShader && m_pShader->GetShaderType() == eST_Vegetation); }
+	inline bool IsTesselated () const { return (m_pShader && m_pShader->GetFlags2() & EF2_HW_TESSELLATION); }
 
 	inline struct SShaderTechnique* GetTechnique() const;
 	bool                            IsMergable(SShaderItem& PrevSI);

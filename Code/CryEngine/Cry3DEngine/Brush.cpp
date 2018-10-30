@@ -64,8 +64,6 @@ CBrush::~CBrush()
 		m_pCameraSpacePos = nullptr;
 	}
 
-	RemoveAndMarkForAutoDeleteTempData();
-
 	GetInstCount(GetRenderNodeType())--;
 }
 
@@ -105,8 +103,8 @@ CLodValue CBrush::ComputeLod(int wantedLod, const SRenderingPassInfo& passInfo)
 		{
 			wantedLod = CObjManager::GetObjectLOD(this, fEntDistance);
 
-			if (auto pTempData = m_pTempData.load())
-				pTempData->userData.nWantedLod = wantedLod;
+			if (m_pTempData)
+				m_pTempData->userData.nWantedLod = wantedLod;
 		}
 
 		nLodA = CLAMP(wantedLod, pStatObj->GetMinUsableLod(), (int)pStatObj->m_nMaxUsableLod);
@@ -545,8 +543,6 @@ void CBrush::UpdatePhysicalMaterials(int bThreadSafe)
 
 void CBrush::Dephysicalize(bool bKeepIfReferenced)
 {
-	AABB WSBBox = GetBBox();
-
 	// delete old physics
 	if (m_pPhysEnt && 0 != GetSystem()->GetIPhysicalWorld()->DestroyPhysicalEntity(m_pPhysEnt, ((int)bKeepIfReferenced) * 4))
 		m_pPhysEnt = 0;
@@ -659,8 +655,6 @@ void CBrush::SetStatObj(IStatObj* pStatObj)
 	if (pStatObj == m_pStatObj)
 		return;
 
-	RemoveAndMarkForAutoDeleteTempData();
-
 	m_pStatObj = (CStatObj*)pStatObj;
 	if (m_pStatObj && m_pStatObj->IsDeformable())
 	{
@@ -718,7 +712,7 @@ IRenderMesh* CBrush::GetRenderMesh(int nLod)
 
 void CBrush::OffsetPosition(const Vec3& delta)
 {
-	if (const auto pTempData = m_pTempData.load()) pTempData->OffsetPosition(delta);
+	if (m_pTempData) m_pTempData->OffsetPosition(delta);
 	m_Matrix.SetTranslation(m_Matrix.GetTranslation() + delta);
 	InvalidatePermanentRenderObjectMatrix();
 	m_WSBBox.Move(delta);
@@ -824,7 +818,7 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 		}
 	}
 
-	auto pTempData = m_pTempData.load();
+	auto pTempData = m_pTempData;
 	if (!pTempData)
 	{
 		CRY_ASSERT(false);
@@ -850,7 +844,7 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 
  				pObj->m_fDistance = fObjDistance;
 				IF(!m_bDrawLast, 1)
-					pObj->m_nSort = fastround_positive(pObj->m_fDistance * 2.0f);
+					pObj->m_nSort = HalfFlip(CryConvertFloatToHalf(pObj->m_fDistance * 2.0f));
 				else
 					pObj->m_nSort = 0xFFFF;
 			}
@@ -861,7 +855,6 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	const auto& userData = pTempData->userData;
 
 	const Vec3 vObjCenter = CBrush::GetBBox().GetCenter();
-	const Vec3 vObjPos = CBrush::GetPos();
 
 	const float fObjDistance = sqrt_tpl(Distance::Point_AABBSq(vCamPos, CBrush::GetBBox())) * passInfo.GetZoomFactor();
 	CRY_ASSERT(fObjDistance * 2.0f <= std::numeric_limits<decltype(CRenderObject::m_nSort)>::max());
@@ -871,7 +864,7 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 
 	pObj->m_fDistance = fObjDistance;
 	IF (!m_bDrawLast, 1)
-		pObj->m_nSort = fastround_positive(pObj->m_fDistance * 2.0f);
+		pObj->m_nSort = HalfFlip(CryConvertFloatToHalf(pObj->m_fDistance * 2.0f));
 	else
 		pObj->m_nSort = 0xFFFF;
 
@@ -1070,17 +1063,18 @@ void CBrush::InvalidatePermanentRenderObjectMatrix()
 		// Compound unmerged stat objects create duplicate sub render objects and do not support fast matrix only instance update for PermanentRenderObject
 		InvalidatePermanentRenderObject();
 	}
-	else if (const auto pTempData = m_pTempData.load())
+	else if (m_pTempData)
 	{
 		// Special optimization when only matrix change, we invalidate render object instance data flag
-		pTempData->InvalidateRenderObjectsInstanceData();
+		m_pTempData->InvalidateRenderObjectsInstanceData();
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 bool CBrush::CanExecuteRenderAsJob()
 {
-	return (GetCVars()->e_ExecuteRenderAsJobMask & BIT(GetRenderNodeType())) != 0;
+	return (GetCVars()->e_ExecuteRenderAsJobMask & BIT(GetRenderNodeType())) != 0 &&
+	       (m_dwRndFlags & ERF_RENDER_ALWAYS) == 0;
 }
 
 //////////////////////////////////////////////////////////////////////////

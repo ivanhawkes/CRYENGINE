@@ -14,15 +14,6 @@
 
 #include "XRenderD3D9/DriverD3D.h"
 
-void CREMeshImpl::mfCenter(Vec3& Pos, CRenderObject* pObj, const SRenderingPassInfo& passInfo)
-{
-	Vec3 Mins = m_pRenderMesh->m_vBoxMin;
-	Vec3 Maxs = m_pRenderMesh->m_vBoxMax;
-	Pos = (Mins + Maxs) * 0.5f;
-	if (pObj)
-		Pos += pObj->GetMatrix(passInfo).GetTranslation();
-}
-
 void CREMeshImpl::mfGetBBox(Vec3& vMins, Vec3& vMaxs) const
 {
 	vMins = m_pRenderMesh->_GetVertexContainer()->m_vBoxMin;
@@ -115,19 +106,6 @@ void* CREMeshImpl::mfGetPointer(ESrcPointer ePT, int* Stride, EParamType Type, E
 	return pD;
 }
 
-void CREMeshImpl::mfGetPlane(Plane& pl)
-{
-	CRenderMesh* pRM = m_pRenderMesh->_GetVertexContainer();
-
-	// fixme: plane orientation based on biggest bbox axis
-	Vec3 pMin, pMax;
-	mfGetBBox(pMin, pMax);
-	Vec3 p0 = pMin;
-	Vec3 p1 = Vec3(pMax.x, pMin.y, pMin.z);
-	Vec3 p2 = Vec3(pMin.x, pMax.y, pMin.z);
-	pl.SetPlane(p2, p0, p1);
-}
-
 //////////////////////////////////////////////////////////////////////////
 InputLayoutHandle CREMeshImpl::GetVertexFormat() const
 {
@@ -137,7 +115,7 @@ InputLayoutHandle CREMeshImpl::GetVertexFormat() const
 }
 
 //////////////////////////////////////////////////////////////////////////
-bool CREMeshImpl::Compile(CRenderObject* pObj, CRenderView *pRenderView, bool updateInstanceDataOnly)
+bool CREMeshImpl::Compile(CRenderObject* pObj, uint64 objFlags, uint16 elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly)
 {
 	if (!m_pRenderMesh)
 		return false;

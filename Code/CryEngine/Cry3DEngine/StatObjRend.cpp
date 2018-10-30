@@ -131,8 +131,6 @@ void CStatObj::FillRenderObject(const SRendParams& rParams, IRenderNode* pRender
 	// Specify transformation
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	IRenderer* pRend = GetRenderer();
-
 	assert(pObj);
 	if (!pObj)
 		return;
@@ -210,7 +208,7 @@ void CStatObj::FillRenderObject(const SRendParams& rParams, IRenderNode* pRender
 		//clear, when exchange the state of pLightMapInfo to NULL, the pObj parameters must be update...
 		CRY_ASSERT(rParams.fDistance * 2.0f <= std::numeric_limits<decltype(CRenderObject::m_nSort)>::max());
 		pObj->m_fDistance = rParams.fDistance;
-		pObj->m_nSort = fastround_positive(rParams.fDistance * 2.0f);
+		pObj->m_nSort = HalfFlip(CryConvertFloatToHalf(rParams.fDistance * 2.0f));
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -434,6 +432,23 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 					IRenderAuxText::DrawLabelExF(pos, fontSize, clr, true, true, "%s\n%d (LOD %d/%d)", shortName, m_nRenderTrisCount, nLod, nNumLods);
 				else
 					IRenderAuxText::DrawLabelExF(pos, fontSize, clr, true, true, "%s\n%d", shortName, m_nRenderTrisCount);
+
+				// Render color scheme here		
+				SAuxGeomRenderFlags prevState = pAuxGeom->GetRenderFlags();
+				pAuxGeom->SetRenderFlags(e_Mode2D | e_AlphaNone);
+				float screenWidth = (float)gEnv->pRenderer->GetWidth();
+				float screenHeight = (float)gEnv->pRenderer->GetHeight();
+				pAuxGeom->Draw2dLabel(screenWidth - 420, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "LOD: 0");
+				pAuxGeom->Draw2dLabel(screenWidth - 225, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "3");
+				pAuxGeom->Draw2dLabel(screenWidth - 50, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, ">= 5");
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 400, screenHeight - 10), Vec2(screenWidth - 350, screenHeight - 15)), true, ColorB(255, 0, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 350, screenHeight - 10), Vec2(screenWidth - 300, screenHeight - 15)), true, ColorB(0, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 300, screenHeight - 10), Vec2(screenWidth - 250, screenHeight - 15)), true, ColorB(200, 100, 255, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 250, screenHeight - 10), Vec2(screenWidth - 200, screenHeight - 15)), true, ColorB(0, 255, 255, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 200, screenHeight - 10), Vec2(screenWidth - 150, screenHeight - 15)), true, ColorB(255, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 150, screenHeight - 10), Vec2(screenWidth - 100, screenHeight - 15)), true, ColorB(255, 0, 255, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 100, screenHeight - 10), Vec2(screenWidth - 50, screenHeight - 15)), true, ColorB(255, 255, 255, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->SetRenderFlags(prevState.m_renderFlags);
 			}
 			break;
 
@@ -444,17 +459,17 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 				//////////////////////////////////////////////////////////////////////////
 				int fMult = 1;
 				int nTris = m_nRenderTrisCount;
-				ColorB clr = ColorB(0, 0, 0, 255);
+				ColorB clr = ColorB(0, 255, 0, 255);
 				if (nTris >= 20000 * fMult)
 					clr = ColorB(255, 0, 0, 255);
 				else if (nTris >= 10000 * fMult)
-					clr = ColorB(255, 255, 0, 255);
+					clr = ColorB(255, 80, 0, 255);
 				else if (nTris >= 5000 * fMult)
-					clr = ColorB(0, 255, 0, 255);
+					clr = ColorB(255, 127, 0, 255);
 				else if (nTris >= 2500 * fMult)
-					clr = ColorB(0, 255, 255, 255);
+					clr = ColorB(255, 255, 0, 255);
 				else if (nTris > 1250 * fMult)
-					clr = ColorB(0, 0, 255, 255);
+					clr = ColorB(0, 127, 0, 255);
 
 				if (pMaterial)
 					pMaterial = GetMatMan()->GetDefaultHelperMaterial();
@@ -467,6 +482,23 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 
 				if (!bNoText)
 					IRenderAuxText::DrawLabelExF(pos, 1.3f, color, true, true, "%d", m_nRenderTrisCount);
+
+				// Render color scheme here		
+				SAuxGeomRenderFlags prevState = pAuxGeom->GetRenderFlags();
+				pAuxGeom->SetRenderFlags(e_Mode2D | e_AlphaNone);
+				float screenWidth = (float)gEnv->pRenderer->GetWidth();
+				float screenHeight = (float)gEnv->pRenderer->GetHeight();
+				pAuxGeom->Draw2dLabel(screenWidth - 375, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "Polycount: < 1250");
+				pAuxGeom->Draw2dLabel(screenWidth - 175, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "> 5000");
+				pAuxGeom->Draw2dLabel(screenWidth - 50, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, ">= 20000");
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 350, screenHeight - 10), Vec2(screenWidth - 300, screenHeight - 15)), true, ColorB(0, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 300, screenHeight - 10), Vec2(screenWidth - 250, screenHeight - 15)), true, ColorB(0, 127, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 250, screenHeight - 10), Vec2(screenWidth - 200, screenHeight - 15)), true, ColorB(255, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 200, screenHeight - 10), Vec2(screenWidth - 150, screenHeight - 15)), true, ColorB(255, 127, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 150, screenHeight - 10), Vec2(screenWidth - 100, screenHeight - 15)), true, ColorB(255, 80, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 100, screenHeight - 10), Vec2(screenWidth - 50, screenHeight - 15)), true, ColorB(255, 0, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+
+				pAuxGeom->SetRenderFlags(prevState.m_renderFlags);
 
 				return false;
 				//////////////////////////////////////////////////////////////////////////
@@ -493,19 +525,19 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 				else
 				{
 					if (nLod == 0)
-						clr = ColorB(255, 0, 0, 255);
-					else if (nLod == 1)
 						clr = ColorB(0, 255, 0, 255);
+					else if (nLod == 1)
+						clr = ColorB(0, 127, 0, 255);
 					else if (nLod == 2)
-						clr = ColorB(0, 0, 255, 255);
+						clr = ColorB(0, 80, 0, 255);
 					else if (nLod == 3)
-						clr = ColorB(0, 255, 255, 255);
-					else if (nLod == 4)
 						clr = ColorB(255, 255, 0, 255);
+					else if (nLod == 4)
+						clr = ColorB(255, 127, 0, 255);
 					else if (nLod == 5)
-						clr = ColorB(255, 0, 255, 255);
+						clr = ColorB(255, 80, 0, 255);
 					else
-						clr = ColorB(255, 255, 255, 255);
+						clr = ColorB(255, 0, 0, 255);
 				}
 
 				if (pMaterial)
@@ -528,6 +560,23 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 					                   bRenderNodeValid ? pRN->GetLodRatio() : -1, pObj->m_fDistance);
 				}
 
+				// Render color scheme here		
+				SAuxGeomRenderFlags prevState = pAuxGeom->GetRenderFlags();
+				pAuxGeom->SetRenderFlags(e_Mode2D | e_AlphaNone);
+				float screenWidth = (float)gEnv->pRenderer->GetWidth();
+				float screenHeight = (float)gEnv->pRenderer->GetHeight();
+				pAuxGeom->Draw2dLabel(screenWidth - 420, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "LOD: 0");
+				pAuxGeom->Draw2dLabel(screenWidth - 225, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "3");
+				pAuxGeom->Draw2dLabel(screenWidth - 50, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, ">= 5");
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 400, screenHeight - 10), Vec2(screenWidth - 350, screenHeight - 15)), true, ColorB(0, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 350, screenHeight - 10), Vec2(screenWidth - 300, screenHeight - 15)), true, ColorB(0, 127, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 300, screenHeight - 10), Vec2(screenWidth - 250, screenHeight - 15)), true, ColorB(0, 80, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 250, screenHeight - 10), Vec2(screenWidth - 200, screenHeight - 15)), true, ColorB(255, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 200, screenHeight - 10), Vec2(screenWidth - 150, screenHeight - 15)), true, ColorB(255, 127, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 150, screenHeight - 10), Vec2(screenWidth - 100, screenHeight - 15)), true, ColorB(255, 80, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 100, screenHeight - 10), Vec2(screenWidth - 50, screenHeight - 15)), true, ColorB(255, 0, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->SetRenderFlags(prevState.m_renderFlags);
+
 				return false;
 				//////////////////////////////////////////////////////////////////////////
 			}
@@ -549,19 +598,19 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 				//////////////////////////////////////////////////////////////////////////
 				ColorB clr(0, 0, 0, 0);
 				if (nRenderMats == 1)
-					clr = ColorB(0, 0, 255, 255);
-				else if (nRenderMats == 2)
-					clr = ColorB(0, 255, 255, 255);
-				else if (nRenderMats == 3)
 					clr = ColorB(0, 255, 0, 255);
+				else if (nRenderMats == 2)
+					clr = ColorB(0, 127, 0, 255);
+				else if (nRenderMats == 3)
+					clr = ColorB(0, 80, 0, 255);
 				else if (nRenderMats == 4)
-					clr = ColorB(255, 0, 255, 255);
-				else if (nRenderMats == 5)
 					clr = ColorB(255, 255, 0, 255);
+				else if (nRenderMats == 5)
+					clr = ColorB(255, 127, 0, 255);
 				else if (nRenderMats >= 6)
-					clr = ColorB(255, 0, 0, 255);
+					clr = ColorB(255, 80, 0, 255);
 				else if (nRenderMats >= 11)
-					clr = ColorB(255, 255, 255, 255);
+					clr = ColorB(255, 0, 0, 255);
 
 				if (pMaterial)
 					pMaterial = GetMatMan()->GetDefaultHelperMaterial();
@@ -574,6 +623,23 @@ bool CStatObj::RenderDebugInfo(CRenderObject* pObj, const SRenderingPassInfo& pa
 
 				if (!bNoText)
 					IRenderAuxText::DrawLabelExF(pos, 1.3f, color, true, true, "%d", nRenderMats);
+
+				// Render color scheme here		
+				SAuxGeomRenderFlags prevState = pAuxGeom->GetRenderFlags();
+				pAuxGeom->SetRenderFlags(e_Mode2D | e_AlphaNone);
+				float screenWidth = (float)gEnv->pRenderer->GetWidth();
+				float screenHeight = (float)gEnv->pRenderer->GetHeight();
+				pAuxGeom->Draw2dLabel(screenWidth - 440, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "NumMaterials: 1");
+				pAuxGeom->Draw2dLabel(screenWidth - 245, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, "4");
+				pAuxGeom->Draw2dLabel(screenWidth - 50, screenHeight - 40, 1.3f, ColorB(255, 255, 255, 255), true, ">= 11");
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 400, screenHeight - 10), Vec2(screenWidth - 350, screenHeight - 15)), true, ColorB(0, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 350, screenHeight - 10), Vec2(screenWidth - 300, screenHeight - 15)), true, ColorB(0, 127, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 300, screenHeight - 10), Vec2(screenWidth - 250, screenHeight - 15)), true, ColorB(0, 80, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 250, screenHeight - 10), Vec2(screenWidth - 200, screenHeight - 15)), true, ColorB(255, 255, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 200, screenHeight - 10), Vec2(screenWidth - 150, screenHeight - 15)), true, ColorB(255, 127, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 150, screenHeight - 10), Vec2(screenWidth - 100, screenHeight - 15)), true, ColorB(255, 80, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->DrawAABB(AABB(Vec2(screenWidth - 100, screenHeight - 10), Vec2(screenWidth - 50, screenHeight - 15)), true, ColorB(255, 0, 0, 255), EBoundingBoxDrawStyle::eBBD_Faceted);
+				pAuxGeom->SetRenderFlags(prevState.m_renderFlags);
 			}
 			break;
 

@@ -74,6 +74,7 @@ struct SLibraryScope final
 	uint32     numParameterConnections = 0;
 	uint32     numStateConnections = 0;
 	uint32     numEnvironmentConnections = 0;
+	uint32     numPreloadConnections = 0;
 	uint32     numSettingConnections = 0;
 };
 
@@ -83,9 +84,15 @@ class CFileWriter final
 {
 public:
 
-	explicit CFileWriter(FileNames& previousLibraryPaths);
-
 	CFileWriter() = delete;
+	CFileWriter(CFileWriter const&) = delete;
+	CFileWriter(CFileWriter&&) = delete;
+	CFileWriter& operator=(CFileWriter const&) = delete;
+	CFileWriter& operator=(CFileWriter&&) = delete;
+
+	explicit CFileWriter(FileNames& previousLibraryPaths)
+		: m_previousLibraryPaths(previousLibraryPaths)
+	{}
 
 	void WriteAll();
 

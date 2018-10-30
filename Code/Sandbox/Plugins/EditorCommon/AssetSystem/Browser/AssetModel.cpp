@@ -8,10 +8,10 @@
 #include "AssetSystem/Browser/AssetThumbnailsLoader.h"
 
 #include "DragDrop.h"
+#include "PathUtils.h"
 #include "QAdvancedItemDelegate.h"
 #include "QThumbnailView.h"
 #include "QtUtil.h"
-#include "FilePathUtil.h"
 
 QStringList CAssetModel::GetAssetTypesStrList()
 {
@@ -340,9 +340,25 @@ QVariant CAssetModel::data(const QModelIndex& index, int role) const
 				return pAsset->GetThumbnail();
 			case QThumbnailsView::s_ThumbnailColorRole:
 				return pAsset->GetType()->GetThumbnailColor();
-			case QThumbnailsView::s_ThumbnailTintedBackgroundRole:
-					// Use a tinted background only for the default type icons.
-					return !pAsset->GetType()->HasThumbnail() || !pAsset->IsThumbnailLoaded();
+			case QThumbnailsView::s_ThumbnailBackgroundColorRole:
+				// Use a tinted background only for the default type icons.
+				if (!pAsset->GetType()->HasThumbnail() || !pAsset->IsThumbnailLoaded())
+				{
+					const float lightnessFactor = 0.75f;
+					const float saturationFactor = 0.125f;
+
+					const QColor hslColor = pAsset->GetType()->GetThumbnailColor().toHsl();
+					const QColor backgroundColor = QColor::fromHslF(
+						hslColor.hslHueF(),
+						hslColor.hslSaturationF() * saturationFactor,
+						hslColor.lightnessF() * lightnessFactor,
+						hslColor.alphaF());
+					return backgroundColor;
+				}
+				else
+				{
+					return QVariant();
+				}
 			case QThumbnailsView::s_ThumbnailIconsRole:
 			{
 				QVariantList icons;
@@ -357,6 +373,24 @@ QVariant CAssetModel::data(const QModelIndex& index, int role) const
 						}
 					}
 				}
+
+				if (m_favHelper.IsFavorite(index))
+				{
+					const QThumbnailsView::SSubIcon subIcon{ m_favHelper.GetFavoriteIcon(true), QThumbnailsView::SSubIcon::EPosition::TopLeft };
+					QVariant v;
+					v.setValue(subIcon);
+					icons.push_back(v);
+				}
+
+				if (pAsset->IsModified())
+				{
+					const static CryIcon modified("icons:common/general_state_modified.ico");
+					const QThumbnailsView::SSubIcon subIcon{ modified, QThumbnailsView::SSubIcon::EPosition::BottomRight };
+					QVariant v;
+					v.setValue(subIcon);
+					icons.push_back(v);
+				}
+
 				return icons;
 			}
 			default:
@@ -433,17 +467,19 @@ bool CAssetModel::setData(const QModelIndex& index, const QVariant& value, int r
 			return false;
 		}
 
-		string newName = QtUtil::ToString(stringValue);
+		const CryPathString newName = PathUtil::AdjustCasing(QtUtil::ToString(stringValue).c_str());
+		const CryPathString newAssetFilepath = PathUtil::Make(pAsset->GetFolder(), pAsset->GetType()->MakeMetadataFilename(newName));
 
-		if (!PathUtil::IsValidFileName(stringValue))
+		string reasonToReject;
+		if (!CAssetType::IsValidAssetPath(newAssetFilepath, reasonToReject))
 		{
-			CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_ERROR, "Invalid asset name: %s", newName.c_str());
+			CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_ERROR, "Invalid asset path: %s. %s", newAssetFilepath.c_str(), reasonToReject.c_str());
 			return false;
 		}
 
 		// Check if the new name doesn't collide with existing name
-		const string newAssetFilepath = PathUtil::Make(pAsset->GetFolder(), newName, string().Format("%s.cryasset", pAsset->GetType()->GetFileExtension()));
-		if (CAssetManager::GetInstance()->FindAssetForMetadata(newAssetFilepath))
+		const CAsset* const pExistingAsset = CAssetManager::GetInstance()->FindAssetForMetadata(newAssetFilepath);
+		if (pExistingAsset && pExistingAsset != pAsset)
 		{
 			CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_ERROR, "Asset already exists: %s", newAssetFilepath.c_str());
 			return false;

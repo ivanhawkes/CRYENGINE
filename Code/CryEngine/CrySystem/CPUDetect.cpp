@@ -11,6 +11,7 @@
 #include "StdAfx.h"
 #include "System.h"
 #include "AutoDetectSpec.h"
+#include "CPUDetect.h"
 
 #if CRY_PLATFORM_WINDOWS
 	#include <intrin.h>
@@ -38,7 +39,7 @@
 #define MMX_FLAG    0x800000
 #define ISSE_FLAG   0x2000000
 
-#ifdef __GNUC__
+#if defined(CRY_COMPILER_GCC)
 	#define cpuid(op, eax, ebx, ecx, edx) __asm__("cpuid" : "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx) : "a" (op) : "cc");
 #endif
 

@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 #include "FileLoader.h"
 
+#include "Common.h"
 #include "FileWriter.h"
 #include "AudioControlsEditorPlugin.h"
 
@@ -55,11 +56,6 @@ EAssetType TagToType(char const* const szTag)
 
 	return type;
 }
-
-//////////////////////////////////////////////////////////////////////////
-CFileLoader::CFileLoader()
-	: m_errorCodeMask(EErrorCode::None)
-{}
 
 //////////////////////////////////////////////////////////////////////////
 void CFileLoader::LoadAll()
@@ -310,7 +306,7 @@ void CFileLoader::CreateInternalControls()
 	// These controls are hidden in the ACE and don't get written to XML!
 	CAsset* const pLibrary = static_cast<CAsset*>(g_assetsManager.CreateLibrary(CryAudio::s_szDefaultLibraryName));
 
-	CRY_ASSERT_MESSAGE(pLibrary != nullptr, "Default library could not get created.");
+	CRY_ASSERT_MESSAGE(pLibrary != nullptr, "Default library could not get created during %s", __FUNCTION__);
 
 	if (pLibrary != nullptr)
 	{

@@ -3,12 +3,13 @@
 #include "StdAfx.h"
 #include "MiddlewareDataWidget.h"
 
+#include "Common.h"
 #include "AudioControlsEditorPlugin.h"
 #include "ImplementationManager.h"
 #include "AssetIcons.h"
 #include "FileImporterDialog.h"
 
-#include <FilePathUtil.h>
+#include <PathUtils.h>
 #include <QtUtil.h>
 #include <FileDialogs/SystemFileDialog.h>
 
@@ -26,12 +27,12 @@ CMiddlewareDataWidget::CMiddlewareDataWidget(QWidget* const pParent)
 	m_pLayout->setContentsMargins(0, 0, 0, 0);
 	InitImplDataWidget();
 
-	g_implementationManager.SignalImplementationAboutToChange.Connect([this]()
+	g_implementationManager.SignalOnBeforeImplementationChange.Connect([this]()
 		{
 			ClearImplDataWidget();
 		}, reinterpret_cast<uintptr_t>(this));
 
-	g_implementationManager.SignalImplementationChanged.Connect([this]()
+	g_implementationManager.SignalOnAfterImplementationChange.Connect([this]()
 		{
 			InitImplDataWidget();
 		}, reinterpret_cast<uintptr_t>(this));
@@ -40,8 +41,8 @@ CMiddlewareDataWidget::CMiddlewareDataWidget(QWidget* const pParent)
 //////////////////////////////////////////////////////////////////////////
 CMiddlewareDataWidget::~CMiddlewareDataWidget()
 {
-	g_implementationManager.SignalImplementationAboutToChange.DisconnectById(reinterpret_cast<uintptr_t>(this));
-	g_implementationManager.SignalImplementationChanged.DisconnectById(reinterpret_cast<uintptr_t>(this));
+	g_implementationManager.SignalOnBeforeImplementationChange.DisconnectById(reinterpret_cast<uintptr_t>(this));
+	g_implementationManager.SignalOnAfterImplementationChange.DisconnectById(reinterpret_cast<uintptr_t>(this));
 
 	ClearImplDataWidget();
 }
@@ -144,8 +145,8 @@ void CMiddlewareDataWidget::OpenFileImporter(FileImportInfos const& fileImportIn
 {
 	FileImportInfos fileInfos = fileImportInfos;
 
-	QString assetsPath = QtUtil::ToQString(PathUtil::GetGameFolder() + "/" + g_pIImpl->GetAssetsPath());
-	QString localizedAssetsPath = QtUtil::ToQString(PathUtil::GetGameFolder() + "/" + g_pIImpl->GetLocalizedAssetsPath());
+	QString assetsPath = QtUtil::ToQString(PathUtil::GetGameFolder() + "/" + g_implInfo.assetsPath.c_str());
+	QString localizedAssetsPath = QtUtil::ToQString(PathUtil::GetGameFolder() + "/" + g_implInfo.localizedAssetsPath.c_str());
 	QString const targetFolderPath = (isLocalized ? localizedAssetsPath : assetsPath) + "/" + targetFolderName;
 
 	QDir const targetFolder(targetFolderPath);

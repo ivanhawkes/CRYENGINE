@@ -83,7 +83,7 @@ void CObjectManager::Update(float const deltaTime)
 		{
 			CATLAudioObject* const pObject = *iter;
 
-			if (IsActive(pObject))
+			if (pObject->IsActive())
 			{
 				pObject->Update(deltaTime);
 			}
@@ -111,7 +111,7 @@ void CObjectManager::Update(float const deltaTime)
 	{
 		for (auto const pObject : m_constructedObjects)
 		{
-			if (IsActive(pObject))
+			if (pObject->IsActive())
 			{
 				pObject->GetImplDataPtr()->Update(deltaTime);
 			}
@@ -197,36 +197,6 @@ void CObjectManager::ReleasePendingRays()
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
-bool CObjectManager::IsActive(CATLAudioObject const* const pAudioObject) const
-{
-	return HasActiveData(pAudioObject);
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool CObjectManager::HasActiveData(CATLAudioObject const* const pAudioObject) const
-{
-	for (auto const pEvent : pAudioObject->GetActiveEvents())
-	{
-		if (pEvent->IsPlaying() || pEvent->IsVirtual())
-		{
-			return true;
-		}
-	}
-
-	for (auto const& standaloneFilePair : pAudioObject->GetActiveStandaloneFiles())
-	{
-		CATLStandaloneFile const* const pStandaloneFile = standaloneFilePair.first;
-
-		if (pStandaloneFile->IsPlaying())
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 size_t CObjectManager::GetNumAudioObjects() const
@@ -241,7 +211,7 @@ size_t CObjectManager::GetNumActiveAudioObjects() const
 
 	for (auto const pObject : m_constructedObjects)
 	{
-		if (IsActive(pObject))
+		if (pObject->IsActive())
 		{
 			++numActiveObjects;
 		}
@@ -255,7 +225,7 @@ void CObjectManager::DrawPerObjectDebugInfo(IRenderAuxGeom& auxGeom) const
 {
 	for (auto const pObject : m_constructedObjects)
 	{
-		if (IsActive(pObject))
+		if (pObject->IsActive())
 		{
 			pObject->DrawDebugInfo(auxGeom);
 		}
@@ -263,45 +233,59 @@ void CObjectManager::DrawPerObjectDebugInfo(IRenderAuxGeom& auxGeom) const
 }
 
 //////////////////////////////////////////////////////////////////////////
+void DrawObjectDebugData(
+	IRenderAuxGeom& auxGeom,
+	float const posX,
+	float& posY,
+	CATLAudioObject const& object,
+	CryFixedStringT<MaxControlNameLength> const& lowerCaseSearchString,
+	size_t& numObjects)
+{
+	Vec3 const& position = object.GetTransformation().GetPosition();
+	float const distance = position.GetDistance(g_listenerManager.GetActiveListenerTransformation().GetPosition());
+
+	if (g_cvars.m_debugDistance <= 0.0f || (g_cvars.m_debugDistance > 0.0f && distance < g_cvars.m_debugDistance))
+	{
+		char const* const szObjectName = object.m_name.c_str();
+		CryFixedStringT<MaxControlNameLength> lowerCaseObjectName(szObjectName);
+		lowerCaseObjectName.MakeLower();
+		bool const hasActiveData = object.IsActive();
+		bool const isVirtual = (object.GetFlags() & EObjectFlags::Virtual) != 0;
+		bool const stringFound = (lowerCaseSearchString.empty() || (lowerCaseSearchString.compareNoCase("0") == 0)) || (lowerCaseObjectName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos);
+		bool const draw = stringFound && ((g_cvars.m_hideInactiveAudioObjects == 0) || ((g_cvars.m_hideInactiveAudioObjects != 0) && hasActiveData && !isVirtual));
+
+		if (draw)
+		{
+			auxGeom.Draw2dLabel(posX, posY, Debug::g_managerFontSize,
+			                    isVirtual ? Debug::g_globalColorVirtual.data() : (hasActiveData ? Debug::g_managerColorItemActive.data() : Debug::g_globalColorInactive.data()),
+			                    false,
+			                    szObjectName);
+
+			posY += Debug::g_managerLineHeight;
+			++numObjects;
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
 void CObjectManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY) const
 {
-	size_t numAudioObjects = 0;
+	size_t numObjects = 0;
 	float const headerPosY = posY;
 	CryFixedStringT<MaxControlNameLength> lowerCaseSearchString(g_cvars.m_pDebugFilter->GetString());
 	lowerCaseSearchString.MakeLower();
 
 	posY += Debug::g_managerHeaderLineHeight;
 
+	DrawObjectDebugData(auxGeom, posX, posY, *g_pObject, lowerCaseSearchString, numObjects);
+	DrawObjectDebugData(auxGeom, posX, posY, g_previewObject, lowerCaseSearchString, numObjects);
+
 	for (auto const pObject : m_constructedObjects)
 	{
-		Vec3 const& position = pObject->GetTransformation().GetPosition();
-		float const distance = position.GetDistance(g_listenerManager.GetActiveListenerTransformation().GetPosition());
-
-		if (g_cvars.m_debugDistance <= 0.0f || (g_cvars.m_debugDistance > 0.0f && distance < g_cvars.m_debugDistance))
-		{
-			char const* const szObjectName = pObject->m_name.c_str();
-			CryFixedStringT<MaxControlNameLength> lowerCaseObjectName(szObjectName);
-			lowerCaseObjectName.MakeLower();
-			bool const hasActiveData = HasActiveData(pObject);
-			bool const stringFound = (lowerCaseSearchString.empty() || (lowerCaseSearchString.compareNoCase("0") == 0)) || (lowerCaseObjectName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos);
-			bool const draw = stringFound && ((g_cvars.m_hideInactiveAudioObjects == 0) || ((g_cvars.m_hideInactiveAudioObjects != 0) && hasActiveData));
-
-			if (draw)
-			{
-				bool const isVirtual = (pObject->GetFlags() & EObjectFlags::Virtual) != 0;
-
-				auxGeom.Draw2dLabel(posX, posY, Debug::g_managerFontSize,
-				                    isVirtual ? Debug::g_globalColorVirtual.data() : (hasActiveData ? Debug::g_managerColorItemActive.data() : Debug::g_globalColorInactive.data()),
-				                    false,
-				                    szObjectName);
-
-				posY += Debug::g_managerLineHeight;
-				++numAudioObjects;
-			}
-		}
+		DrawObjectDebugData(auxGeom, posX, posY, *pObject, lowerCaseSearchString, numObjects);
 	}
 
-	auxGeom.Draw2dLabel(posX, headerPosY, Debug::g_managerHeaderFontSize, Debug::g_globalColorHeader.data(), false, "Audio Objects [%" PRISIZE_T "]", numAudioObjects);
+	auxGeom.Draw2dLabel(posX, headerPosY, Debug::g_managerHeaderFontSize, Debug::g_globalColorHeader.data(), false, "Audio Objects [%" PRISIZE_T "]", numObjects);
 }
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 }      // namespace CryAudio

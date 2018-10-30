@@ -8,7 +8,6 @@
 #include "CryIcon.h"
 #include "ProxyModels/ItemModelAttribute.h"
 #include "Asset.h"
-#include "AssetEditor.h"
 #include "CryIcon.h"
 
 #include <CryString/CryString.h>
@@ -19,6 +18,7 @@
 #define ASSET_THUMBNAIL_SIZE 256
 
 class CAbstractMenu;
+class CAssetEditor;
 
 //! IAssetMetadata allows to edit asset.
 //! \sa CAssetType::OnEdit
@@ -167,7 +167,7 @@ public:
 	//! \param asset An instance of asset to be examined.
 	//! \param includeSourceFile If true, the collection will include the asset source file, if any.
 	//! \param makeAbsolute By default the paths are relative to the assets root directory.
-	virtual std::vector<string> GetAssetFiles(const CAsset& asset, bool includeSourceFile, bool makeAbsolute = false) const;
+	virtual std::vector<string> GetAssetFiles(const CAsset& asset, bool includeSourceFile, bool makeAbsolute = false, bool includeThumbnail = true) const;
 
 	//! Returns the color code of the thumbnail.
 	virtual QColor GetThumbnailColor() const { return QColor(Qt::green); }

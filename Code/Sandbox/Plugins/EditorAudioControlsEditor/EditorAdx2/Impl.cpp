@@ -129,6 +129,69 @@ char const* TypeToTag(EItemType const type)
 }
 
 //////////////////////////////////////////////////////////////////////////
+void CountConnections(EAssetType const assetType, EItemType const itemType)
+{
+	switch (itemType)
+	{
+	case EItemType::Cue: // Intentional fall-through.
+	case EItemType::Snapshot:
+		{
+			++g_connections.triggers;
+			break;
+		}
+	case EItemType::AisacControl: // Intentional fall-through.
+	case EItemType::Category:     // Intentional fall-through.
+	case EItemType::GameVariable:
+		{
+			switch (assetType)
+			{
+			case EAssetType::Parameter:
+				{
+					++g_connections.parameters;
+					break;
+				}
+			case EAssetType::State:
+				{
+					++g_connections.switchStates;
+					break;
+				}
+			case EAssetType::Environment:
+				{
+					++g_connections.environments;
+					break;
+				}
+			default:
+				break;
+			}
+
+			break;
+		}
+	case EItemType::SelectorLabel:
+		{
+			++g_connections.switchStates;
+			break;
+		}
+	case EItemType::Bus:
+		{
+			++g_connections.environments;
+			break;
+		}
+	case EItemType::DspBusSetting:
+		{
+			++g_connections.settings;
+			break;
+		}
+	case EItemType::Binary:
+		{
+			++g_connections.files;
+			break;
+		}
+	default:
+		break;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
 CItem* SearchForItem(CItem* const pItem, string const& name, EItemType const type, string const& cuesheetName)
 {
 	CItem* pSearchedItem = nullptr;
@@ -169,6 +232,26 @@ CImpl::CImpl()
 	, m_localizedAssetsPath(m_assetsPath)
 	, m_szUserSettingsFile("%USER%/audiocontrolseditor_adx2.user")
 {
+}
+
+//////////////////////////////////////////////////////////////////////////
+CImpl::~CImpl()
+{
+	Clear();
+	DestroyDataPanel();
+
+	CItem::FreeMemoryPool();
+	CCueConnection::FreeMemoryPool();
+	CParameterConnection::FreeMemoryPool();
+	CParameterToStateConnection::FreeMemoryPool();
+	CPlatformConnection::FreeMemoryPool();
+	CSnapshotConnection::FreeMemoryPool();
+	CGenericConnection::FreeMemoryPool();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::Initialize(SImplInfo& implInfo, Platforms const& platforms)
+{
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Item Pool");
 	CItem::CreateAllocator(g_itemPoolSize);
 
@@ -190,26 +273,14 @@ CImpl::CImpl()
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Adx2 ACE Generic Connection Pool");
 	CGenericConnection::CreateAllocator(g_genericConnectionPoolSize);
 
-	gEnv->pAudioSystem->GetImplInfo(m_implInfo);
-	m_implName = m_implInfo.name.c_str();
-	m_implFolderName = CryAudio::Impl::Adx2::s_szImplFolderName;
+	CryAudio::SImplInfo systemImplInfo;
+	gEnv->pAudioSystem->GetImplInfo(systemImplInfo);
+	m_implName = systemImplInfo.name.c_str();
+
+	SetImplInfo(implInfo);
+	g_platforms = platforms;
 
 	Serialization::LoadJsonFile(*this, m_szUserSettingsFile);
-}
-
-//////////////////////////////////////////////////////////////////////////
-CImpl::~CImpl()
-{
-	Clear();
-	DestroyDataPanel();
-
-	CItem::FreeMemoryPool();
-	CCueConnection::FreeMemoryPool();
-	CParameterConnection::FreeMemoryPool();
-	CParameterToStateConnection::FreeMemoryPool();
-	CPlatformConnection::FreeMemoryPool();
-	CSnapshotConnection::FreeMemoryPool();
-	CGenericConnection::FreeMemoryPool();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -230,31 +301,24 @@ void CImpl::DestroyDataPanel()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::Reload(bool const preserveConnectionStatus)
+void CImpl::Reload(SImplInfo& implInfo)
 {
 	Clear();
-	SetLocalizedAssetsPath();
+	SetImplInfo(implInfo);
 
 	CProjectLoader(m_projectPath, m_assetsPath, m_localizedAssetsPath, m_rootItem, m_itemCache, *this);
 
-	if (preserveConnectionStatus)
+	for (auto const& connection : m_connectionsByID)
 	{
-		for (auto const& connection : m_connectionsByID)
+		if (connection.second > 0)
 		{
-			if (connection.second > 0)
-			{
-				auto const pItem = static_cast<CItem* const>(GetItem(connection.first));
+			auto const pItem = static_cast<CItem* const>(GetItem(connection.first));
 
-				if (pItem != nullptr)
-				{
-					pItem->SetFlags(pItem->GetFlags() | EItemFlags::IsConnected);
-				}
+			if (pItem != nullptr)
+			{
+				pItem->SetFlags(pItem->GetFlags() | EItemFlags::IsConnected);
 			}
 		}
-	}
-	else
-	{
-		m_connectionsByID.clear();
 	}
 
 	if (m_pDataPanel != nullptr)
@@ -280,7 +344,7 @@ IItem* CImpl::GetItem(ControlId const id) const
 CryIcon const& CImpl::GetItemIcon(IItem const* const pIItem) const
 {
 	auto const pItem = static_cast<CItem const* const>(pIItem);
-	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer.");
+	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer during %s", __FUNCTION__);
 	return GetTypeIcon(pItem->GetType());
 }
 
@@ -288,7 +352,7 @@ CryIcon const& CImpl::GetItemIcon(IItem const* const pIItem) const
 QString const& CImpl::GetItemTypeName(IItem const* const pIItem) const
 {
 	auto const pItem = static_cast<CItem const* const>(pIItem);
-	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer.");
+	CRY_ASSERT_MESSAGE(pItem != nullptr, "Impl item is null pointer during %s", __FUNCTION__);
 	return TypeToString(pItem->GetType());
 }
 
@@ -297,32 +361,6 @@ void CImpl::SetProjectPath(char const* const szPath)
 {
 	m_projectPath = szPath;
 	Serialization::SaveJsonFile(m_szUserSettingsFile, *this);
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool CImpl::IsSystemTypeSupported(EAssetType const assetType) const
-{
-	bool isSupported = false;
-
-	switch (assetType)
-	{
-	case EAssetType::Trigger:     // Intentional fall-through.
-	case EAssetType::Parameter:   // Intentional fall-through.
-	case EAssetType::Switch:      // Intentional fall-through.
-	case EAssetType::State:       // Intentional fall-through.
-	case EAssetType::Environment: // Intentional fall-through.
-	case EAssetType::Preload:     // Intentional fall-through.
-	case EAssetType::Setting:     // Intentional fall-through.
-	case EAssetType::Folder:      // Intentional fall-through.
-	case EAssetType::Library:
-		isSupported = true;
-		break;
-	default:
-		isSupported = false;
-		break;
-	}
-
-	return isSupported;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -723,6 +761,63 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(IConnection const* const pIConnect
 			}
 			break;
 		}
+
+		CountConnections(assetType, type);
+	}
+
+	return pNode;
+}
+
+//////////////////////////////////////////////////////////////////////////
+XmlNodeRef CImpl::SetDataNode(char const* const szTag)
+{
+	XmlNodeRef pNode = GetISystem()->CreateXmlNode(szTag);
+	bool hasConnections = false;
+
+	if (g_connections.triggers > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Adx2::s_szTriggersAttribute, g_connections.triggers);
+		hasConnections = true;
+	}
+
+	if (g_connections.parameters > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Adx2::s_szParametersAttribute, g_connections.parameters);
+		hasConnections = true;
+	}
+
+	if (g_connections.switchStates > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Adx2::s_szSwitchStatesAttribute, g_connections.switchStates);
+		hasConnections = true;
+	}
+
+	if (g_connections.environments > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Adx2::s_szEnvironmentsAttribute, g_connections.environments);
+		hasConnections = true;
+	}
+
+	if (g_connections.settings > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Adx2::s_szSettingsAttribute, g_connections.settings);
+		hasConnections = true;
+	}
+
+	if (g_connections.files > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Adx2::s_szFilesAttribute, g_connections.files);
+		hasConnections = true;
+	}
+
+	if (!hasConnections)
+	{
+		pNode = nullptr;
+	}
+	else
+	{
+		// Reset connection count for next library.
+		ZeroStruct(g_connections);
 	}
 
 	return pNode;
@@ -751,7 +846,7 @@ void CImpl::DisableConnection(IConnection const* const pIConnection, bool const 
 
 		if (connectionCount < 1)
 		{
-			CRY_ASSERT_MESSAGE(connectionCount >= 0, "Connection count is < 0");
+			CRY_ASSERT_MESSAGE(connectionCount >= 0, "Connection count is < 0 during %s", __FUNCTION__);
 			connectionCount = 0;
 			pItem->SetFlags(pItem->GetFlags() & ~EItemFlags::IsConnected);
 		}
@@ -767,20 +862,20 @@ void CImpl::DestructConnection(IConnection const* const pIConnection)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::OnAboutToReload()
+void CImpl::OnBeforeReload()
 {
 	if (m_pDataPanel != nullptr)
 	{
-		m_pDataPanel->OnAboutToReload();
+		m_pDataPanel->OnBeforeReload();
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::OnReloaded()
+void CImpl::OnAfterReload()
 {
 	if (m_pDataPanel != nullptr)
 	{
-		m_pDataPanel->OnReloaded();
+		m_pDataPanel->OnAfterReload();
 	}
 }
 
@@ -803,6 +898,27 @@ void CImpl::Clear()
 
 	m_itemCache.clear();
 	m_rootItem.Clear();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetImplInfo(SImplInfo& implInfo)
+{
+	SetLocalizedAssetsPath();
+
+	implInfo.name = m_implName.c_str();
+	implInfo.folderName = CryAudio::Impl::Adx2::s_szImplFolderName;
+	implInfo.projectPath = m_projectPath.c_str();
+	implInfo.assetsPath = m_assetsPath.c_str();
+	implInfo.localizedAssetsPath = m_localizedAssetsPath.c_str();
+	implInfo.flags = (
+		EImplInfoFlags::SupportsProjects |
+		EImplInfoFlags::SupportsTriggers |
+		EImplInfoFlags::SupportsParameters |
+		EImplInfoFlags::SupportsSwitches |
+		EImplInfoFlags::SupportsStates |
+		EImplInfoFlags::SupportsEnvironments |
+		EImplInfoFlags::SupportsPreloads |
+		EImplInfoFlags::SupportsSettings);
 }
 
 //////////////////////////////////////////////////////////////////////////

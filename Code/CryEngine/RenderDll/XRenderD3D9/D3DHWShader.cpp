@@ -274,7 +274,7 @@ CHWShader* CHWShader::mfForName(const char* name, const char* nameSource, uint32
 
 	if (nMaskGen)
 	{
-#ifdef __GNUC__
+#if defined(CRY_COMPILER_GCC) || defined(CRY_COMPILER_CLANG)
 		strName += AddStr.Format("(%llx)", nMaskGen);
 #else
 		strName += AddStr.Format("(%I64x)", nMaskGen);
@@ -294,18 +294,6 @@ CHWShader* CHWShader::mfForName(const char* name, const char* nameSource, uint32
 		pSH->m_EntryFunc = szEntryFunc;
 		pSH->m_CRC32 = CRC32;
 		pSH->m_eSHClass = eClass;
-
-		// Acquire cache resource
-		auto* hwSharedCache = CBaseResource::GetResource(cacheClassName, cacheNameCrc, true);
-		if (!hwSharedCache)
-		{
-			char dstName[256];
-			pSH->mfGetDstFileName(nullptr, dstName, 256, 0);
-
-			hwSharedCache = new SHWShaderCache(string{ dstName });
-			hwSharedCache->Register(cacheClassName, cacheNameCrc);
-		}
-		pSH->m_pCache = static_cast<SHWShaderCache*>(hwSharedCache);
 	}
 	else
 	{
@@ -317,7 +305,7 @@ CHWShader* CHWShader::mfForName(const char* name, const char* nameSource, uint32
 				if (SHData.size())
 				{
 					char strName[256];
-#if defined(__GNUC__)
+#if defined(CRY_COMPILER_GCC) || defined(CRY_COMPILER_CLANG)
 					cry_sprintf(strName, "$MAP_%llx", pSH->m_nMaskGenShader);
 #else
 					cry_sprintf(strName, "$MAP_%I64x", pSH->m_nMaskGenShader);
@@ -329,12 +317,22 @@ CHWShader* CHWShader::mfForName(const char* name, const char* nameSource, uint32
 		}
 
 		// CRC mismatch
-		pSH->m_pCache->Reset();
-
 		pSH->mfFree();
 		pSH->m_CRC32 = CRC32;
 		pSH->m_eSHClass = eClass;
 	}
+
+	// Acquire cache resource
+	auto* hwSharedCache = CBaseResource::GetResource(cacheClassName, cacheNameCrc, true);
+	if (!hwSharedCache)
+	{
+		char dstName[256];
+		pSH->mfGetDstFileName(nullptr, dstName, 256, 0);
+
+		hwSharedCache = new SHWShaderCache(string{ dstName });
+		hwSharedCache->Register(cacheClassName, cacheNameCrc);
+	}
+	pSH->m_pCache = static_cast<SHWShaderCache*>(hwSharedCache);
 
 	if (CParserBin::m_bEditable || (CVrProjectionManager::IsMultiResEnabledStatic() && eClass == eHWSC_Vertex))
 	{
@@ -566,7 +564,7 @@ void CHWShader_D3D::mfConstructFX(const FXShaderToken& Table, const TArray<uint3
 		if (SHData.size())
 		{
 			char strName[256];
-#if defined(__GNUC__)
+#if defined(CRY_COMPILER_GCC) || defined(CRY_COMPILER_CLANG)
 			cry_sprintf(strName, "$MAP_%llx", m_nMaskGenShader);
 #else
 			cry_sprintf(strName, "$MAP_%I64x", m_nMaskGenShader);

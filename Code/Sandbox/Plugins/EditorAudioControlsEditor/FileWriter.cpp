@@ -3,11 +3,12 @@
 #include "StdAfx.h"
 #include "FileWriter.h"
 
+#include "Common.h"
 #include "AudioControlsEditorPlugin.h"
 #include "ImplementationManager.h"
+#include "Common/IConnection.h"
+#include "Common/IItem.h"
 
-#include <IItem.h>
-#include <IConnection.h>
 #include <CryString/StringUtils.h>
 #include <CrySystem/File/CryFile.h>
 
@@ -121,6 +122,11 @@ void CountConnections(EAssetType const type, SLibraryScope& scope)
 			++scope.numEnvironmentConnections;
 			break;
 		}
+	case EAssetType::Preload:
+		{
+			++scope.numPreloadConnections;
+			break;
+		}
 	case EAssetType::Setting:
 		{
 			++scope.numSettingConnections;
@@ -130,11 +136,6 @@ void CountConnections(EAssetType const type, SLibraryScope& scope)
 		break;
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
-CFileWriter::CFileWriter(FileNames& previousLibraryPaths)
-	: m_previousLibraryPaths(previousLibraryPaths)
-{}
 
 //////////////////////////////////////////////////////////////////////////
 void CFileWriter::WriteAll()
@@ -283,9 +284,21 @@ void CFileWriter::WriteLibrary(CLibrary& library)
 					pFileNode->setAttr(CryAudio::s_szNumEnvironmentConnectionsAttribute, libScope.numEnvironmentConnections);
 				}
 
+				if (libScope.numPreloadConnections > 0)
+				{
+					pFileNode->setAttr(CryAudio::s_szNumPreloadConnectionsAttribute, libScope.numPreloadConnections);
+				}
+
 				if (libScope.numSettingConnections > 0)
 				{
 					pFileNode->setAttr(CryAudio::s_szNumSettingConnectionsAttribute, libScope.numSettingConnections);
+				}
+
+				XmlNodeRef const pImplDataNode = g_pIImpl->SetDataNode(CryAudio::s_szImplDataNodeTag);
+
+				if (pImplDataNode != nullptr)
+				{
+					pFileNode->addChild(pImplDataNode);
 				}
 
 				auto const numTypes = static_cast<int>(EAssetType::NumTypes);

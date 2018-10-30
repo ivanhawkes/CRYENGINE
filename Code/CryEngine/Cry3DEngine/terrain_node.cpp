@@ -53,8 +53,6 @@ CTerrainNode* CTerrainNode::GetTexuringSourceNode(int nTexMML, eTexureType eTexT
 
 CTerrainNode* CTerrainNode::GetReadyTexSourceNode(int nTexMML, eTexureType eTexType)
 {
-	Vec3 vSunDir = Get3DEngine()->GetSunDir().normalized();
-
 	CTerrainNode* pTexSourceNode = this;
 	while (pTexSourceNode)
 	{
@@ -430,7 +428,6 @@ void CTerrainNode::Init(int x1, int y1, int nNodeSize, CTerrainNode* pParent, bo
 CTerrainNode::~CTerrainNode()
 {
 	Get3DEngine()->FreeRenderNodeState(this);
-	CRY_ASSERT(!m_pTempData.load());
 
 	if (GetTerrain()->m_pTerrainUpdateDispatcher)
 		GetTerrain()->m_pTerrainUpdateDispatcher->RemoveJob(this);
@@ -513,8 +510,6 @@ void CTerrainNode::UpdateNodeTextureFromEditorData()
 	}
 
 	float sectorSizeM = GetBBox().GetSize().x;
-
-	int smallestEditorTileSizeM = GetTerrain()->GetTerrainSize() / 16;
 
 	ColorB* colors = (ColorB*)alloca(sizeof(ColorB) * texDim);
 
@@ -776,9 +771,6 @@ bool CTerrainNode::CheckUpdateProcObjects()
 				if (pGroup == GetObjManager()->m_lstStaticTypes.end() || !pGroup->GetStatObj() || pGroup->fSize <= 0)
 					continue;
 
-				if (!CheckMinSpec(pGroup->minConfigSpec)) // Check min spec of this group.
-					continue;
-
 				// distribute objects into different tree levels based on object size
 
 				float fSectorViewDistMax = GetCVars()->e_ProcVegetationMaxViewDistance * (GetBBox().GetSize().x / 64.f);
@@ -872,6 +864,9 @@ bool CTerrainNode::CheckUpdateProcObjects()
 
 						if (pGroup->offlineProcedural && !gEnv->IsEditor())
 							continue; // those procedural objects are already loaded as permanent objects
+
+						if (!CheckMinSpec(pGroup->minConfigSpec)) // Check min spec of this group.
+							continue;
 
 						CVegetation* pEnt = m_arrProcObjects.Add(new(CVegetation::eAllocator_Procedural) CVegetation());
 						assert(pEnt);

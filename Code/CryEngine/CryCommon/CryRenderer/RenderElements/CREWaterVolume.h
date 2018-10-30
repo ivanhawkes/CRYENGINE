@@ -16,13 +16,14 @@ public:
 
 	virtual void mfGetPlane(Plane& pl) override;
 	virtual void mfCenter(Vec3& vCenter, CRenderObject* pObj, const SRenderingPassInfo& passInfo) override;
+	virtual void mfGetBBox(Vec3& vMins, Vec3& vMaxs) const override;
 
 	virtual void GetMemoryUsage(ICrySizer* pSizer) const override
 	{
 		pSizer->AddObject(this, sizeof(*this));
 	}
 
-	virtual bool Compile(CRenderObject* pObj, CRenderView *pRenderView, bool updateInstanceDataOnly) override;
+	virtual bool Compile(CRenderObject* pObj, uint64 objFlags, uint16 elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly) override;
 	virtual void DrawToCommandList(CRenderObject* pObj, const struct SGraphicsPipelinePassContext& ctx, CDeviceCommandList* commandList) override;
 
 private:

@@ -2,12 +2,14 @@
 
 #include "StdAfx.h"
 #include "AssetLoaderBackgroundTask.h"
-#include "AssetLoader.h"
+
 #include "AssetCache.h"
+#include "AssetLoader.h"
 #include "AssetSystem/Asset.h"
 #include "IBackgroundTaskManager.h"
-#include "FilePathUtil.h"
+#include "PathUtils.h"
 #include <CryString/CryPath.h>
+#include <IEditor.h>
 #include <future>
 
 namespace AssetLoaderBackgroundTask_Private

@@ -2,27 +2,24 @@
 
 #include "StdAfx.h"
 #include "LevelSystem.h"
-#include "ActorSystem.h"
 #include <CryMovie/IMovieSystem.h>
-#include "CryAction.h"
+#include <CryRenderer/IRenderAuxGeom.h>
 #include <CryGame/IGameTokens.h>
 #include <CryAudio/Dialog/IDialogSystem.h>
 #include "TimeOfDayScheduler.h"
 #include "IGameRulesSystem.h"
 #include <CryAction/IMaterialEffects.h>
 #include "IPlayerProfiles.h"
-#include <CryLiveCreate/ILiveCreateHost.h>
 #include <CrySystem/File/IResourceManager.h>
-#include <CrySystem/ILocalizationManager.h>
 #include "Network/GameContext.h"
 #include "ICooperativeAnimationManager.h"
 #include <CryPhysics/IDeferredCollisionEvent.h>
 #include <CryCore/Platform/IPlatformOS.h>
 #include <CryAction/ICustomActions.h>
+#include <CrySystem/CryVersion.h>
 #include "CustomEvents/CustomEventsManager.h"
 #include "GameVolumes/GameVolumesManager.h"
 
-#include <CryGame/IGameVolumes.h>
 
 #define LOCAL_WARNING(cond, msg) do { if (!(cond)) { CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_WARNING, "%s", msg); } } while (0)
 //#define LOCAL_WARNING(cond, msg)  CRY_ASSERT_MESSAGE(cond, msg)
@@ -1637,10 +1634,8 @@ ILevelInfo* CLevelSystem::LoadLevel(const char* _levelName)
 	{
 		return nullptr;
 	}
-
-	ILevelInfo* pResult = slicer.GetResult();
 	
-	CRY_ASSERT(pResult == m_pCurrentLevelInfo);
+	CRY_ASSERT(slicer.GetResult() == m_pCurrentLevelInfo);
 
 	return m_pCurrentLevelInfo;
 }
@@ -2216,7 +2211,9 @@ void CLevelSystem::UnLoadLevel()
 	CryLog("UnLoadLevel Start");
 	INDENT_LOG_DURING_SCOPE();
 
+#if !defined(EXCLUDE_NORMAL_LOG)
 	CTimeValue tBegin = gEnv->pTimer->GetAsyncTime();
+#endif
 
 	if (m_pLevelLoadTimeslicer)
 	{
@@ -2412,8 +2409,10 @@ void CLevelSystem::UnLoadLevel()
 
 	m_bLevelLoaded = false;
 
+#if !defined(EXCLUDE_NORMAL_LOG)
 	CTimeValue tUnloadTime = gEnv->pTimer->GetAsyncTime() - tBegin;
 	CryLog("UnLoadLevel End: %.1f sec", tUnloadTime.GetSeconds());
+#endif
 
 	// Must be sent last.
 	// Cleanup all containers

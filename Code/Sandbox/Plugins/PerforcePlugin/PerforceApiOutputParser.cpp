@@ -5,12 +5,15 @@
 #include "VersionControl/VersionControlFileStatusUpdate.h"
 #include "VersionControl/VersionControlError.h"
 #include <p4/clientapi.h>
+#include <CrySystem/ISystem.h>
 #include <iostream>
 #include <unordered_map>
 #include <memory>
 
 namespace Private_CPerforceApiOutputParser
 {
+
+const bool g_forceLog = false;
 
 void ReplaceBackslashes(string& str)
 {
@@ -100,19 +103,46 @@ bool StartsWith(const char* startString, const string& searchString, size_t star
 	return startString[i] == '\0';
 }
 
-string g_depotStreamPath;
+bool StartsWith(const string& startString, const char* searchString, size_t startPos = 0)
+{
+	int i = 0;
+	while (searchString[i] != '\0' && i < startString.length() - startPos)
+	{
+		if (searchString[startPos + i] != startString[i])
+		{
+			return false;
+		}
+		++i;
+	}
+	return !startString.empty();
+}
+
+static string g_depotStreamPath;
+static string g_trackedFolderPath;
+static string g_rootFolderPath;
+static bool   g_hasStream;
 
 int UpdateDepotStreamPath(const char* data, int lineStart = 0)
 {
-	if (StartsWith(data, g_depotStreamPath))
+	if (StartsWith(g_depotStreamPath, data))
 	{
 		return static_cast<int>(g_depotStreamPath.size());
 	}
 	string str = data;
 	auto depotStreamLength = str.find('/', lineStart + 2) + 1;
-	depotStreamLength = str.find('/', depotStreamLength) + 1;
+	if (g_hasStream)
+	{
+		depotStreamLength = str.find('/', depotStreamLength) + 1;
+	}
 	g_depotStreamPath = str.substr(0, depotStreamLength);
-	return static_cast<int>(depotStreamLength);
+
+	// if client's root doesn't match current working dir we add difference to the depot path.
+	if (g_trackedFolderPath.size() > g_rootFolderPath.size())
+	{
+		g_depotStreamPath += g_trackedFolderPath.substr(g_rootFolderPath.size() + 1) + '/';
+	}
+
+	return static_cast<int>(g_depotStreamPath.size());
 }
 
 string ExtractFilePath(const string& str, int depotStreamLength, int lineStart, int lineEnd = -1)
@@ -149,32 +179,50 @@ public:
 
 	virtual void OutputInfo(char level, const char* data) override
 	{
-		CryLog("--- %s", data);
+		if (ShouldLog())
+		{
+			CryLog("--- %s", data);
+		}
 	}
 
 	virtual void OutputText(const char* data, int length) override
 	{
-		CryLog("CBaseClientUser::OutputText: %s", data);
+		if (ShouldLog())
+		{
+			CryLog("CBaseClientUser::OutputText: %s", data);
+		}
 	}
 
 	virtual void OutputBinary(const char *data, int length)
 	{
-		CryLog("CBaseClientUser::OutputBinary: %s", data);
+		if (ShouldLog())
+		{
+			CryLog("CBaseClientUser::OutputBinary: %s", data);
+		}
 	}
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		if (ShouldLog())
+		{
+			OutputDics(dict);
+		}
 	}
 
 	virtual void OutputError(const char *errBuf) override
 	{
-		CryLog("CBaseClientUser::OutputError: %s", errBuf);
+		if (ShouldLog())
+		{
+			CryLog("CBaseClientUser::OutputError: %s", errBuf);
+		}
 	}
 
 	virtual void Prompt(const StrPtr& str, StrBuf& strbuf, int, Error*) override
 	{
-		CryLog("CBaseClientUser::Prompt: %s", str.Text());
+		if (ShouldLog())
+		{
+			CryLog("CBaseClientUser::Prompt: %s", str.Text());
+		}
 	}
 
 	virtual void HandleError(Error *err) override
@@ -182,7 +230,10 @@ public:
 		StrBuf msg;
 		err->Fmt(&msg);
 		auto message = msg.Text();
-		CryLog("CBaseClientUser::HandleError: (%d) %s", err->GetSeverity(), message);
+		if (ShouldLog() || err->IsError())
+		{
+			CryLog("CBaseClientUser::HandleError: (%d) %s", err->GetSeverity(), message);
+		}
 		if (StartsWith("Perforce password", message) || (StartsWith("User ", message) && strstr(message, "doesn't exist")))
 		{
 			SetErrorIfNew(EVersionControlError::LoginFailed, message);
@@ -216,6 +267,10 @@ public:
 		{
 			SetErrorIfNew(EVersionControlError::InvalidFileName, message);
 		}
+		else if (StartsWith("Client side operation(s) failed.", message))
+		{
+			SetErrorIfNew(EVersionControlError::OperationFailed, message);
+		}
 		else if (err->IsError())
 		{
 			SetErrorIfNew(EVersionControlError::Unknown, message);
@@ -226,7 +281,6 @@ public:
 
 	virtual void Finished() override
 	{
-		CryLog("<<<<<<<<<<<< Finished!\n\n");
 		g_error = m_error;
 	}
 
@@ -239,22 +293,9 @@ public:
 	bool HasError() const { return m_error.type != EVersionControlError::None; }
 	SVersionControlError GetError() const { return m_error; }
 
-protected:
-	void OutputDics(StrDict* dict, const string& prefix = "")
-	{
-		string output = "";
-		if (prefix != "")
-		{
-			output += prefix + ": \n";
-		}
-		StrRef var, val;
-		for (int i = 0; varList->GetVar(i, var, val); i++)
-		{
-			output += "--- " + string(var.Text()) + ": " + string(val.Text()) + "\n";
-		}
-		CryLog(output);
-	}
+	void EnableDetailedOutput() { m_hasDetailedOutput = true; }
 
+protected:
 	void SetErrorIfNew(EVersionControlError error, const string& message = "") 
 	{
 		if (m_error.type == EVersionControlError::None)
@@ -264,7 +305,21 @@ protected:
 	}
 
 private:
+	bool ShouldLog() const { return m_hasDetailedOutput || g_forceLog; }
+
+	void OutputDics(StrDict* dict)
+	{
+		string output = "";
+		StrRef var, val;
+		for (int i = 0; varList->GetVar(i, var, val); i++)
+		{
+			output += "--- " + string(var.Text()) + ": " + string(val.Text()) + "\n";
+		}
+		CryLog(output);
+	}
+
 	SVersionControlError m_error{ EVersionControlError::None };
+	bool                 m_hasDetailedOutput{ false };
 };
 
 class CBaseFileStatusClientUser : public CBaseClientUser
@@ -312,7 +367,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 		if (auto pVar = dict->GetVar("change"))
 		{
 			m_list.push_back(pVar->Text());
@@ -334,7 +389,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 		if (auto pVar = dict->GetVar("desc"))
 		{
 			m_output = pVar->Text();
@@ -365,7 +420,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 		if (auto pVar = dict->GetVar("depotFile"))
 		{
 			m_files.push_back(UpdateDepotStreamAndExtractFile(pVar->Text()));
@@ -436,7 +491,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		CreateFileStatusUpdate(dict);
 
@@ -502,11 +557,6 @@ public:
 		CBaseClientUser::HandleError(err);
 		// Change 97 has shelved files associated with it and can't be deleted.
 	}
-
-	virtual void OutputStat(StrDict* dict) override
-	{
-		OutputDics(dict, "OutputStat");
-	}
 };
 
 class CSubmitClientUser : public CBaseFileStatusClientUser
@@ -533,7 +583,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		CreateFileStatusUpdate(dict, true);
 		auto pActionVar = dict->GetVar("action");
@@ -551,7 +601,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		m_info.user = dict->GetVar("userName")->Text();
 		if (auto pVar = dict->GetVar("clientName"))
@@ -562,13 +612,15 @@ public:
 		{
 			m_info.root = pVar->Text();
 			ReplaceBackslashes(m_info.root);
-			m_info.root.MakeLower();
+			g_rootFolderPath = m_info.root;
 		}
 		if (auto pVar = dict->GetVar("clientCwd"))
 		{
 			m_info.currentDir = pVar->Text();
-			m_info.currentDir.MakeLower();
+			CRY_ASSERT_MESSAGE(stricmp(m_info.currentDir.c_str(), g_trackedFolderPath.c_str()) == 0, 
+				"Working directory provided by info (%s) doesn't match with the one set for p4 plugin (%s)", m_info.currentDir.c_str(), g_trackedFolderPath.c_str());
 		}
+		g_hasStream = dict->GetVar("clientStream") != nullptr;
 	}
 
 	virtual void Reset() override
@@ -589,6 +641,7 @@ public:
 		CBaseClientUser::OutputStat(dict);
 
 		CreateFileStatusUpdate(dict, false, CVersionControlFileStatus::eState_AddedLocally);
+		GetCurrentFileStatusUpdate().RemoveState(CVersionControlFileStatus::eState_NotTracked);
 	}
 };
 
@@ -605,7 +658,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict);
+		CBaseClientUser::OutputStat(dict);
 		m_success.push_back(true);
 	}
 
@@ -642,7 +695,7 @@ public:
 		auto messagePos = strrchr(data, '-') + 2;
 		if (StartsWith("can't edit exclusive file already opened", messagePos))
 		{
-			SetErrorIfNew(EVersionControlError::AlreadyCheckedOutByOthers);
+			SetErrorIfNew(EVersionControlError::AlreadyCheckedOutByOthers, data);
 			auto depotStreamLength = UpdateDepotStreamPath(data);
 			const string& filePath = ExtractFilePath(data, depotStreamLength, 0);
 			CreateFileStatusUpdate(filePath, false, CVersionControlFileStatus::eState_CheckedOutRemotely);
@@ -651,7 +704,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		CreateFileStatusUpdate(dict, false, CVersionControlFileStatus::eState_CheckedOutLocally);
 	}
@@ -664,7 +717,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		CreateFileStatusUpdate(dict, false, CVersionControlFileStatus::eState_DeletedLocally);
 	}
@@ -688,7 +741,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		CreateFileStatusUpdate(dict);
 		GetCurrentFileStatusUpdate().RemoveState(CVersionControlFileStatus::GetLocalStates());
@@ -707,7 +760,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 
 		if (m_filter != EFileStatFilter::None)
 		{
@@ -717,49 +770,54 @@ public:
 
 		CreateFileStatusUpdate(dict, true);
 
+		if (auto pActionVar = dict->GetVar("action"))
+		{
+			if (strcmp(pActionVar->Text(), "edit") == 0)
+			{
+				GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_CheckedOutLocally);
+			}
+			else if (strcmp(pActionVar->Text(), "delete") == 0)
+			{
+				GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_DeletedLocally);
+			}
+			else if (strcmp(pActionVar->Text(), "add") == 0)
+			{
+				GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_AddedLocally);
+				GetCurrentFileStatusUpdate().RemoveState(CVersionControlFileStatus::eState_NotTracked);
+			}
+		}
+
 		auto pHaveRevVar = dict->GetVar("haveRev");
 		auto pHeadRevVar = dict->GetVar("headRev");
 
-		if (!pHeadRevVar) // doesn't exist on remote
+		if (!pHeadRevVar) // if doesn't exist on remote 
 		{
-			if (pHaveRevVar)
+			return;
+		}
+
+		if (pHaveRevVar) // also exists locally
+		{
+			if (std::atoi(pHeadRevVar->Text()) > std::atoi(pHaveRevVar->Text()))
 			{
-				GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_AddedLocally);
+				auto pHeadActionVar = dict->GetVar("headAction");
+				if (pHeadActionVar && strcmp(pHeadActionVar->Text(), "delete") == 0)
+				{
+					GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_DeletedRemotely);
+				}
+				else 
+				{
+					GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_UpdatedRemotely);
+				}
 			}
 		}
-		else // exists on remote
+		else // exists only on remote
 		{
-			if (pHaveRevVar) // also exists locally
-			{
-				if (std::atoi(pHeadRevVar->Text()) > std::atoi(pHaveRevVar->Text()))
-				{
-					auto pHeadActionVar = dict->GetVar("headAction");
-					if (pHeadActionVar && strcmp(pHeadActionVar->Text(), "delete") == 0)
-					{
-						GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_DeletedRemotely);
-					}
-					else 
-					{
-						GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_UpdatedRemotely);
-					}
-				}
-				else if (auto pActionVar = dict->GetVar("action"))
-				{
-					if (strcmp(pActionVar->Text(), "edit") == 0)
-					{
-						GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_CheckedOutLocally);
-					}
-				}
-			}
-			else // exists only on remote
-			{
-				GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_AddedRemotely);
-			}
+			GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_AddedRemotely);
+		}
 
-			if (auto pOtherOpenVar = dict->GetVar("otherOpen"))
-			{
-				GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_CheckedOutRemotely);
-			}
+		if (auto pOtherOpenVar = dict->GetVar("otherOpen"))
+		{
+			GetCurrentFileStatusUpdate().AddState(CVersionControlFileStatus::eState_CheckedOutRemotely);
 		}
 	}
 
@@ -782,7 +840,7 @@ public:
 
 	virtual void OutputStat(StrDict* dict) override
 	{
-		OutputDics(dict, "OutputStat");
+		CBaseClientUser::OutputStat(dict);
 		m_files.emplace_back(UpdateDepotStreamAndExtractFile(dict->GetVar("depotFile")->Text()));
 	}
 
@@ -793,6 +851,26 @@ public:
 	}
 
 	std::vector<string> m_files;
+};
+
+class CPrintClientUser : public CBaseClientUser
+{
+public:
+	static string GetName() { return "print"; }
+
+	virtual void OutputText(const char* data, int length) override
+	{
+		CBaseClientUser::OutputText(data, length);
+		m_fileContent += data;
+	}
+
+	virtual void Reset() override
+	{
+		CBaseClientUser::Reset();
+		m_fileContent = "";
+	}
+
+	string m_fileContent;
 };
 
 std::unordered_map<string, std::shared_ptr<CBaseClientUser>, stl::hash_strcmp<string>, stl::hash_strcmp<string>> g_clientUsers;
@@ -806,10 +884,14 @@ T* GetP4ClientUser()
 }
 
 template<class T>
-void AddP4ClientUser(std::initializer_list<string> aliases = {})
+void AddP4ClientUser(std::initializer_list<string> aliases = {}, bool enableDetailedOutput = false)
 {
 	std::shared_ptr<CBaseClientUser> cu = std::make_shared<T>();
 	g_clientUsers[T::GetName()] = cu;
+	if (enableDetailedOutput)
+	{
+		cu->EnableDetailedOutput();
+	}
 	for (const string& alias : aliases)
 	{
 		g_clientUsers[alias] = cu;
@@ -825,8 +907,8 @@ void InitP4ClientUsers()
 	AddP4ClientUser<CSyncClientUser>({ "sync" });
 	AddP4ClientUser<CFilesClientUser>({ "files" });
 	AddP4ClientUser<CChangelistClientUser>({ "changelist", "change" });
-	AddP4ClientUser<CSubmitClientUser>({ "submit" });
-	AddP4ClientUser<CInfoClientUser>({ "info" });
+	AddP4ClientUser<CSubmitClientUser>({ "submit" }, true);
+	AddP4ClientUser<CInfoClientUser>({ "info" }, true);
 	AddP4ClientUser<CAddClientUser>({ "add" });
 	AddP4ClientUser<CResolveClientUser>({ "resolve" });
 	AddP4ClientUser<CShelveClientUser>({ "shelve" });
@@ -836,6 +918,7 @@ void InitP4ClientUsers()
 	AddP4ClientUser<CRevertClientUser>({ "revert" });
 	AddP4ClientUser<CFileStatClientUser>({ "fstat" });
 	AddP4ClientUser<CDiffClientUser>({ "diff" });
+	AddP4ClientUser<CPrintClientUser>({ "print" });
 	AddP4ClientUser<CBaseClientUser>({ "dummy" });
 }
 
@@ -846,9 +929,11 @@ void ClearP4ClientUsers()
 
 }
 
-CPerforceApiOutputParser::CPerforceApiOutputParser()
+CPerforceApiOutputParser::CPerforceApiOutputParser(const string& trackedFolderPath)
 {
-	Private_CPerforceApiOutputParser::InitP4ClientUsers();
+	using namespace Private_CPerforceApiOutputParser;
+	g_trackedFolderPath = trackedFolderPath;
+	InitP4ClientUsers();
 }
 
 CPerforceApiOutputParser::~CPerforceApiOutputParser()
@@ -1026,6 +1111,13 @@ void CPerforceApiOutputParser::ParseReconcile(const string& perforceOutput, std:
 	}
 }
 
+void CPerforceApiOutputParser::ParsePrint(const string& perforceOutput, string& result) const
+{
+	using namespace Private_CPerforceApiOutputParser;
+	auto cu = GetP4ClientUser<CPrintClientUser>();
+	result = cu->m_fileContent;
+}
+
 SVersionControlError CPerforceApiOutputParser::GetError() const
 {
 	return Private_CPerforceApiOutputParser::g_error;
@@ -1058,7 +1150,6 @@ ClientUser* CPerforceApiOutputParser::SetP4ClientUser(const string& command)
 	else
 	{
 		cu = g_clientUsers["dummy"].get();
-		CryLog("!!! Parser for %s not found.", command.c_str());
 	}
 	cu->ResetData();
 	return cu;

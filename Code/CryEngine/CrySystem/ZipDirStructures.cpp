@@ -6,12 +6,14 @@
 #include <zlib.h>
 #include "ZipFileFormat.h"
 #include "ZipDirStructures.h"
+#include "FileIOWrapper.h"
 #include <time.h>
 #include <stdlib.h>
 #include <CrySystem/ISystem.h>
 #include <CryThreading/IJobManager.h>
 #include "CryPak.h"
 #include <CryThreading/IJobManager_JobDelegator.h>
+#include <CryMath/Random.h>
 
 #ifdef SUPPORT_UNBUFFERED_IO
 	#include <shlwapi.h>

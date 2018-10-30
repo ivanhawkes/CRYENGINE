@@ -1,10 +1,17 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 #include "StdAfx.h"
 #include "PerforceFilePathUtil.h"
-#include "FilePathUtil.h"
+
+#include "FileUtils.h"
+#include "PathUtils.h"
 
 namespace Private_PerforceFilePathUtil
 {
+
+static bool DoesLookLikeFolder(const string& path)
+{
+	return !path.empty() && path[path.size() - 1] == '/';
+}
 
 static string GetAdjustedFolderPath(const string& folderPath)
 {
@@ -33,19 +40,32 @@ std::vector<string> AdjustFolders(const std::vector<string>& folders)
 	return adjustedFolders;
 }
 
+std::vector<string> AdjustPaths(const std::vector<string>& paths)
+{
+	std::vector<string> files;
+	std::vector<string> folders;
+	SeparateFolders(paths, files, folders);
+	if (!folders.empty())
+	{
+		folders = AdjustFolders(folders);
+		std::move(folders.begin(), folders.end(), std::back_inserter(files));
+	}
+
+	return files;
+}
+
 void SeparateFolders(const std::vector<string>& paths, std::vector<string>& outputFiles, std::vector<string>& outputFolders)
 {
 	using namespace Private_PerforceFilePathUtil;
 	for (const string& path : paths)
 	{
-		auto absolutePath = PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), path);
-		if (PathUtil::FileExists(absolutePath))
+		if (DoesLookLikeFolder(path) || FileUtils::FolderExists(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), path)))
+		{
+			outputFolders.push_back(path);
+		}
+		else
 		{
 			outputFiles.push_back(path);
-		}
-		else if (PathUtil::FolderExists(absolutePath))
-		{
-			outputFolders.push_back(DoesFolderNeedAdjusting(path) ? GetAdjustedFolderPath(path) : path);
 		}
 	}
 }

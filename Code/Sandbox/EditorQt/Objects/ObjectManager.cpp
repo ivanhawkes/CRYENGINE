@@ -37,19 +37,19 @@
 #include <EditorFramework/Events.h>
 #include <Gizmos/GizmoManager.h>
 #include <Gizmos/TransformManipulator.h>
+#include <IAIManager.h>
 #include <IObjectEnumerator.h>
 #include <LevelEditor/Tools/DeepSelection.h>
 #include <LevelEditor/Tools/ObjectMode.h>
 #include <Objects/InspectorWidgetCreator.h>
 #include <Objects/ObjectPropertyWidget.h>
+#include <PathUtils.h>
 #include <Preferences/GlobalHelperPreferences.h>
 #include <Preferences/ViewportPreferences.h>
-#include <QT/Widgets/QWaitProgress.h>
-#include <Serialization/QPropertyTree/QPropertyTree.h>
-#include <FilePathUtil.h>
-#include <IAIManager.h>
 #include <QAdvancedPropertyTree.h>
+#include <QT/Widgets/QWaitProgress.h>
 #include <QtUtil.h>
+#include <Serialization/QPropertyTree/QPropertyTree.h>
 #include <Viewport.h>
 
 // CryEngine
@@ -1180,8 +1180,9 @@ CBaseObject* CObjectManager::CloneObject(CBaseObject* obj)
 {
 	CRY_ASSERT(obj);
 
-	CBaseObject* clone = NewObject(obj->GetClassDesc(), obj);
-	return clone;
+	CBaseObject* pClone = NewObject(obj->GetClassDesc(), obj);
+	pClone->ClearFlags(OBJFLAG_SELECTED);
+	return pClone;
 }
 
 CBaseObject* CObjectManager::FindObject(const CryGUID& guid) const
@@ -3794,7 +3795,7 @@ void CObjectManager::SaveEntitiesInternalState(IDataWriteStream& writer) const
 		uint32 numVisibleLayers = 0;
 		for (uint32 i = 0; i < layers.size(); ++i)
 		{
-			CObjectLayer* pLayer = layers[i];
+			IObjectLayer* pLayer = layers[i];
 			if (pLayer->IsVisible())
 			{
 				numVisibleLayers += 1;
@@ -3804,7 +3805,7 @@ void CObjectManager::SaveEntitiesInternalState(IDataWriteStream& writer) const
 		writer.WriteUint32(numVisibleLayers);
 		for (uint32 i = 0; i < layers.size(); ++i)
 		{
-			CObjectLayer* pLayer = layers[i];
+			IObjectLayer* pLayer = layers[i];
 			if (pLayer->IsVisible())
 			{
 				writer.WriteString(pLayer->GetName());

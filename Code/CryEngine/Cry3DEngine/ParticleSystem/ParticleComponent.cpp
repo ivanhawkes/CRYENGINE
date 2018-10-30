@@ -237,7 +237,6 @@ void CParticleComponent::GetMaxParticleCounts(int& total, int& perFrame, float m
 void CParticleComponent::UpdateTimings()
 {
 	// Adjust parent lifetimes to include child lifetimes
-	STimingParams params {};
 	float maxChildEq = 0.0f, maxChildLife = 0.0f;
 	for (auto& pChild : m_children)
 	{
@@ -348,10 +347,10 @@ void CParticleComponent::Compile()
 			{
 				if (auto* params = GetPSystem()->GetDefaultFeatureParam(EFeatureType(b)))
 				{
-					if (auto* feature = params->m_pFactory())
+					if (auto* feature = static_cast<CParticleFeature*>(params->m_pFactory()))
 					{
-						m_defaultFeatures.push_back(static_cast<CParticleFeature*>(feature));
-						static_cast<CParticleFeature*>(feature)->AddToComponent(this, &m_params);
+						m_features.push_back(feature);
+						feature->AddToComponent(this, &m_params);
 					}
 				}
 			}

@@ -508,8 +508,10 @@ bool CSceneForwardStage::PreparePerPassResources(bool bOnInit, bool bShadowMask,
 		eResSubset_TiledShadingTransparent = BIT(2),
 		eResSubset_Particles               = BIT(3),
 		eResSubset_EyeOverlay              = BIT(4),
+		eResSubset_ForwardShadows          = BIT(5),
 
-		eResSubset_All                     = eResSubset_General | eResSubset_TiledShadingOpaque | eResSubset_TiledShadingTransparent | eResSubset_Particles | eResSubset_EyeOverlay,
+		eResSubset_All                     = eResSubset_General   | eResSubset_TiledShadingOpaque | eResSubset_TiledShadingTransparent | 
+		                                     eResSubset_Particles | eResSubset_EyeOverlay         | eResSubset_ForwardShadows,
 		eResSubset_None                    = ~eResSubset_All
 	};
 	
@@ -518,8 +520,8 @@ bool CSceneForwardStage::PreparePerPassResources(bool bOnInit, bool bShadowMask,
 	{
 #if RENDERER_ENABLE_FULL_PIPELINE
 		{ m_opaquePassResources,            m_pOpaquePassResourceSet.get(),            eResSubset_General | eResSubset_TiledShadingOpaque      | eResSubset_Particles },
-		{ m_transparentPassResources,       m_pTransparentPassResourceSet.get(),       eResSubset_General | eResSubset_TiledShadingTransparent | eResSubset_Particles },
-		{ m_eyeOverlayPassResources,	    m_pEyeOverlayPassResourceSet.get(),        eResSubset_General | eResSubset_EyeOverlay              | eResSubset_Particles },
+		{ m_transparentPassResources,       m_pTransparentPassResourceSet.get(),       eResSubset_General | eResSubset_TiledShadingTransparent | eResSubset_Particles | eResSubset_ForwardShadows },
+		{ m_eyeOverlayPassResources,	    m_pEyeOverlayPassResourceSet.get(),        eResSubset_General | eResSubset_EyeOverlay              | eResSubset_Particles | eResSubset_ForwardShadows },
 #endif
 
 #if RENDERER_ENABLE_MOBILE_PIPELINE
@@ -560,8 +562,8 @@ bool CSceneForwardStage::PreparePerPassResources(bool bOnInit, bool bShadowMask,
 
 		const bool includeOpaquePassResources      = !!(resourceSubset & eResSubset_TiledShadingOpaque);
 		const bool includeTransparentPassResources = !!(resourceSubset & eResSubset_TiledShadingTransparent);
-		const bool includeEyeOverlayPassResources  = !!(resourceSubset & eResSubset_EyeOverlay);		
-		const bool includeForwardShadowResources   = !!(resourceSubset & (eResSubset_TiledShadingTransparent | eResSubset_Particles));
+		const bool includeEyeOverlayPassResources  = !!(resourceSubset & eResSubset_EyeOverlay);
+		const bool includeForwardShadowResources   = !!(resourceSubset & eResSubset_ForwardShadows);
 
 		// Samplers
 		{
@@ -827,6 +829,8 @@ void CSceneForwardStage::ExecuteOpaque()
 	m_forwardOverlayPass.SetFlags(passFlags);
 	m_forwardOverlayPass.SetViewport(viewport);
 
+	ExecuteSky(CRendererResources::s_ptexHDRTarget, RenderView()->GetDepthTarget());
+
 	{
 		renderItemDrawer.InitDrawSubmission();
 
@@ -845,13 +849,12 @@ void CSceneForwardStage::ExecuteOpaque()
 		if (CRenderer::CV_r_DeferredShadingTiled == 4)
 			m_forwardOverlayPass.DrawRenderItems(pRenderView, EFSLIST_TERRAINLAYER);
 		m_forwardOverlayPass.DrawRenderItems(pRenderView, EFSLIST_DECAL);
+		m_forwardOverlayPass.DrawRenderItems(pRenderView, EFSLIST_SKY);
 		m_forwardOverlayPass.EndExecution();
 
 		renderItemDrawer.JobifyDrawSubmission();
 		renderItemDrawer.WaitForDrawSubmission();
 	}
-
-	ExecuteSky(CRendererResources::s_ptexHDRTarget, RenderView()->GetDepthTarget());
 }
 
 void CSceneForwardStage::ExecuteTransparent(bool bBelowWater)
@@ -1081,6 +1084,8 @@ void CSceneForwardStage::ExecuteMobile()
 	m_forwardTransparentPassMobile.SetFlags(passFlags | CSceneRenderPass::ePassFlags_RenderNearest);
 	m_forwardTransparentPassMobile.SetViewport(viewport);
 
+	ExecuteSky(CRendererResources::s_ptexHDRTarget, RenderView()->GetDepthTarget());
+
 	// forward opaque
 	{
 		renderItemDrawer.InitDrawSubmission();
@@ -1096,8 +1101,6 @@ void CSceneForwardStage::ExecuteMobile()
 		renderItemDrawer.JobifyDrawSubmission();
 		renderItemDrawer.WaitForDrawSubmission();
 	}
-
-	ExecuteSky(CRendererResources::s_ptexHDRTarget, RenderView()->GetDepthTarget());
 
 	// forward transparent AW
 	{
@@ -1153,6 +1156,8 @@ void CSceneForwardStage::ExecuteMinimum(CTexture* pColorTex, CTexture* pDepthTex
 	m_forwardOverlayRecursivePass.SetFlags(CSceneRenderPass::ePassFlags_None);
 	m_forwardOverlayRecursivePass.SetViewport(viewport);
 
+	ExecuteSky(pColorTex, pDepthTex);
+
 	{
 		renderItemDrawer.InitDrawSubmission();
 
@@ -1164,13 +1169,12 @@ void CSceneForwardStage::ExecuteMinimum(CTexture* pColorTex, CTexture* pDepthTex
 		m_forwardOverlayRecursivePass.BeginExecution();
 		m_forwardOverlayRecursivePass.DrawRenderItems(pRenderView, EFSLIST_TERRAINLAYER);
 		m_forwardOverlayRecursivePass.DrawRenderItems(pRenderView, EFSLIST_DECAL);
+		m_forwardOverlayRecursivePass.DrawRenderItems(pRenderView, EFSLIST_SKY);
 		m_forwardOverlayRecursivePass.EndExecution();
 
 		renderItemDrawer.JobifyDrawSubmission();
 		renderItemDrawer.WaitForDrawSubmission();
 	}
-
-	ExecuteSky(pColorTex, pDepthTex);
 
 	m_forwardTransparentRecursivePass.PrepareRenderPassForUse(commandList);
 	m_forwardTransparentRecursivePass.SetFlags(CSceneRenderPass::ePassFlags_None);
@@ -1194,10 +1198,19 @@ void CSceneForwardStage::ExecuteMinimum(CTexture* pColorTex, CTexture* pDepthTex
 // Sky
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void CSceneForwardStage::SetSkyRE(CRESky* pSkyRE, CREHDRSky* pHDRSkyRE)
+void CSceneForwardStage::SetSkyRE(CRESky* pSkyRE)
 {
 	m_pSkyRE = pSkyRE;
+}
+
+void CSceneForwardStage::SetSkyRE(CREHDRSky* pHDRSkyRE)
+{
 	m_pHDRSkyRE = pHDRSkyRE;
+}
+
+void CSceneForwardStage::SetSkyMat(IMaterial* pMat)
+{
+	m_pSkyMat = pMat;
 }
 
 void CSceneForwardStage::SetSkyParameters()
@@ -1205,12 +1218,15 @@ void CSceneForwardStage::SetSkyParameters()
 	if (!m_pSkyRE)
 		return;
 
-	static CCryNameR skyBoxParamName("SkyDome_SkyBoxParams");
-	const float skyBoxAngle = m_pSkyRE->m_fSkyBoxAngle;
-	const float skyBoxScaling = 1.0f / std::max(0.0001f, m_pSkyRE->m_fSkyBoxStretching);
-	const float skyBoxMultiplier = gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKYBOX_MULTIPLIER);
-	const Vec4 skyBoxParams(skyBoxAngle, skyBoxScaling, skyBoxMultiplier, 0);
-	m_skyPass.SetConstant(skyBoxParamName, skyBoxParams, eHWSC_Pixel);
+	// SkyBox
+	{
+		static CCryNameR skyBoxParamName("SkyDome_SkyBoxParams");
+		const float skyBoxAngle = m_pSkyRE->m_fSkyBoxAngle;
+		const float skyBoxScaling = 1.0f / std::max(0.0001f, m_pSkyRE->m_fSkyBoxStretching);
+		const float skyBoxMultiplier = gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKYBOX_MULTIPLIER);
+		const Vec4 skyBoxParams(skyBoxAngle, skyBoxScaling, skyBoxMultiplier, 0);
+		m_skyPass.SetConstant(skyBoxParamName, skyBoxParams, eHWSC_Pixel);
+	}
 }
 
 void CSceneForwardStage::SetHDRSkyParameters()
@@ -1219,6 +1235,16 @@ void CSceneForwardStage::SetHDRSkyParameters()
 		return;
 
 	I3DEngine* p3DEngine = gEnv->p3DEngine;
+
+	// SkyBox
+	{
+		static CCryNameR skyBoxParamName("SkyDome_SkyBoxParams");
+		const float skyBoxAngle = 0.0f;// DEG2RAD(gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKY_SKYBOX_ANGLE));
+		const float skyBoxScaling = 2.0f;// 1.0f / std::max(0.0001f, gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKY_SKYBOX_STRETCHING));
+		const float skyBoxMultiplier = gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKYBOX_MULTIPLIER);
+		const Vec4 skyBoxParams(skyBoxAngle, skyBoxScaling, skyBoxMultiplier, 0);
+		m_skyPass.SetConstant(skyBoxParamName, skyBoxParams, eHWSC_Pixel);
+	}
 
 	// Day sky
 	{
@@ -1312,6 +1338,31 @@ void CSceneForwardStage::SetHDRSkyParameters()
 	}
 }
 
+void CSceneForwardStage::SetMatParameters()
+{
+	IMaterial* skyMat = m_pSkyMat ? m_pSkyMat : gEnv->p3DEngine->GetSkyMaterial();
+	CShaderResources* skyRes = nullptr;
+	if (!skyMat || !skyMat->GetShaderItem().m_pShaderResources)
+		return;
+
+	skyRes = (CShaderResources*)skyMat->GetShaderItem().m_pShaderResources;
+
+	// SkyBox
+	{
+		static CCryNameR skyBoxExposureName("SkyDome_SkyBoxExposure");
+		const ColorF skyBoxEmittance = skyRes->GetFinalEmittance();
+		Vec4 skyBoxExposure(skyBoxEmittance.r, skyBoxEmittance.g, skyBoxEmittance.b, 1.0f);
+		//SShaderParam::GetValue("Exposure", &skyRes->GetParameters(), &skyBoxExposure.w, 0);
+		m_skyPass.SetConstant(skyBoxExposureName, skyBoxExposure, eHWSC_Pixel);
+
+		static CCryNameR skyBoxOpacityName("SkyDome_SkyBoxOpacity");
+		const ColorF skyBoxFilter = skyRes->GetColorValue(EFTT_DIFFUSE) * skyRes->GetStrengthValue(EFTT_OPACITY);
+		Vec4 skyBoxOpacity(skyBoxFilter.r, skyBoxFilter.g, skyBoxFilter.b, 1.0f);
+		//SShaderParam::GetValue("Opacity", &skyRes->GetParameters(), &skyBoxOpacity.w, 0);
+		m_skyPass.SetConstant(skyBoxOpacityName, skyBoxOpacity, eHWSC_Pixel);
+	}
+}
+
 static void FillSkyTextureData(CTexture* pTexture, const void* pData, const uint32 width, const uint32 height, const uint32 pitch)
 {
 	assert(pTexture && pTexture->GetWidth() == width && pTexture->GetHeight() == height && pTexture->GetDevTexture());
@@ -1329,10 +1380,18 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 
 	PROFILE_LABEL_SCOPE("SKY_PASS");
 
-	CTexture* pSkyDomeTex = CRendererResources::s_ptexBlack;
+	CRenderView* pRenderView = RenderView();
+
+	const bool applyFog = pRenderView->IsGlobalFogEnabled() && !(GetGraphicsPipeline().IsPipelineFlag(CGraphicsPipeline::EPipelineFlags::NO_SHADER_FOG));
+	bool isProcedualSky = false;
+	bool hasSkyDomeTexture = false;
 
 	// Update sky dome texture if new data is available
 	int timestamp = 0;
+
+	m_pSkyDomeTextureMie = CRendererResources::s_ptexBlack;
+	m_pSkyDomeTextureRayleigh = CRendererResources::s_ptexBlack;
+	m_pSkyMoonTex = CRendererResources::s_ptexBlack;
 	if (m_pHDRSkyRE)
 	{
 		if (m_pHDRSkyRE->m_skyDomeTextureLastTimeStamp != m_pHDRSkyRE->m_pRenderParams->m_skyDomeTextureTimeStamp)
@@ -1345,20 +1404,28 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 			// Update time stamp of last update
 			m_pHDRSkyRE->m_skyDomeTextureLastTimeStamp = m_pHDRSkyRE->m_pRenderParams->m_skyDomeTextureTimeStamp;
 		}
+
+		m_pSkyDomeTextureMie = m_pHDRSkyRE->m_pSkyDomeTextureMie;
+		m_pSkyDomeTextureRayleigh = m_pHDRSkyRE->m_pSkyDomeTextureRayleigh;
+		if (m_pHDRSkyRE->m_moonTexId > 0)
+			m_pSkyMoonTex = CTexture::GetByID(m_pHDRSkyRE->m_moonTexId);
+
 		timestamp = m_pHDRSkyRE->m_skyDomeTextureLastTimeStamp;
-	}
-	else if (m_pSkyRE)
-	{
-		IMaterial* skyMat = gEnv->p3DEngine->GetSkyMaterial();
-		if (skyMat && skyMat->GetShaderItem().m_pShaderResources)
-		{
-			auto pSkyTexInfo = ((CShaderResources*)skyMat->GetShaderItem().m_pShaderResources)->m_Textures[EFTT_DIFFUSE];
-			if (pSkyTexInfo)
-				pSkyDomeTex = CTexture::ForName(pSkyTexInfo->m_Name, 0, eTF_Unknown);
-		}
+		isProcedualSky = true;
 	}
 
-	CRenderView* pRenderView = RenderView();
+	CTexture* pSkyDomeTex = CRendererResources::s_ptexBlack;
+	IMaterial* skyMat = m_pSkyMat ? m_pSkyMat : gEnv->p3DEngine->GetSkyMaterial();
+	if (skyMat && skyMat->GetShaderItem().m_pShaderResources)
+	{
+		auto* pResources = (CShaderResources*)skyMat->GetShaderItem().m_pShaderResources;
+
+		if (auto pSkyTexInfo = pResources->m_Textures[EFTT_DIFFUSE])
+		{
+			pSkyDomeTex = CTexture::ForName(pSkyTexInfo->m_Name, 0, eTF_Unknown);
+			hasSkyDomeTexture = true;
+		}
+	}
 
 	D3DViewPort viewport = RenderViewportToD3D11Viewport(RenderView()->GetViewport());
 	if (pRenderView->IsRecursive())
@@ -1367,24 +1434,13 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 	}
 	CRY_ASSERT(pColorTex->GetWidth() == viewport.Width && pColorTex->GetHeight() == viewport.Height);
 
-	const bool bFog = pRenderView->IsGlobalFogEnabled() && !(GetGraphicsPipeline().IsPipelineFlag(CGraphicsPipeline::EPipelineFlags::NO_SHADER_FOG));
-
-	m_pSkyDomeTextureMie = CRendererResources::s_ptexBlack;
-	m_pSkyDomeTextureRayleigh = CRendererResources::s_ptexBlack;
-	m_pSkyMoonTex = CRendererResources::s_ptexBlack;
-	if (m_pHDRSkyRE)
-	{
-		m_pSkyDomeTextureMie = m_pHDRSkyRE->m_pSkyDomeTextureMie;
-		m_pSkyDomeTextureRayleigh = m_pHDRSkyRE->m_pSkyDomeTextureRayleigh;
-		if (m_pHDRSkyRE->m_moonTexId > 0)
-			m_pSkyMoonTex = CTexture::GetByID(m_pHDRSkyRE->m_moonTexId);
-	}
-
 	uint64 rtMask = 0;
-	rtMask |= m_pSkyRE ? g_HWSR_MaskBit[HWSR_SAMPLE0] : 0;
-	rtMask |= bFog ? g_HWSR_MaskBit[HWSR_FOG] : 0;
 
-	if (m_skyPass.IsDirty(rtMask, timestamp, !m_pHDRSkyRE), pDepthTex->GetTextureID())
+	rtMask |= isProcedualSky    ? g_HWSR_MaskBit[HWSR_SAMPLE0] : 0;
+	rtMask |= hasSkyDomeTexture ? g_HWSR_MaskBit[HWSR_SAMPLE1] : 0;
+	rtMask |= applyFog          ? g_HWSR_MaskBit[HWSR_FOG    ] : 0;
+
+	if (m_skyPass.IsDirty(rtMask, timestamp, pSkyDomeTex->GetTextureID(), pDepthTex->GetTextureID()))
 	{
 		const SSamplerState      samplerDescLinearWrapU(FILTER_LINEAR, eSamplerAddressMode_Wrap, eSamplerAddressMode_Clamp, eSamplerAddressMode_Clamp, 0);
 		const SamplerStateHandle samplerStateLinearWrapU = GetDeviceObjectFactory().GetOrCreateSamplerStateHandle(samplerDescLinearWrapU);
@@ -1409,6 +1465,7 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 	m_skyPass.BeginConstantUpdate();
 	SetSkyParameters();
 	SetHDRSkyParameters();
+	SetMatParameters();
 	m_skyPass.Execute();
 
 	// Stars
@@ -1442,8 +1499,8 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 			static CCryNameR nameMoonTexGenRight("SkyDome_NightMoonTexGenRight");
 			static CCryNameR nameMoonTexGenUp("SkyDome_NightMoonTexGenUp");
 			static CCryNameR nameMoonDirSize("SkyDome_NightMoonDirSize");
-			static CCryNameR nameStarSize("StarSize");
-			static CCryNameR nameStarIntensity("StarIntensity");
+			static CCryNameR nameStarSize("SkyDome_StarSize");
+			static CCryNameR nameStarIntensity("SkyDome_StarIntensity");
 
 			m_starsPrimitive.GetConstantManager().BeginNamedConstantUpdate();
 
@@ -1465,21 +1522,9 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 		}
 	}
 
-	m_pSkyRE = nullptr;
-	m_pHDRSkyRE = nullptr;
-
-	{
-		auto& renderItemDrawer = pRenderView->GetDrawer();
-
-		renderItemDrawer.InitDrawSubmission();
-
-		m_forwardOverlayPass.BeginExecution();
-		m_forwardOverlayPass.DrawRenderItems(pRenderView, EFSLIST_SKY);
-		m_forwardOverlayPass.EndExecution();
-
-		renderItemDrawer.JobifyDrawSubmission();
-		renderItemDrawer.WaitForDrawSubmission();
-	}
+//	m_pSkyRE = nullptr;
+//	m_pHDRSkyRE = nullptr;
+//	m_pSkyMat = nullptr;
 }
 
 void CSceneForwardStage::FillCloudShadingParams(SCloudShadingParams& cloudParams, bool enable) const

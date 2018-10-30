@@ -3,6 +3,7 @@
 #include "stdafx.h"
 
 #include "CharacterToolForm.h"
+#include <QApplication>
 #include <QAction>
 #include <QBoxLayout>
 #include <QDir>
@@ -28,7 +29,7 @@
 #include "UnsavedChangesDialog.h"
 #include "FileDialogs/EngineFileDialog.h"
 #include "FileDialogs/SystemFileDialog.h"
-#include "FilePathUtil.h"
+#include "PathUtils.h"
 #include "SplitViewport.h"
 #include "CharacterDocument.h"
 #include "AnimationList.h"

@@ -7,26 +7,6 @@
 
 namespace PathUtil
 {
-//! Removes the file or directory at the given path. If the path points to a directory it will be removed recursively
-EDITOR_COMMON_API bool Remove(const char* szPath);
-//! Removes the file at the given file path
-EDITOR_COMMON_API bool RemoveFile(const char* szFilePath);
-//! Moves the file at the given file path to the new file path allowing overwriting of the target.
-EDITOR_COMMON_API bool MoveFileAllowOverwrite(const char* szOldFilePath, const char* szNewFilePath);
-//! Copies the file at the given file path to the target file path allowing overwriting of the target.
-EDITOR_COMMON_API bool CopyFileAllowOverwrite(const char* szSourceFilePath, const char* szDestinationFilePath);
-//! Removes the directory at the given path
-EDITOR_COMMON_API bool RemoveDirectory(const char* szPath, bool bRecursive = true);
-//! Sets the file permission from read only to read-write.
-EDITOR_COMMON_API bool MakeFileWritable(const char* szFilePath);
-
-//! Extracts all the files from a pak file. The pak should already be open by GetISystem()->GetIPak()->OpenPack();
-//! The function will silently overwrite existing files.
-//! \param szArchivePath Path to the existing pak file to be unpacked.
-//! \param szDestPath Path to the destination folder.
-//! \param progress. A function object that is called each time another portion of the pak file has been extracted. The progress value is in the range 0..1 inclusive.
-//! \see ICryPak::OpenPack()
-EDITOR_COMMON_API void   Unpak(const char* szArchivePath, const char* szDestPath, std::function<void(float)> progress);
 
 EDITOR_COMMON_API string GetAudioLocalizationFolder();
 
@@ -88,6 +68,11 @@ EDITOR_COMMON_API string GamePathToCryPakPath(const string& path, bool bForWriti
 //! Example if using "new" detached projects : A:/ProjectDir/Assets
 EDITOR_COMMON_API string GetGameProjectAssetsPath();
 
+//! Returns relative path to game content directory of active project.
+//! Path uses unix-style delimiters and contains no trailing delimiter.
+//! For example, for "path A:/ProjectDir/Assets" return value would be "Assets"
+EDITOR_COMMON_API string GetGameProjectAssetsRelativePath();
+
 //! Converts any path to a game path (relative to assets folder)
 //! Strips project root path and game directory from 'path'.
 //! A:/p4/GameSDK/Objects/bird.cgf -> Objects/bird.cgf
@@ -100,19 +85,23 @@ EDITOR_COMMON_API string  ToGamePath(const char* path);
 
 EDITOR_COMMON_API QString ToUnixPath(const QString& path);
 
-//! Returns true if the file exists on disk (does not use CryPak)
-EDITOR_COMMON_API bool FileExists(const string& path);
-
-//! Returns true if the gives is folder that exists on disk 
-EDITOR_COMMON_API bool FolderExists(const string& path);
-
-//! Returns true if the file exists only in paks
-EDITOR_COMMON_API bool IsFileInPakOnly(const string& path);
-
 //! Returns true if the name is not empty and only contains letters, numbers or '-' '_' ' ', and starts with a significant character
 //! This restrictive naming policy ensures filenames will work on any system
 EDITOR_COMMON_API bool IsValidFileName(const QString& name);
 
 //! Returns current platform specific folder name, used when the user wants to store platform specific data.
 EDITOR_COMMON_API string GetCurrentPlatformFolder();
+
+//! Adjust the path to follow CryPak casing mode, which may or may not be case-preserving.
+EDITOR_COMMON_API string AdjustCasing(const string& path);
+EDITOR_COMMON_API CryPathString AdjustCasing(const char* szPath);
+EDITOR_COMMON_API CryPathString AdjustCasing(const CryPathString& path);
+
+//! Returns the same path with correction that exactly match casing on files system.
+//! If file is not present on the file system an empty string is returned.
+EDITOR_COMMON_API string MatchGamePathToCaseOnFileSystem(const string& path);
+
+//! Returns the same path with correction that exactly match casing on files system.
+//! If file is not present on the file system an empty string is returned.
+EDITOR_COMMON_API string MatchAbsolutePathToCaseOnFileSystem(const string& path);
 }

@@ -12,7 +12,6 @@
 #include "CryEditDoc.h"
 #include "CrySandbox/ScopedVariableSetter.h"
 #include "CryString/CryPath.h"
-#include "FilePathUtil.h"
 #include "GameExporter.h"
 #include "IEditorImpl.h"
 #include "LevelEditor.h" // CLevelEditor::tr
@@ -20,6 +19,7 @@
 #include "LevelFileUtils.h"
 #include "LevelIndependentFileMan.h"
 #include "Objects/ObjectLayerManager.h"
+#include "PathUtils.h"
 #include "Prefabs/PrefabManager.h"
 #include "Preferences/GeneralPreferences.h"
 #include "QtUtil.h"
@@ -177,9 +177,9 @@ CAssetEditor* CLevelType::Edit(CAsset* pAsset) const
 	return nullptr;
 }
 
-std::vector<string> CLevelType::GetAssetFiles(const CAsset& asset, bool includeSourceFile, bool makeAbsolute) const
+std::vector<string> CLevelType::GetAssetFiles(const CAsset& asset, bool includeSourceFile, bool makeAbsolute, bool includeThumbnail) const
 {
-	std::vector<string> files = CAssetType::GetAssetFiles(asset, includeSourceFile, makeAbsolute);
+	std::vector<string> files = CAssetType::GetAssetFiles(asset, includeSourceFile, makeAbsolute, includeThumbnail);
 
 	if (makeAbsolute)
 	{

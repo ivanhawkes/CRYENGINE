@@ -27,10 +27,11 @@
 #include "ShaderCache.h"
 #include "TerrainLighting.h"
 
+#include <FileUtils.h>
 #include <Notifications/NotificationCenter.h>
+#include <PathUtils.h>
 #include <Preferences/GeneralPreferences.h>
 #include <Util/CryMemFile.h>
-#include <FilePathUtil.h>
 
 #include <CryGame/IGame.h>
 #include <CryGame/IGameFramework.h>
@@ -583,7 +584,7 @@ bool CGameExporter::ExportSvogiData()
 	}
 
 	// completely remove old pak. TODO: support incremental update - update only modified level segments
-	PathUtil::RemoveFile(m_SvogiDataPak.m_sPath);
+	FileUtils::RemoveFile(m_SvogiDataPak.m_sPath);
 
 	if (!OpenLevelPack(m_SvogiDataPak, false))
 	{
@@ -1832,7 +1833,7 @@ void CGameExporter::ExportLevelPerLayerResourceList(const string& path)
 	const auto& layers = GetIEditorImpl()->GetObjectManager()->GetLayersManager()->GetLayers();
 	for (size_t i = 0; i < layers.size(); ++i)
 	{
-		CObjectLayer* pLayer = layers[i];
+		CObjectLayer* pLayer = static_cast<CObjectLayer*>(layers[i]);
 
 		// Only export topmost layers, and make sure they are flagged for exporting
 		if (pLayer->GetParent() || !pLayer->IsExporLayerPak())

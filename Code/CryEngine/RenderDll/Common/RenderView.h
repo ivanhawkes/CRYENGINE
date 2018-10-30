@@ -77,7 +77,8 @@ struct SRenderViewInfo
 	SRenderViewInfo();
 	void     SetCamera(const CCamera& cam, const CCamera& previousCam, Vec2 subpixelShift, float drawNearestFov, float drawNearestFarPlane);
 
-	Matrix44 GetNearestProjection(float nearestFOV, float farPlane, Vec2 subpixelShift);
+	Matrix44 GetReprojection() const;
+	Matrix44 GetNearestProjection(float nearestFOV, float farPlane, Vec2 subpixelShift) const;
 	void     ExtractViewMatrices(const CCamera& cam, Matrix44& view, Matrix44& viewZero, Matrix44& invView) const;
 
 	float    WorldToCameraZ(const Vec3& wP) const;
@@ -140,6 +141,9 @@ public:
 	virtual void       SetShaderRenderingFlags(uint32 nFlags) override { m_shaderRenderingFlags = nFlags; }
 	virtual uint32     GetShaderRenderingFlags() const final           { return m_shaderRenderingFlags; };
 
+	virtual void       SetZoomFactor(float zFactor) override           { m_zFactor = zFactor; }
+	virtual float      GetZoomFactor() const final                     { return m_zFactor; };
+	
 	virtual void       SetCameras(const CCamera* pCameras, int cameraCount) final;
 	virtual void       SetPreviousFrameCameras(const CCamera* pCameras, int cameraCount) final;
 
@@ -210,8 +214,8 @@ public:
 	RenderItems& GetRenderItems(int nRenderList);
 	uint32       GetBatchFlags(int nRenderList) const;
 
-	void         AddRenderItem(CRenderElement* pElem, CRenderObject* RESTRICT_POINTER pObj, const SShaderItem& shaderItem, uint32 nList, uint32 nBatchFlags, const SRenderingPassInfo& passInfo,
-							   SRendItemSorter sorter, bool bShadowPass, bool bForceOpaqueForward) threadsafe;
+	void         AddRenderItem(CRenderElement* pElem, CRenderObject* RESTRICT_POINTER pObj, const SShaderItem& shaderItem, ERenderListID renderList, uint32 nBatchFlags, const SRenderingPassInfo& passInfo,
+							   SRendItemSorter sorter) threadsafe;
 
 	bool       CheckPermanentRenderObjects() const { return !m_permanentObjects.empty(); }
 	void       AddPermanentObjectImpl(CPermanentRenderObject* pObject, const SRenderingPassInfo& passInfo);
@@ -367,13 +371,14 @@ private:
 
 	void                   Job_PostWrite();
 	void                   Job_SortRenderItemsInList(ERenderListID list);
+	SRendItem              PrepareRenderItemForRenderList(const SRendItem& ri, uint32 nBatchFlags, uint64 objFlags, CRenderObject* pObj, float objDistance, ERenderListID list);
 	void                   SortLights();
 	void                   ExpandPermanentRenderObjects();
 	void                   UpdateModifiedShaderItems();
 	void                   ClearTemporaryCompiledObjects();
 	void                   CheckAndScheduleForUpdate(const SShaderItem& shaderItem) threadsafe;
-	template<bool bConcurrent>
-	void                   AddRenderItemToRenderLists(const SRendItem& ri, int nRenderList, CRenderObject* RESTRICT_POINTER pObj, const SShaderItem& shaderItem) threadsafe;
+	template<bool isConcurrent>
+	void                   AddRenderItemToRenderLists(const SRendItem& ri, uint64 objFlags, ERenderListID nRenderList, CRenderObject* RESTRICT_POINTER pObj, const SShaderItem& shaderItem) threadsafe;
 
 	CCompiledRenderObject* AllocCompiledObject(CRenderObject* pObj, CRenderElement* pElem, const SShaderItem& shaderItem);
 
@@ -394,6 +399,7 @@ private:
 	uint32           m_skipRenderingFlags;
 	/// @see EShaderRenderingFlags
 	uint32           m_shaderRenderingFlags;
+	float            m_zFactor = 1.0f;
 
 	int              m_frameId;
 	CTimeValue       m_frameTime;
@@ -402,11 +408,7 @@ private:
 	CRenderView*     m_pParentView;
 
 	RenderItems      m_renderItems[EFSLIST_NUM];
-
-	volatile uint32  m_BatchFlags[EFSLIST_NUM];
-	// For general passes initialized as a pointers to the m_BatchFlags
-	// But for shadow pass it will be a pointer to the shadow frustum side mask
-	//volatile uint32* m_pFlagsPointer[EFSLIST_NUM];
+	volatile uint32  m_batchFlags[EFSLIST_NUM];
 
 	// Resolve passes information
 	STransparentSegments m_transparentSegments[3];
@@ -497,6 +499,8 @@ private:
 	{
 		CCompiledRenderObject* pObject;
 		AABB                   localAABB;
+		uint64                 objFlags;
+		uint16                 elmFlags;
 	};
 	lockfree_add_vector<STemporaryRenderObjectCompilationData> m_temporaryCompiledObjects;
 
@@ -560,6 +564,9 @@ private:
 		void GenerateSortedFrustumsForTiledShadingByScreenspaceOverlap();
 	};
 
+	// A list of auxiliary stat objects to be injected for rendering
+	std::vector<std::pair<SRendParams, IStatObj*>> m_auxiliaryStatObjects;
+
 public:// temp
 	SShadows m_shadows;
 
@@ -573,6 +580,9 @@ public:
 
 	CRenderItemDrawer&       GetDrawer()       { return m_RenderItemDrawer; }
 	const CRenderItemDrawer& GetDrawer() const { return m_RenderItemDrawer; }
+
+	void                                                  InjectAuxiliaryStatObject(SRendParams rp, IStatObj* pStatObj) override { m_auxiliaryStatObjects.emplace_back(std::make_pair(rp, pStatObj)); }
+	const std::vector<std::pair<SRendParams, IStatObj*>> &GetAuxiliaryStatObjects() const override                               { return m_auxiliaryStatObjects; }
 };
 
 template<typename T>

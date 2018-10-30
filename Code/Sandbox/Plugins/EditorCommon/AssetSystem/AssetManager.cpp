@@ -2,26 +2,28 @@
 #include "StdAfx.h"
 #include "AssetManager.h"
 
-#include "AssetImporter.h"
-#include "PakImporter.h"
-#include "AssetGenerator.h"
+#include "AssetEditor.h"
 #include "AssetFileMonitor.h"
+#include "AssetFilesGroupProvider.h"
+#include "AssetGenerator.h"
+#include "AssetImporter.h"
 #include "AssetManagerHelpers.h"
-#include "EditableAsset.h"
-#include "DependencyTracker.h"
-#include "FilePathUtil.h"
-#include "ThreadingUtils.h"
-
-#include "Browser/AssetModel.h"
-#include "Browser/AssetFoldersModel.h"
-#include "Loader/AssetLoaderBackgroundTask.h"
-#include "Loader/AssetLoaderHelpers.h"
 #include "AssetResourceSelector.h"
-#include "SourceFilesTracker.h"
+#include "Browser/AssetFoldersModel.h"
+#include "Browser/AssetModel.h"
+#include "DependencyTracker.h"
+#include "EditableAsset.h"
+#include "EditorFramework/BroadcastManager.h"
 #include "FileOperationsExecutor.h"
 #include "IFilesGroupProvider.h"
-#include "AssetFilesGroupProvider.h"
+#include "Loader/AssetLoaderBackgroundTask.h"
+#include "Loader/AssetLoaderHelpers.h"
+#include "PakImporter.h"
+#include "PathUtils.h"
+#include "SourceFilesTracker.h"
+#include "ThreadingUtils.h"
 
+#include <IEditor.h>
 #include <CrySystem/IConsole.h>
 #include <CryString/CryPath.h>
 
@@ -123,6 +125,7 @@ CAssetManager::CAssetManager()
 	: m_assetModel(nullptr)
 	, m_assetFoldersModel(nullptr)
 	, m_isScanning(false)
+	, m_orderedByGUID(false)
 {
 	s_instance = this;
 	m_assetModel = new CAssetModel();

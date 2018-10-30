@@ -1696,15 +1696,15 @@ void NavigationSystem::ComputeMeshesAccessibility(const NavigationMeshID* pUpdat
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
-	std::vector<std::pair<Vec3, NavigationAgentTypeID>> seeds;
-	seeds.reserve(10);
-	GetAISystem()->GetNavigationSeeds(seeds);
+	std::vector<std::pair<Vec3, NavigationAgentTypeID>> allSeedPoints;
+	std::vector<Vec3> seedPointsAffectingMesh;
+	allSeedPoints.reserve(32);
+	seedPointsAffectingMesh.reserve(32);
+	GetAISystem()->GetNavigationSeeds(allSeedPoints);
 
-	if (seeds.size() == 0)
-		return;
-
-	const float horizontalRange = 1.0f;
-	const float verticalRange = 1.0f;
+	MNM::SOrderedSnappingMetrics snappingMetrics;
+	snappingMetrics.EmplaceMetric(MNM::ESnappingType::Vertical, 1.0f, 1.0f);
+	snappingMetrics.EmplaceMetric(MNM::ESnappingType::Box, 1.0f, 1.0f, 1.0f);
 
 	for (size_t i = 0; i < count; ++i)
 	{
@@ -1716,30 +1716,46 @@ void NavigationSystem::ComputeMeshesAccessibility(const NavigationMeshID* pUpdat
 		NavigationMesh& mesh = m_meshes[meshId];
 		MNM::CNavMesh& navMesh = mesh.navMesh;
 
-		navMesh.GetIslands().ResetSeedConnectivityStates(MNM::CIslands::ESeedConnectivityState::Inaccessible);
+		seedPointsAffectingMesh.clear();
 
-		MNM::IslandConnections::ConnectedIslandsArray connectedIslands;
-
-		for (size_t seedIdx = 0, count = seeds.size(); seedIdx < count; ++seedIdx)
+		for (size_t seedIdx = 0, count = allSeedPoints.size(); seedIdx < count; ++seedIdx)
 		{
-			connectedIslands.clear();
-			
-			if (seeds[seedIdx].second.IsValid() && seeds[seedIdx].second != mesh.agentTypeID)
+			if (allSeedPoints[seedIdx].second.IsValid() && allSeedPoints[seedIdx].second != mesh.agentTypeID)
 				continue;
 
-			if(!IsLocationInMeshVolume(meshId, seeds[seedIdx].first))
+			if (!IsLocationInMeshVolume(meshId, allSeedPoints[seedIdx].first))
 				continue;
 
-			const MNM::TriangleID triangleID = GetClosestMeshLocation(meshId, seeds[seedIdx].first, verticalRange, horizontalRange, nullptr, nullptr, nullptr);
-			MNM::Tile::STriangle triangle;
-			if (!triangleID || !navMesh.GetTriangle(triangleID, triangle) || (triangle.islandID == MNM::Constants::eStaticIsland_InvalidIslandID))
-				continue;
+			seedPointsAffectingMesh.push_back(allSeedPoints[seedIdx].first);
+		}
 
-			const MNM::GlobalIslandID seedIslandID(meshId, triangle.islandID);
-			if (navMesh.GetIslands().GetSeedConnectivityState(triangle.islandID) != MNM::CIslands::ESeedConnectivityState::Accessible)
+		if (seedPointsAffectingMesh.empty())
+		{
+			navMesh.GetIslands().ResetSeedConnectivityStates(MNM::CIslands::ESeedConnectivityState::Accessible);
+		}
+		else
+		{
+			navMesh.GetIslands().ResetSeedConnectivityStates(MNM::CIslands::ESeedConnectivityState::Inaccessible);
+			MNM::IslandConnections::ConnectedIslandsArray connectedIslands;
+
+			for (size_t seedIdx = 0, count = seedPointsAffectingMesh.size(); seedIdx < count; ++seedIdx)
 			{
-				m_islandConnectionsManager.GetIslandConnections().GetConnectedIslands(seedIslandID, connectedIslands);
-				navMesh.GetIslands().SetSeedConnectivityState(connectedIslands.data(), connectedIslands.size(), MNM::CIslands::ESeedConnectivityState::Accessible);
+				connectedIslands.clear();
+
+				MNM::TriangleID triangleID;
+				if (!navMesh.SnapPosition(seedPointsAffectingMesh[seedIdx], snappingMetrics, nullptr, nullptr, &triangleID))
+					continue;
+
+				MNM::Tile::STriangle triangle;
+				if (!triangleID || !navMesh.GetTriangle(triangleID, triangle) || (triangle.islandID == MNM::Constants::eStaticIsland_InvalidIslandID))
+					continue;
+
+				const MNM::GlobalIslandID seedIslandID(meshId, triangle.islandID);
+				if (navMesh.GetIslands().GetSeedConnectivityState(triangle.islandID) != MNM::CIslands::ESeedConnectivityState::Accessible)
+				{
+					m_islandConnectionsManager.GetIslandConnections().GetConnectedIslands(seedIslandID, connectedIslands);
+					navMesh.GetIslands().SetSeedConnectivityState(connectedIslands.data(), connectedIslands.size(), MNM::CIslands::ESeedConnectivityState::Accessible);
+				}
 			}
 		}
 		navMesh.MarkTrianglesNotConnectedToSeeds(m_annotationsLibrary.GetInaccessibleAreaFlag().value);
@@ -1885,42 +1901,72 @@ void NavigationSystem::RemoveAllTrianglesByFlags(const MNM::AreaAnnotation::valu
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
+	const CTimeValue startTime = gEnv->pTimer->GetAsyncTime();
+
 	for (const AgentType& agentType : m_agentTypes)
 	{
-		for (const NavigationVolumeID markupVolumeId : agentType.markups)
+		for (const AgentType::MeshInfo& meshInfo : agentType.meshes)
 		{
-			if(!m_markupsData.validate(markupVolumeId))
-				continue;
+			const NavigationMeshID meshId = meshInfo.id;
+			CRY_ASSERT(m_meshes.validate(meshId));
 
-			MNM::SMarkupVolumeData& markupData = m_markupsData[markupVolumeId];
-			for (MNM::SMarkupVolumeData::MeshTriangles& meshTriangles : markupData.meshTriangles)
+			NavigationMesh& mesh = m_meshes[meshId];
+
+			// Gather all triangle ids that should be updated after triangles are removed from tiles
+			MNM::CNavMesh::TrianglesSetsByTile trianglesToUpdateByTile;
+
+			for (const NavigationVolumeID markupVolumeId : mesh.markups)
 			{
-				if (!m_meshes.validate(meshTriangles.meshId))
+				if (!m_markupsData.validate(markupVolumeId))
 					continue;
 
-				const MNM::CNavMesh& navMesh = m_meshes[meshTriangles.meshId].navMesh;
+				MNM::SMarkupVolumeData& markupData = m_markupsData[markupVolumeId];
+				for (MNM::SMarkupVolumeData::MeshTriangles& meshTriangles : markupData.meshTriangles)
+				{
+					if(meshTriangles.meshId != meshId)
+						continue;
 
-				const auto toRemoveIt = std::remove_if(meshTriangles.triangleIds.begin(), meshTriangles.triangleIds.end(), [&navMesh, flags](const MNM::TriangleID triangleId) {
-					const MNM::AreaAnnotation* pAnnotation = navMesh.GetTriangleAnnotation(triangleId);
-					CRY_ASSERT(pAnnotation);
-					return pAnnotation && pAnnotation->GetFlags() & flags;
-				});
-				meshTriangles.triangleIds.erase(toRemoveIt, meshTriangles.triangleIds.end());
+					for (const MNM::TriangleID triangleId : meshTriangles.triangleIds)
+					{
+						const MNM::TileID tileId = MNM::ComputeTileID(triangleId);
+						trianglesToUpdateByTile[tileId].insert(&meshTriangles.triangleIds);
+					}
+				}
+			}
+
+			// Remove triangles and update triangle ids
+			mesh.navMesh.RemoveTrianglesByFlags(flags, trianglesToUpdateByTile);
+
+			// If a triangle was removed, its triangle id is set to InvalidTriangleID. All such triangles should be removed.
+			for (const NavigationVolumeID markupVolumeId : mesh.markups)
+			{
+				if (!m_markupsData.validate(markupVolumeId))
+					continue;
+
+				MNM::SMarkupVolumeData& markupData = m_markupsData[markupVolumeId];
+				for (auto meshTrianglesIt = markupData.meshTriangles.begin(); meshTrianglesIt != markupData.meshTriangles.end(); ++meshTrianglesIt)
+				{
+					MNM::SMarkupVolumeData::MeshTriangles& meshTriangles = *meshTrianglesIt;
+					if (meshTriangles.meshId == meshId)
+					{
+						const auto toRemoveIt = std::remove(meshTriangles.triangleIds.begin(), meshTriangles.triangleIds.end(), MNM::Constants::InvalidTriangleID);
+						meshTriangles.triangleIds.erase(toRemoveIt, meshTriangles.triangleIds.end());
+
+						if (meshTriangles.triangleIds.empty())
+						{
+							markupData.meshTriangles.erase(meshTrianglesIt);
+							if (markupData.meshTriangles.empty())
+							{
+								m_markupsData.erase(markupVolumeId);
+							}
+						}
+						break;
+					}
+				}
 			}
 		}
 	}
-
-	for (const AgentType& agentType : m_agentTypes)
-	{		
-		for (const AgentType::MeshInfo& meshInfo : agentType.meshes)
-		{
-			if (!m_meshes.validate(meshInfo.id))
-				continue;
-			
-			MNM::CNavMesh& navMesh = m_meshes[meshInfo.id].navMesh;
-			navMesh.RemoveTrianglesByFlags(flags);
-		}
-	}
+	CryLog("Time used by removing NavMesh triangles: %li ms", (gEnv->pTimer->GetAsyncTime() - startTime).GetMilliSecondsAsInt64());
 }
 
 bool NavigationSystem::IsInUse() const
@@ -3766,7 +3812,7 @@ bool NavigationSystem::ReadFromFile(const char* fileName, bool bAfterExporting)
 
 			m_volumesManager.LoadData(file, nFileVersion);
 
-			if (gAIEnv.CVars.MNMRemoveInaccessibleTrianglesOnLoad)
+			if (gAIEnv.CVars.MNMRemoveInaccessibleTrianglesOnLoad && !gEnv->IsEditor())
 			{
 				RemoveAllTrianglesByFlags(m_annotationsLibrary.GetInaccessibleAreaFlag().value);
 			}

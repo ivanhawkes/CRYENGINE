@@ -6,6 +6,8 @@
 #include "FileUtil.h"
 #include "StringHelpers.h"
 #include "CGF/CGFLoader.h"
+#include <vector>
+#include <stack>
 
 namespace
 {
@@ -76,7 +78,7 @@ bool IsCgfLod(const string& cgf)
 //! Removes the read-only attribute and deletes the file. Returns true if successful or file does not exist, otherwise returns false.
 bool DeleteFileIfExists(const string filename)
 {
-	SetFileAttributesA(filename.c_str(), FILE_ATTRIBUTE_ARCHIVE);
+	FileUtil::MakeWritable(filename.c_str());
 	return (DeleteFileA(filename.c_str()) != 0) || (GetLastError() == ERROR_FILE_NOT_FOUND);
 }
 

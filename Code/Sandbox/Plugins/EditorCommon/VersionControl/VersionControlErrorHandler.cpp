@@ -1,6 +1,7 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 #include "StdAfx.h"
 #include "VersionControlErrorHandler.h"
+#include <CrySystem/ISystem.h>
 
 namespace VersionControlErrorHandler
 {
@@ -35,6 +36,12 @@ void Handle(SVersionControlError error)
 		break;
 	case EVersionControlError::InvalidFileName:
 		errorMessage = "Version Control System: Invalid file name";
+		break;
+	case EVersionControlError::OperationFailed:
+		errorMessage = "Version Control System: Operation failed";
+		break;
+	case EVersionControlError::AlreadyCheckedOutByOthers:
+		errorMessage = "Version Control System: Exclusive check out";
 		break;
 	case EVersionControlError::Unknown:
 		errorMessage = "Version Control System: Error";

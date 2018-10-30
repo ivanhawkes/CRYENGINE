@@ -13,7 +13,7 @@ public:
 	void RestoreEntities();
 
 	void OnEntitySpawnedDuringGameMode(const EntityId id) { m_entitiesSpawnedDuringEditorGameMode.emplace(id); }
-	void OnEntityRemovedDuringGameMode(const EntityId id) { m_entitiesSpawnedDuringEditorGameMode.erase(id); }
+	void OnEntityRemovedDuringGameMode(const EntityId id) {	m_entitiesSpawnedDuringEditorGameMode.erase(id); }
 	void RemoveEntitiesSpawnedDuringGameMode();
 
 private:
@@ -39,6 +39,6 @@ private:
 	};
 
 	std::unordered_map<SDoubleGUID, std::unique_ptr<Schematyc::CClassProperties>, HashDoubleGUID> m_componentPropertyCache;
-	std::set<EntityId> m_entitiesSpawnedDuringEditorGameMode;
+	std::unordered_set<EntityId> m_entitiesSpawnedDuringEditorGameMode;
 };
 #endif

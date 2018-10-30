@@ -8,9 +8,12 @@
 #include "AssetSystem/Asset.h"
 #include "AssetSystem/AssetManager.h"
 
-#include "FilePathUtil.h"
+#include "Controls/QuestionDialog.h"
+#include "PathUtils.h"
+#include "QThumbnailView.h"
 #include "QtUtil.h"
-#include "CryString/CryPath.h"
+
+#include <CryString/CryPath.h>
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -136,6 +139,8 @@ QVariant CAssetFoldersModel::data(const QModelIndex& index, int role) const
 			else
 				return folder->m_name;
 		case Qt::DecorationRole:
+			// falls through
+		case QThumbnailsView::s_ThumbnailRole:
 			return CryIcon("icons:General/Folder.ico");
 		case (int)CAssetModel::Roles::TypeCheckRole:
 			return (int)EAssetModelRowType::eAssetModelRow_Folder;
@@ -145,6 +150,8 @@ QVariant CAssetFoldersModel::data(const QModelIndex& index, int role) const
 			return GetPrettyPath(GetPath(folder));
 		case (int)CAssetModel::Roles::InternalPointerRole:
 			return reinterpret_cast<intptr_t>(folder);
+		case QThumbnailsView::s_ThumbnailBackgroundColorRole:
+			return QColor(0x73, 0x73, 0x73);
 		default:
 			return QVariant();
 		}
@@ -159,13 +166,15 @@ bool CAssetFoldersModel::setData(const QModelIndex& index, const QVariant& value
 	{
 		Folder* folder = ToFolder(index);
 		CRY_ASSERT(folder->m_empty);
-		QString newName = value.toString();
-		QString oldName = GetPath(folder);
 
-		if (newName.isEmpty())
+		const QString stringValue = value.toString();
+		if (stringValue.isEmpty())
 		{
 			return false;
 		}
+
+		const QString oldName = GetPath(folder);
+		const QString newName = QtUtil::ToQString(PathUtil::AdjustCasing(QtUtil::ToString(stringValue).c_str()).c_str());
 
 		if (!PathUtil::IsValidFileName(newName))
 		{
@@ -182,7 +191,7 @@ bool CAssetFoldersModel::setData(const QModelIndex& index, const QVariant& value
 		}
 
 		CRY_ASSERT(m_addedFolders.removeOne(oldName));
-		folder->m_name = value.toString();
+		folder->m_name = newName;
 		m_addedFolders.append(GetPath(folder));
 		
 		//Note that due to this model only having one column but thumbnails being another column, the thumbnails will not be updated immediately.
@@ -627,7 +636,6 @@ QModelIndex CAssetFoldersModel::ToIndex(const Folder* pFolder) const
 	return QModelIndex();
 }
 
-
 QModelIndex CAssetFoldersModel::GetProjectAssetsFolderIndex() const
 {
 	// See GetProjectAssetsFolderName().
@@ -636,13 +644,12 @@ QModelIndex CAssetFoldersModel::GetProjectAssetsFolderIndex() const
 
 QString CAssetFoldersModel::CreateFolder(const QString& parentPath)
 {
-	int count = 1;
-	QString newFolderName = tr("New Folder");
+	const QString newFolderBaseName = QtUtil::ToQString(PathUtil::AdjustCasing(QT_TR_NOOP("New Folder")).c_str());
 
-	while (CAssetFoldersModel::GetInstance()->HasSubfolder(parentPath, newFolderName))
+	QString	newFolderName(newFolderBaseName);
+	for (int count = 1; CAssetFoldersModel::GetInstance()->HasSubfolder(parentPath, newFolderName); ++count)
 	{
-		newFolderName = QString(tr("New Folder %1")).arg(count);
-		count++;
+		newFolderName = QString(tr("%1 %2")).arg(newFolderBaseName).arg(count);
 	}
 
 	CreateFolder(parentPath, newFolderName);

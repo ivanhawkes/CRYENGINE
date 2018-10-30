@@ -115,7 +115,8 @@ void CParticleContainer::CopyData(EParticleDataType dstType, EParticleDataType s
 void CParticleContainer::Clear()
 {
 	ParticleFree(m_pData, m_capacity * m_useData.totalSize);
-	new(this) CParticleContainer();
+	m_pData = nullptr;
+	m_capacity = m_lastId = m_firstSpawnId = m_lastSpawnId = m_nextSpawnId = 0;
 }
 
 template<typename TData, typename FnCopy>
@@ -194,12 +195,9 @@ void CParticleContainer::AddParticles(TConstArray<SSpawnEntry> spawnEntries)
 		{
 			auto spawnIds = IOStream(EPDT_SpawnId);
 			for (uint32 i = currentId; i < lastId; ++i)
-				spawnIds[i] = m_nextSpawnId++;
+				spawnIds[i] = m_nextSpawnId + i - currentId;
 		}
-		else
-		{
-			m_nextSpawnId += toAddCount;
-		}
+		m_nextSpawnId += toAddCount;
 
 		if (HasData(EPDT_NormalAge))
 		{

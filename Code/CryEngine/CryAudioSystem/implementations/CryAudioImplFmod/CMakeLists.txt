@@ -7,7 +7,9 @@ sources_platform(ALL)
 add_sources("CryAudioImpl_uber_0.cpp"
 	SOURCE_GROUP "Header Files"
 		"BaseObject.h"
+		"BaseParameter.h"
 		"BaseStandaloneFile.h"
+		"BaseSwitchState.h"
 		"Common.h"
 		"CVars.h"
 		"Debug.h"
@@ -33,7 +35,9 @@ add_sources("CryAudioImpl_uber_0.cpp"
 		"VcaState.h"
 	SOURCE_GROUP "Source Files"
 		"BaseObject.cpp"
+		"BaseParameter.cpp"
 		"BaseStandaloneFile.cpp"
+		"BaseSwitchState.cpp"
 		"Common.cpp"
 		"CryAudioImpl.cpp"
 		"CVars.cpp"
@@ -75,7 +79,6 @@ endif()
 if (ORBIS OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	target_compile_options(${THIS_PROJECT} PRIVATE
 		-Wno-unknown-pragmas
-		-Wno-unused-variable
 		-Wno-reorder
 		-Wno-parentheses
 		-Wno-format
@@ -92,7 +95,6 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(${THIS_PROJECT} PRIVATE
 		-Wno-unused-function
 		-Wno-unused-value
-		-Wno-unused-variable
 		-Wno-sign-compare
 		-Wno-ignored-attributes
 		-Wno-int-in-bool-context

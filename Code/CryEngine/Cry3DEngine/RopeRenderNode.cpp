@@ -889,8 +889,6 @@ void CRopeRenderNode::Render(const SRendParams& rParams, const SRenderingPassInf
 	if (!m_pRenderMesh || m_pRenderMesh->GetVerticesCount() <= 3)
 		return; // false;
 
-	IRenderer* pRend = GetRenderer();
-
 	CRenderObject* pObj = passInfo.GetIRenderView()->AllocateTemporaryRenderObject();
 	if (!pObj)
 		return; // false;
@@ -2078,7 +2076,7 @@ void CRopeRenderNode::SetAudioParams(SRopeAudioParams const& audioParams)
 ///////////////////////////////////////////////////////////////////////////////
 void CRopeRenderNode::OffsetPosition(const Vec3& delta)
 {
-	if (const auto pTempData = m_pTempData.load()) pTempData->OffsetPosition(delta);
+	if (m_pTempData) m_pTempData->OffsetPosition(delta);
 	m_pos += delta;
 	m_worldTM.SetTranslation(m_pos);
 	m_InvWorldTM = m_worldTM.GetInverted();

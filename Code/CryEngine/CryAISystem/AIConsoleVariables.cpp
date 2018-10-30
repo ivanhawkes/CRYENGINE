@@ -107,8 +107,6 @@ void AIConsoleVars::Init()
 
 	DefineConstIntCVarName("ai_UpdateAllAlways", UpdateAllAlways, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
 	                       "If non-zero then over-rides the auto-disabling of invisible/distant AI");
-	DefineConstIntCVarName("ai_UseCalculationStopperCounter", UseCalculationStopperCounter, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
-	                       "Uses a (calibrated) counter instead of time in AI updates");
 
 	// is not cheat protected because it changes during game, depending on your settings
 	REGISTER_CVAR2("ai_UpdateInterval", &AIUpdateInterval, 0.13f, VF_NULL,
@@ -737,7 +735,7 @@ void AIConsoleVars::Init()
 	                       "Any other value is used for the biggest version.");
 
 	DefineConstIntCVarName("ai_MNMRemoveInaccessibleTrianglesOnLoad", MNMRemoveInaccessibleTrianglesOnLoad, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
-		"Defines whether inaccessible triangles should be removed from NavMesh after it is loaded.");
+		"Defines whether inaccessible triangles should be removed from NavMesh after it is loaded (doesn't work in Editor, where the triangles are never removed).");
 
 	DefineConstIntCVarName("ai_SmartPathFollower_useAdvancedPathShortcutting", SmartPathFollower_useAdvancedPathShortcutting, 1, VF_NULL, "Enables a more failsafe way of preventing the AI to shortcut through obstacles (0 = disable, any other value = enable)");
 	DefineConstIntCVarName("ai_SmartPathFollower_useAdvancedPathShortcutting_debug", SmartPathFollower_useAdvancedPathShortcutting_debug, 0, VF_NULL, "Show debug lines for when CVar ai_SmartPathFollower_useAdvancedPathShortcutting_debug is enabled");

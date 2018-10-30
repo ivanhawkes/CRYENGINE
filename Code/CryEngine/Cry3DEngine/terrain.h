@@ -281,7 +281,7 @@ public:
 	Vec3          GetTerrainSurfaceNormal_Int(float x, float y);
 	void          GetTerrainAlignmentMatrix(const Vec3& vPos, const float amount, Matrix33& matrix33);
 	int           GetActiveTextureNodesCount() { return m_lstActiveTextureNodes.Count(); }
-	int           GetActiveProcObjNodesCount(int& objectsNum);
+	int           GetActiveProcObjNodesCount(int& objectsNum, int& maxSectorsNum);
 	int           GetNotReadyTextureNodesCount();
 	void          GetTextureCachesStatus(int& nCount0, int& nCount1) { nCount0 = m_texCache[0].GetPoolSize(); nCount1 = m_texCache[1].GetPoolSize(); }
 
@@ -408,8 +408,12 @@ public:
 	{
 		while (nDataSize & 3)
 		{
+#if defined(USE_CRY_ASSERT)
 			int nRes = GetPak()->FSeek(f, 1, SEEK_CUR);
 			assert(nRes == 0);
+#else
+			GetPak()->FSeek(f, 1, SEEK_CUR);
+#endif
 			assert(nDataSize);
 			nDataSize--;
 		}
@@ -514,6 +518,7 @@ protected:
 
 	PodArray<CTerrainNode*>        m_lstActiveTextureNodes;
 	PodArray<CTerrainNode*>        m_lstActiveProcObjNodes;
+	bool                           m_isOfflineProceduralVegetationReady = false;
 
 	CTextureCache                  m_texCache[3]; // RGB, Normal and Height
 

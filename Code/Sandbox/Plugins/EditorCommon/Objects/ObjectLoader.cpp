@@ -10,6 +10,7 @@
 
 #include <IEditorMaterial.h>
 #include <IUndoManager.h>
+#include <IEditor.h>
 
 #include <CryMovie/IMovieSystem.h>
 #include <CryPhysics/physinterface.h>
@@ -209,18 +210,6 @@ void CObjectArchive::EnableReconstructPrefabObject(bool bEnable)
 	else
 	{
 		m_nFlags &= ~(eObjectLoader_ReconstructPrefabs);
-	}
-}
-
-void CObjectArchive::SetShouldResetInternalMembers(bool reset)
-{
-	if (reset)
-	{
-		m_nFlags |= eObjectLoader_ResetInternalMembers;
-	}
-	else
-	{
-		m_nFlags &= ~(eObjectLoader_ResetInternalMembers);
 	}
 }
 

@@ -3,8 +3,9 @@
 #include "stdafx.h"
 #include "PersonalizationManager.h"
 
-#include "FilePathUtil.h"
+#include "PathUtils.h"
 
+#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 

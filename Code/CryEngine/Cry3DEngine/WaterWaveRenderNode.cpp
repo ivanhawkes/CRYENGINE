@@ -302,7 +302,6 @@ void CWaterWaveRenderNode::Render(const SRendParams& rParam, const SRenderingPas
 		return; // false;
 
 	C3DEngine* p3DEngine(Get3DEngine());
-	IRenderer* pRenderer(GetRenderer());
 
 	// get render objects
 	CRenderObject* pRenderObj(passInfo.GetIRenderView()->AllocateTemporaryRenderObject());
@@ -385,7 +384,7 @@ void CWaterWaveRenderNode::SetRenderMesh(IRenderMesh* pRenderMesh)
 
 void CWaterWaveRenderNode::OffsetPosition(const Vec3& delta)
 {
-	if (const auto pTempData = m_pTempData.load()) pTempData->OffsetPosition(delta);
+	if (m_pTempData) m_pTempData->OffsetPosition(delta);
 	m_pOrigPos += delta;
 	m_pWorldTM.SetTranslation(m_pWorldTM.GetTranslation() + delta);
 	m_pMin += delta;

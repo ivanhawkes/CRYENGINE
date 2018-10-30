@@ -10,6 +10,7 @@
 #include "Objects/EntityObject.h"
 #include "Objects/GeomEntity.h"
 #include "Objects/Group.h"
+#include "Objects/PrefabObject.h"
 #include "Material/Material.h"
 #include "HyperGraph/FlowGraphHelpers.h"
 
@@ -20,11 +21,20 @@
 #include "CryIcon.h"
 #include "QtUtil.h"
 #include "DragDrop.h"
+#include "IEditorImpl.h"
+#include "Objects/ObjectManager.h"
+#include <Cry3DEngine/ISurfaceType.h>
+#include <Cry3DEngine/I3DEngine.h>
+#include <Cry3DEngine/IRenderNode.h>
+#include <CryAnimation/ICryAnimation.h>
+
+#include <QApplication>
 
 namespace LevelModelsAttributes
 {
 CItemModelAttribute s_visibleAttribute("Visible", &Attributes::s_booleanAttributeType, CItemModelAttribute::Visible, true, Qt::Checked, Qt::CheckStateRole);
 CItemModelAttribute s_frozenAttribute("Frozen", &Attributes::s_booleanAttributeType, CItemModelAttribute::Visible, true, Qt::Unchecked, Qt::CheckStateRole);
+CItemModelAttribute s_vcsAttribute("Version Control", &Attributes::s_iconAttributeType);
 CItemModelAttribute s_layerNameAttribute("Layer", &Attributes::s_stringAttributeType);
 CItemModelAttribute s_objectTypeDescAttribute("Type", &Attributes::s_stringAttributeType);
 CItemModelAttribute s_defaultMaterialAttribute("Default Material", &Attributes::s_stringAttributeType, CItemModelAttribute::StartHidden);
@@ -82,6 +92,8 @@ CItemModelAttribute * CLevelLayerModel::GetAttributeForColumn(EObjectColumns col
 		return &LevelModelsAttributes::s_visibleAttribute;
 	case eObjectColumns_Frozen:
 		return &LevelModelsAttributes::s_frozenAttribute;
+	case eObjectColumns_VCS:
+		return &LevelModelsAttributes::s_vcsAttribute;
 	case eObjectColumns_DefaultMaterial:
 		return &LevelModelsAttributes::s_defaultMaterialAttribute;
 	case eObjectColumns_CustomMaterial:
@@ -128,11 +140,14 @@ QVariant CLevelLayerModel::GetHeaderData(int section, Qt::Orientation orientatio
 			return CryIcon("icons:General/Visibility_True.ico");
 		if (section == eObjectColumns_Frozen)
 			return CryIcon("icons:Navigation/Basics_Select_False.ico");
+		if (section == eObjectColumns_VCS)
+			return CryIcon("icons:VersionControl/icon.ico");
 	}
 	if (role == Qt::DisplayRole)
 	{
 		//For Visible and Frozen we use Icons instead
-		if (section == eObjectColumns_Visible || section == eObjectColumns_Frozen || section == eObjectColumns_LayerColor)
+		if (section == eObjectColumns_Visible || section == eObjectColumns_Frozen || section == eObjectColumns_VCS 
+			|| section == eObjectColumns_LayerColor)
 		{
 			return "";
 		}
@@ -153,6 +168,7 @@ QVariant CLevelLayerModel::GetHeaderData(int section, Qt::Orientation orientatio
 		case eObjectColumns_Name:
 		case eObjectColumns_Visible:
 		case eObjectColumns_Frozen:
+		case eObjectColumns_VCS:
 		case eObjectColumns_LayerColor:
 			return "";
 			break;
@@ -231,6 +247,8 @@ QVariant CLevelLayerModel::data(const QModelIndex& index, int role) const
 			{
 				switch (index.column())
 				{
+				case eObjectColumns_VCS:
+					return "-";
 				case eObjectColumns_Name:
 					return (const char*)pObject->GetName();
 				case eObjectColumns_Layer:
@@ -380,8 +398,14 @@ QVariant CLevelLayerModel::data(const QModelIndex& index, int role) const
 			case eObjectColumns_Frozen:
 				return pObject->IsFrozen() ? Qt::Checked : Qt::Unchecked;
 			}
-			break;
 		}
+		break;
+	case Qt::TextAlignmentRole:
+		{
+			if (index.column() == eObjectColumns_VCS)
+				return Qt::AlignCenter;
+		}
+		break;
 	case QAdvancedItemDelegate::s_IconOverrideRole:
 		{
 			CBaseObject* pObject = ObjectFromIndex(index);
@@ -402,8 +426,8 @@ QVariant CLevelLayerModel::data(const QModelIndex& index, int role) const
 			default:
 				break;
 			}
-			break;
 		}
+		break;
 	case QAdvancedItemDelegate::s_DrawRectOverrideRole:
 		{
 			switch (index.column())
@@ -533,7 +557,6 @@ bool CLevelLayerModel::canDropMimeData(const QMimeData* pData, Qt::DropAction ac
 	}
 
 	CBaseObject* pTargetObject = ObjectFromIndex(parent);
-
 	if (pTargetObject)
 	{
 		// Check if our target is invalid
@@ -545,7 +568,23 @@ bool CLevelLayerModel::canDropMimeData(const QMimeData* pData, Qt::DropAction ac
 
 			// If not a group check if it's a valid link target
 			if (!GetIEditorImpl()->IsCGroup(pTargetObject) && !object->CanLinkTo(pTargetObject))
-				return true;
+			{
+			  return true;
+			}
+
+			//find if we have a prefab or a group in the hierarchy, if we do run the safety checks
+			CBaseObject* pFound = pTargetObject;
+			
+			if (!pFound->IsKindOf(RUNTIME_CLASS(CPrefabObject)))
+			{
+				pFound = pFound->GetPrefab();
+			}
+
+			if (pFound)
+			{
+			  //this needs to be inverted as true means not add
+			  return !(static_cast<CPrefabObject*>(pFound))->CanAddMember(object);
+			}
 
 			return false;
 		});
@@ -750,12 +789,14 @@ bool CLevelLayerModel::setData(const QModelIndex& index, const QVariant& value, 
 		case eObjectColumns_Visible:
 			if (role == Qt::CheckStateRole)
 			{
+				CUndo undoVisibility("Set Visibility");
 				pObject->SetVisible(value == Qt::Checked);
 			}
 			break;
 		case eObjectColumns_Frozen:
 			if (role == Qt::CheckStateRole)
 			{
+				CUndo undoFrozen("Set Frozen");
 				pObject->SetFrozen(value == Qt::Checked);
 			}
 			break;

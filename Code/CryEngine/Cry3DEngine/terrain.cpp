@@ -262,10 +262,9 @@ void CTerrain::UpdateNodesIncrementaly(const SRenderingPassInfo& passInfo)
 	// in the editor build all procedural vegetation on level load and make sure it is always up to date
 	if (gEnv->IsEditor())
 	{
-		static bool oldVal = false;
 		const bool newVal = Get3DEngine()->m_supportOfflineProceduralVegetation && (GetCVars()->e_ProcVegetation != 0);
 
-		if (newVal != oldVal)
+		if (newVal != m_isOfflineProceduralVegetationReady)
 		{
 			if (newVal)
 			{
@@ -273,7 +272,7 @@ void CTerrain::UpdateNodesIncrementaly(const SRenderingPassInfo& passInfo)
 				CheckUpdateProcObjectsInArea(GetParentNode()->GetBBox(), true);
 			}
 
-			oldVal = newVal;
+			m_isOfflineProceduralVegetationReady = newVal;
 		}
 	}
 
@@ -363,8 +362,11 @@ void CTerrain::ProcessActiveProcObjNodes(bool bSyncUpdate)
 	}
 }
 
-int CTerrain::GetActiveProcObjNodesCount(int& objectsNum)
+int CTerrain::GetActiveProcObjNodesCount(int& objectsNum, int& maxSectorsNum)
 {
+	maxSectorsNum = GetTerrainSize() / CTerrain::GetSectorSize();
+	maxSectorsNum *= maxSectorsNum;
+
 	objectsNum = 0;
 	for (int i = 0; i < m_lstActiveProcObjNodes.Count(); i++)
 		objectsNum += m_lstActiveProcObjNodes[i]->m_arrProcObjects.Count();
@@ -498,11 +500,7 @@ void CTerrain::GetObjects(PodArray<SRNInfo>* pLstObjects)
 int CTerrain::GetTerrainNodesAmount()
 {
 	//	((N pow l)-1)/(N-1)
-#if defined(__GNUC__)
 	uint64 amount = (uint64)0xaaaaaaaaaaaaaaaaULL;
-#else
-	uint64 amount = (uint64)0xaaaaaaaaaaaaaaaa;
-#endif
 	amount >>= (65 - (GetParentNode()->m_nTreeLevel + 1) * 2);
 	return (int)amount;
 }

@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 #include "AudioControlsLoader.h"
 
+#include "Common.h"
 #include "AudioControlsEditorPlugin.h"
 
 #include <CrySystem/File/CryFile.h>
@@ -53,12 +54,6 @@ EAssetType TagToType_BackwardsComp(char const* const szTag)
 
 	return type;
 }
-
-//////////////////////////////////////////////////////////////////////////
-CAudioControlsLoader::CAudioControlsLoader()
-	: m_errorCodeMask(EErrorCode::None)
-	, m_loadOnlyDefaultControls(false)
-{}
 
 //////////////////////////////////////////////////////////////////////////
 void CAudioControlsLoader::LoadAll(bool const loadOnlyDefaultControls /*= false*/)

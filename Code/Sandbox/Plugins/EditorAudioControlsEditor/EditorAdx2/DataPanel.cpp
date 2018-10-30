@@ -7,8 +7,8 @@
 #include "FilterProxyModel.h"
 #include "ItemModel.h"
 #include "TreeView.h"
+#include "../Common/ModelUtils.h"
 
-#include <ModelUtils.h>
 #include <QFilteringPanel.h>
 #include <QSearchBox.h>
 #include <QtUtil.h>
@@ -26,6 +26,7 @@ namespace Impl
 namespace Adx2
 {
 CryAudio::Impl::Adx2::STriggerInfo g_previewTriggerInfo;
+bool g_isPreviewPlaying = false;
 
 //////////////////////////////////////////////////////////////////////////
 CDataPanel::CDataPanel(CImpl const& impl)
@@ -175,14 +176,19 @@ void CDataPanel::PlayEvent()
 		g_previewTriggerInfo.name = pItem->GetName().c_str();
 		g_previewTriggerInfo.cueSheet = pItem->GetCueSheetName().c_str();
 
-		gEnv->pAudioSystem->ExecutePreviewTrigger(g_previewTriggerInfo);
+		gEnv->pAudioSystem->ExecutePreviewTriggerEx(g_previewTriggerInfo);
+		g_isPreviewPlaying = true;
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CDataPanel::StopEvent()
 {
-	gEnv->pAudioSystem->StopPreviewTrigger();
+	if (g_isPreviewPlaying)
+	{
+		gEnv->pAudioSystem->StopPreviewTrigger();
+		g_isPreviewPlaying = false;
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -200,7 +206,7 @@ void CDataPanel::Reset()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CDataPanel::OnAboutToReload()
+void CDataPanel::OnBeforeReload()
 {
 	m_pTreeView->BackupExpanded();
 	m_pTreeView->BackupSelection();
@@ -208,7 +214,7 @@ void CDataPanel::OnAboutToReload()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CDataPanel::OnReloaded()
+void CDataPanel::OnAfterReload()
 {
 	m_pModel->Reset();
 	m_pTreeView->RestoreExpanded();

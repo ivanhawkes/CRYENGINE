@@ -4,13 +4,14 @@
 
 #include <AssetSystem/Asset.h>
 #include <AssetSystem/EditableAsset.h>
-#include <FilePathUtil.h>
+#include <PathUtils.h>
 
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 
-#include "EditorFramework/Inspector.h"
+#include <EditorFramework/Events.h>
+#include <EditorFramework/Inspector.h>
 #include <LevelEditor/LevelEditorSharedState.h>
 
 #include "SubMaterialView.h"

@@ -72,6 +72,9 @@ void AllocateMemoryPools()
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Environment Connection Pool");
 	CATLEnvironmentImpl::CreateAllocator(g_poolSizes.environmentConnections);
 
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Preload Connection Pool");
+	CATLAudioFileEntry::CreateAllocator(g_poolSizes.preloadConnections);
+
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Setting Connection Pool");
 	CSettingImpl::CreateAllocator(g_poolSizes.settingConnections);
 }
@@ -91,6 +94,7 @@ void FreeMemoryPools()
 	CParameterImpl::FreeMemoryPool();
 	CSwitchStateImpl::FreeMemoryPool();
 	CATLEnvironmentImpl::FreeMemoryPool();
+	CATLAudioFileEntry::FreeMemoryPool();
 	CSettingImpl::FreeMemoryPool();
 }
 
@@ -683,10 +687,20 @@ void CSystem::StopTrigger(ControlId const triggerId /* = CryAudio::InvalidContro
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CSystem::ExecutePreviewTrigger(Impl::ITriggerInfo const& triggerInfo)
+void CSystem::ExecutePreviewTrigger(ControlId const triggerId)
 {
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-	SManagerRequestData<EManagerRequestType::ExecutePreviewTrigger> const requestData(triggerInfo);
+	SManagerRequestData<EManagerRequestType::ExecutePreviewTrigger> const requestData(triggerId);
+	CAudioRequest const request(&requestData);
+	PushRequest(request);
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CSystem::ExecutePreviewTriggerEx(Impl::ITriggerInfo const& triggerInfo)
+{
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	SManagerRequestData<EManagerRequestType::ExecutePreviewTriggerEx> const requestData(triggerInfo);
 	CAudioRequest const request(&requestData);
 	PushRequest(request);
 #endif  // INCLUDE_AUDIO_PRODUCTION_CODE
@@ -1501,6 +1515,27 @@ ERequestStatus CSystem::ProcessManagerRequest(CAudioRequest const& request)
 			SManagerRequestData<EManagerRequestType::ExecutePreviewTrigger> const* const pRequestData =
 				static_cast<SManagerRequestData<EManagerRequestType::ExecutePreviewTrigger> const*>(request.GetData());
 
+			CTrigger const* const pTrigger = stl::find_in_map(g_triggers, pRequestData->triggerId, nullptr);
+
+			if (pTrigger != nullptr)
+			{
+				pTrigger->Execute(g_previewObject, request.pOwner, request.pUserData, request.pUserDataOwner, request.flags);
+				result = ERequestStatus::Success;
+			}
+			else
+			{
+				result = ERequestStatus::FailureInvalidControlId;
+			}
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
+
+			break;
+		}
+	case EManagerRequestType::ExecutePreviewTriggerEx:
+		{
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+			SManagerRequestData<EManagerRequestType::ExecutePreviewTriggerEx> const* const pRequestData =
+				static_cast<SManagerRequestData<EManagerRequestType::ExecutePreviewTriggerEx> const*>(request.GetData());
+
 			g_previewTrigger.Execute(pRequestData->triggerInfo);
 			result = ERequestStatus::Success;
 #endif  // INCLUDE_AUDIO_PRODUCTION_CODE
@@ -1541,7 +1576,7 @@ ERequestStatus CSystem::ProcessManagerRequest(CAudioRequest const& request)
 			{
 				for (auto const pEvent : pObject->GetActiveEvents())
 				{
-					CRY_ASSERT_MESSAGE((pEvent != nullptr) && (pEvent->IsPlaying() || pEvent->IsVirtual()), "Invalid event during EAudioManagerRequestType::ReloadControlsData");
+					CRY_ASSERT_MESSAGE((pEvent != nullptr) && pEvent->IsPlaying(), "Invalid event during EAudioManagerRequestType::ReloadControlsData");
 					pEvent->Stop();
 				}
 			}
@@ -1686,7 +1721,7 @@ ERequestStatus CSystem::ProcessCallbackManagerRequest(CAudioRequest& request)
 				static_cast<SCallbackManagerRequestData<ECallbackManagerRequestType::ReportStartedEvent> const* const>(request.GetData());
 			CATLEvent& audioEvent = pRequestData->audioEvent;
 
-			audioEvent.m_state = EEventState::PlayingDelayed;
+			audioEvent.m_state = pRequestData->isVirtual ? EEventState::Virtual : EEventState::Playing;
 
 			if (audioEvent.m_pAudioObject != g_pObject)
 			{
@@ -1727,31 +1762,7 @@ ERequestStatus CSystem::ProcessCallbackManagerRequest(CAudioRequest& request)
 			SCallbackManagerRequestData<ECallbackManagerRequestType::ReportVirtualizedEvent> const* const pRequestData =
 				static_cast<SCallbackManagerRequestData<ECallbackManagerRequestType::ReportVirtualizedEvent> const* const>(request.GetData());
 
-			pRequestData->audioEvent.m_state = EEventState::Virtual;
-			CATLAudioObject* const pObject = pRequestData->audioEvent.m_pAudioObject;
-
-			if ((pObject->GetFlags() & EObjectFlags::Virtual) == 0)
-			{
-				bool isVirtual = true;
-
-				for (auto const pEvent : pObject->GetActiveEvents())
-				{
-					if (pEvent->m_state != EEventState::Virtual)
-					{
-						isVirtual = false;
-						break;
-					}
-				}
-
-				if (isVirtual)
-				{
-					pObject->SetFlag(EObjectFlags::Virtual);
-
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-					pObject->ResetObstructionRays();
-#endif      // INCLUDE_AUDIO_PRODUCTION_CODE
-				}
-			}
+			pRequestData->audioEvent.SetVirtual();
 
 			result = ERequestStatus::Success;
 
@@ -1762,8 +1773,7 @@ ERequestStatus CSystem::ProcessCallbackManagerRequest(CAudioRequest& request)
 			SCallbackManagerRequestData<ECallbackManagerRequestType::ReportPhysicalizedEvent> const* const pRequestData =
 				static_cast<SCallbackManagerRequestData<ECallbackManagerRequestType::ReportPhysicalizedEvent> const* const>(request.GetData());
 
-			pRequestData->audioEvent.m_state = EEventState::Playing;
-			pRequestData->audioEvent.m_pAudioObject->RemoveFlag(EObjectFlags::Virtual);
+			pRequestData->audioEvent.SetPlaying();
 
 			result = ERequestStatus::Success;
 
@@ -2720,7 +2730,7 @@ void CSystem::HandleDrawDebug()
 
 			if (memAlloc < 1024)
 			{
-				memInfoString.Format("u Byte", memAlloc);
+				memInfoString.Format("%u Byte", memAlloc);
 			}
 			else
 			{
@@ -2744,7 +2754,7 @@ void CSystem::HandleDrawDebug()
 
 				{
 					auto& allocator = CATLStandaloneFile::GetAllocator();
-					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Files");
+					DrawMemoryPoolInfo(pAuxGeom, posX, posY, allocator.GetTotalMemory(), allocator.GetCounts(), "Standalone Files");
 				}
 
 				if (g_debugPoolSizes.triggers > 0)
@@ -2809,7 +2819,7 @@ void CSystem::HandleDrawDebug()
 			if (g_pIImpl != nullptr)
 			{
 				posY += Debug::g_systemHeaderLineHeight;
-				g_pIImpl->DrawDebugInfo(*pAuxGeom, posX, posY);
+				g_pIImpl->DrawDebugInfo(*pAuxGeom, posX, posY, (g_cvars.m_drawAudioDebug & Debug::EDrawFilter::DetailedMemoryInfo) != 0);
 			}
 
 			posY += Debug::g_systemHeaderLineHeight;

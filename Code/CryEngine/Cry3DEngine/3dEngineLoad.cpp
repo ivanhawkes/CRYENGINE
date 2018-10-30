@@ -653,8 +653,11 @@ void C3DEngine::UnloadLevel()
 	stl::free_container(m_collisionClasses);
 
 	CRY_ASSERT(m_lstStaticLights.empty());
+
+#if defined(USE_CRY_ASSERT)
 	for (auto& renderNodes : m_renderNodesToDelete)
 		CRY_ASSERT(renderNodes.empty());
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -854,8 +857,6 @@ I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 		if (IRenderer* pRenderer = m_owner.GetRenderer())
 		{
 			pRenderer->PrecachePostponedTextures();
-			// Let RT to process shaders and textures requested by preloaded materials
-			pRenderer->TryFlush();
 		}
 #else
 		m_owner.Warning("Disabling level texture precaching on Durango");

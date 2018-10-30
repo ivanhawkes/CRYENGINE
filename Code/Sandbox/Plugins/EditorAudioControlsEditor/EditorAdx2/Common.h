@@ -4,6 +4,7 @@
 
 #include "Item.h"
 #include <CryIcon.h>
+#include <CryAudioImplAdx2/GlobalData.h>
 
 namespace ACE
 {
@@ -11,6 +12,9 @@ namespace Impl
 {
 namespace Adx2
 {
+extern CryAudio::Impl::Adx2::SPoolSizes g_connections;
+extern Platforms g_platforms;
+
 static CryIcon s_errorIcon;
 static CryIcon s_aisacControlIcon;
 static CryIcon s_binaryIcon;
