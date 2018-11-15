@@ -1,29 +1,20 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*************************************************************************
--------------------------------------------------------------------------
-Description: 
-
--------------------------------------------------------------------------
-History:
-- 6:11:2009	16:35 : Created by David Ramos
-*************************************************************************/
 #pragma once
-#ifndef __HIT_DEATH_REACTIONS_H
-#define __HIT_DEATH_REACTIONS_H
 
 #include "HitDeathReactionsDefs.h"
 
 #include "Actor.h"										// CActor::KillParams
 #include <IGameRulesSystem.h>					// HitInfo
 #include "PlayerAnimation.h"
+#include "GameCVars.h"
+
+struct IAnimationDatabase;
+struct ICharacterInstance;
+struct EventPhysCollision;
+struct ExplosionInfo;
 
 class CActor;
-struct ICharacterInstance;
-struct ExplosionInfo;
-struct EventPhysCollision;
-class IAnimationDatabase;
-
 class CHitDeathReactions;
 
 //////////////////////////////////////////////////////////////////////////
@@ -295,5 +286,3 @@ private:
 	unsigned char										m_reactionOnCollision;
 	uint8														m_reactionFlags;
 };
-
-#endif // __HIT_DEATH_REACTIONS

@@ -20,6 +20,7 @@
 #include "Particles/ParticleManager.h"
 #include "Prefabs/PrefabEvents.h"
 #include "Prefabs/PrefabManager.h"
+#include "ProjectManagement/UI/SelectProjectDialog.h"
 #include "Terrain/Heightmap.h"
 #include "Terrain/SurfaceType.h"
 #include "Terrain/TerrainGrid.h"
@@ -319,12 +320,7 @@ static void CmdGotoEditor(IConsoleCmdArgs* pArgs)
 	}
 }
 
-bool CGameEngine::Init(
-  bool bPreviewMode,
-  bool bTestMode,
-  bool bShaderCacheGen,
-  const char* sInCmdLine,
-  IInitializeUIInfo* logo)
+bool CGameEngine::Init(bool bPreviewMode, bool bTestMode, bool bShaderCacheGen, const char* sInCmdLine, IInitializeUIInfo* logo)
 {
 	m_pSystemUserCallback = new SSystemUserCallback(logo);
 
@@ -355,6 +351,25 @@ bool CGameEngine::Init(
 
 	// We do this manually in the Editor
 	startupParams.bExecuteCommandLine = false;
+
+	if (strstr(sInCmdLine, "-project") == 0)
+	{
+		CSelectProjectDialog dlg(true);
+		if (dlg.exec() != QDialog::Accepted)
+		{
+			return false;
+		}
+
+		const string projPath = dlg.GetPathToProject();
+		if (projPath.empty())
+		{
+			CRY_ASSERT_MESSAGE(false, "Expected non-empty path to a project");
+			return false;
+		}
+
+		cry_strcat(startupParams.szSystemCmdLine, " -project ");
+		cry_strcat(startupParams.szSystemCmdLine, projPath);
+	}
 
 	if (!CryInitializeEngine(startupParams, true))
 	{
@@ -1191,40 +1206,6 @@ void CGameEngine::GenerateAiAll(uint32 flags)
 	{
 		GenerateAINavigationMesh();
 	}
-
-	wait.Step(95);
-	CryLog("Validating SmartObjects");
-
-	// quick temp code to validate smart objects on level export
-	{
-		static CObjectClassDesc* pClass = GetIEditorImpl()->GetObjectManager()->FindClass("SmartObject");
-		CRY_ASSERT_MESSAGE(pClass != nullptr, "SmartObject class desc not found");
-		//this code now assumes SmartObjects are declared and are inherited from CEntityObject.h.
-		//See SmartObject.h in the SmartObjectsEditor plugin where it will now reside.
-
-		string error;
-		CBaseObjectsArray objects;
-		GetIEditorImpl()->GetObjectManager()->GetObjects(objects);
-
-		CBaseObjectsArray::iterator it, itEnd = objects.end();
-		for (it = objects.begin(); it != itEnd; ++it)
-		{
-			CBaseObject* pBaseObject = *it;
-			if (pBaseObject->GetClassDesc() == pClass)
-			{
-				CEntityObject* pSOEntity = (CEntityObject*)pBaseObject;
-
-				if (!gEnv->pAISystem->GetSmartObjectManager()->ValidateSOClassTemplate(pSOEntity->GetIEntity()))
-				{
-					const Vec3 pos = pSOEntity->GetWorldPos();
-
-					CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "SmartObject '%s' at (%.2f, %.2f, %.2f) is invalid!",
-					           (const char*)pSOEntity->GetName(), pos.x, pos.y, pos.z);
-				}
-			}
-		}
-	}
-
 	wait.Step(100);
 }
 

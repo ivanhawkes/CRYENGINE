@@ -4,6 +4,7 @@
 #include "Object.h"
 #include "Common.h"
 #include "CVars.h"
+#include "Impl.h"
 #include "Environment.h"
 #include "Event.h"
 #include "Listener.h"
@@ -34,14 +35,11 @@ static AkRtpcID const s_relativeVelocityParameterId = AK::SoundEngine::GetIDFrom
 //////////////////////////////////////////////////////////////////////////
 void EndEventCallback(AkCallbackType callbackType, AkCallbackInfo* pCallbackInfo)
 {
-	if (callbackType == AK_EndOfEvent)
+	if ((callbackType == AK_EndOfEvent) && !g_pImpl->IsToBeReleased() && (pCallbackInfo->pCookie != nullptr))
 	{
-		CATLEvent* const pEvent = static_cast<CATLEvent* const>(pCallbackInfo->pCookie);
-
-		if (pEvent != nullptr)
-		{
-			gEnv->pAudioSystem->ReportFinishedEvent(*pEvent, true);
-		}
+		auto const pEvent = static_cast<CEvent* const>(pCallbackInfo->pCookie);
+		pEvent->m_toBeRemoved = true;
+		gEnv->pAudioSystem->ReportFinishedEvent(pEvent->m_event, true);
 	}
 }
 
@@ -62,7 +60,7 @@ void SetParameterById(AkRtpcID const rtpcId, AkRtpcValue const value, AkGameObje
 }
 
 //////////////////////////////////////////////////////////////////////////
-CObject::CObject(AkGameObjectID const id, CObjectTransformation const& transformation)
+CObject::CObject(AkGameObjectID const id, CTransformation const& transformation, char const* const szName)
 	: m_id(id)
 	, m_needsToUpdateEnvironments(false)
 	, m_needsToUpdateVirtualStates(false)
@@ -74,6 +72,9 @@ CObject::CObject(AkGameObjectID const id, CObjectTransformation const& transform
 	, m_position(transformation.GetPosition())
 	, m_previousPosition(transformation.GetPosition())
 	, m_velocity(ZERO)
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	, m_name(szName)
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 {
 	m_auxSendValues.reserve(4);
 
@@ -92,7 +93,7 @@ CObject::~CObject()
 {
 	if ((m_flags& EObjectFlags::TrackRelativeVelocity) != 0)
 	{
-		CRY_ASSERT_MESSAGE(g_numObjectsWithRelativeVelocity > 0, "g_numObjectsWithRelativeVelocity is 0 but an object with relative velocity tracking still exists.");
+		CRY_ASSERT_MESSAGE(g_numObjectsWithRelativeVelocity > 0, "g_numObjectsWithRelativeVelocity is 0 but an object with relative velocity tracking still exists during %s", __FUNCTION__);
 		g_numObjectsWithRelativeVelocity--;
 	}
 }
@@ -116,7 +117,10 @@ void CObject::Update(float const deltaTime)
 		{
 			for (auto const pEvent : m_events)
 			{
-				pEvent->UpdateVirtualState(m_distanceToListener);
+				if (!pEvent->m_toBeRemoved)
+				{
+					pEvent->UpdateVirtualState(m_distanceToListener);
+				}
 			}
 		}
 	}
@@ -128,7 +132,7 @@ void CObject::Update(float const deltaTime)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetTransformation(CObjectTransformation const& transformation)
+void CObject::SetTransformation(CTransformation const& transformation)
 {
 	m_position = transformation.GetPosition();
 
@@ -159,10 +163,10 @@ void CObject::SetTransformation(CObjectTransformation const& transformation)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
+void CObject::SetEnvironment(IEnvironmentConnection const* const pIEnvironmentConnection, float const amount)
 {
 	static float const envEpsilon = 0.0001f;
-	CEnvironment const* const pEnvironment = static_cast<CEnvironment const* const>(pIEnvironment);
+	auto const pEnvironment = static_cast<CEnvironment const*>(pIEnvironmentConnection);
 
 	if (pEnvironment != nullptr)
 	{
@@ -234,13 +238,13 @@ void CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float cons
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetParameter(IParameter const* const pIParameter, float const value)
+void CObject::SetParameter(IParameterConnection const* const pIParameterConnection, float const value)
 {
-	CParameter const* const pParameter = static_cast<CParameter const* const>(pIParameter);
+	auto const pParameter = static_cast<CParameter const*>(pIParameterConnection);
 
 	if (pParameter != nullptr)
 	{
-		AkRtpcValue rtpcValue = static_cast<AkRtpcValue>(pParameter->mult * value + pParameter->shift);
+		auto const rtpcValue = static_cast<AkRtpcValue>(pParameter->mult * value + pParameter->shift);
 
 		AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(pParameter->id, rtpcValue, m_id);
 
@@ -261,9 +265,9 @@ void CObject::SetParameter(IParameter const* const pIParameter, float const valu
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetSwitchState(ISwitchState const* const pISwitchState)
+void CObject::SetSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
 {
-	CSwitchState const* const pSwitchState = static_cast<CSwitchState const* const>(pISwitchState);
+	auto const pSwitchState = static_cast<CSwitchState const*>(pISwitchStateConnection);
 
 	if (pSwitchState != nullptr)
 	{
@@ -343,7 +347,7 @@ void CObject::SetSwitchState(ISwitchState const* const pISwitchState)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
+void CObject::SetOcclusion(float const occlusion)
 {
 	if (m_id != g_globalObjectId)
 	{
@@ -351,7 +355,7 @@ void CObject::SetObstructionOcclusion(float const obstruction, float const occlu
 		{
 			AKRESULT const wwiseResult = AK::SoundEngine::SetObjectObstructionAndOcclusion(
 				m_id,
-				g_listenerId,                     // Set obstruction/occlusion for only the default listener for now.
+				g_listenerId,                     // Set occlusion for only the default listener for now.
 				static_cast<AkReal32>(occlusion), // The occlusion value is currently used on obstruction as well until a correct obstruction value is calculated.
 				static_cast<AkReal32>(occlusion));
 
@@ -360,19 +364,19 @@ void CObject::SetObstructionOcclusion(float const obstruction, float const occlu
 				Cry::Audio::Log(
 					ELogType::Warning,
 					"Wwise - failed to set Obstruction %f and Occlusion %f on object %" PRISIZE_T,
-					obstruction,
+					occlusion,
 					occlusion,
 					m_id);
 			}
 		}
 		else
 		{
-			Cry::Audio::Log(ELogType::Warning, "Wwise - invalid listener Id during SetObjectObstructionAndOcclusion!");
+			Cry::Audio::Log(ELogType::Warning, "Wwise - invalid listener Id during %s!", __FUNCTION__);
 		}
 	}
 	else
 	{
-		Cry::Audio::Log(ELogType::Error, "Trying to set occlusion and obstruction values on the global object!");
+		Cry::Audio::Log(ELogType::Error, "Trying to set occlusion value on the global object!");
 	}
 }
 
@@ -398,12 +402,12 @@ void CObject::SetOcclusionType(EOcclusionType const occlusionType)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent)
+ERequestStatus CObject::ExecuteTrigger(ITriggerConnection const* const pITriggerConnection, IEvent* const pIEvent)
 {
 	ERequestStatus result = ERequestStatus::Failure;
 
-	CTrigger const* const pTrigger = static_cast<CTrigger const* const>(pITrigger);
-	CEvent* const pEvent = static_cast<CEvent* const>(pIEvent);
+	auto const pTrigger = static_cast<CTrigger const*>(pITriggerConnection);
+	auto const pEvent = static_cast<CEvent*>(pIEvent);
 
 	if ((pTrigger != nullptr) && (pEvent != nullptr))
 	{
@@ -416,10 +420,19 @@ ERequestStatus CObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* 
 			PostEnvironmentAmounts();
 		}
 
-		AkPlayingID const id = AK::SoundEngine::PostEvent(pTrigger->m_id, objectId, AK_EndOfEvent, &EndEventCallback, &pEvent->m_atlEvent);
+		AkPlayingID const id = AK::SoundEngine::PostEvent(pTrigger->m_id, objectId, AK_EndOfEvent, &EndEventCallback, pEvent);
 
 		if (id != AK_INVALID_PLAYING_ID)
 		{
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+			pEvent->SetName(pTrigger->GetName());
+
+			{
+				CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+				g_playingIds[id] = pEvent;
+			}
+#endif      // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
 			pEvent->m_id = id;
 			pEvent->m_pObject = this;
 			pEvent->m_maxAttenuation = pTrigger->m_maxAttenuation;
@@ -440,7 +453,7 @@ ERequestStatus CObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* 
 	}
 	else
 	{
-		Cry::Audio::Log(ELogType::Error, "Invalid AudioObjectData, ATLTriggerData or EventData passed to the Wwise implementation of ExecuteTrigger.");
+		Cry::Audio::Log(ELogType::Error, "Invalid AudioObjectData, TriggerData or EventData passed to the Wwise implementation of ExecuteTrigger.");
 	}
 
 	return result;
@@ -466,13 +479,13 @@ void CObject::StopAllTriggers()
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::PlayFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CObject::PlayFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
 	return ERequestStatus::Failure;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::StopFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CObject::StopFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
 	return ERequestStatus::Failure;
 }
@@ -488,6 +501,8 @@ ERequestStatus CObject::SetName(char const* const szName)
 
 	wwiseResult = AK::SoundEngine::RegisterGameObj(m_id, szName);
 	CRY_ASSERT(wwiseResult == AK_Success);
+
+	m_name = szName;
 
 	return ERequestStatus::SuccessNeedsRefresh;
 #else
@@ -685,7 +700,7 @@ void CObject::ToggleFunctionality(EObjectFunctionality const type, bool const en
 						m_flags &= ~EObjectFlags::TrackRelativeVelocity;
 						SetParameterById(s_relativeVelocityParameterId, 0.0f, m_id);
 
-						CRY_ASSERT_MESSAGE(g_numObjectsWithRelativeVelocity > 0, "g_numObjectsWithRelativeVelocity is 0 but an object with relative velocity tracking still exists.");
+						CRY_ASSERT_MESSAGE(g_numObjectsWithRelativeVelocity > 0, "g_numObjectsWithRelativeVelocity is 0 but an object with relative velocity tracking still exists during %s", __FUNCTION__);
 						g_numObjectsWithRelativeVelocity--;
 					}
 				}

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <ITriggerConnection.h>
 #include <PoolObject.h>
 
 namespace CryAudio
@@ -20,7 +20,7 @@ enum class EEventType : EnumFlagsType
 	Resume,
 };
 
-class CTrigger final : public ITrigger, public CPoolObject<CTrigger, stl::PSyncNone>
+class CTrigger final : public ITriggerConnection, public CPoolObject<CTrigger, stl::PSyncNone>
 {
 public:
 
@@ -36,16 +36,23 @@ public:
 		FMOD::Studio::EventDescription* const pEventDescription,
 		FMOD_GUID const guid,
 		bool const hasProgrammerSound = false,
-		char const* const szKey = "");
+		char const* const szKey = "")
+		: m_id(id)
+		, m_eventType(eventType)
+		, m_pEventDescription(pEventDescription)
+		, m_guid(guid)
+		, m_hasProgrammerSound(hasProgrammerSound)
+		, m_key(szKey)
+	{}
 
 	virtual ~CTrigger() override = default;
 
-	// CryAudio::Impl::ITrigger
+	// CryAudio::Impl::ITriggerConnection
 	virtual ERequestStatus Load()  const override                            { return ERequestStatus::Success; }
 	virtual ERequestStatus Unload() const override                           { return ERequestStatus::Success; }
 	virtual ERequestStatus LoadAsync(IEvent* const pIEvent) const override   { return ERequestStatus::Success; }
 	virtual ERequestStatus UnloadAsync(IEvent* const pIEvent) const override { return ERequestStatus::Success; }
-	// ~CryAudio::Impl::ITrigger
+	// ~CryAudio::Impl::ITriggerConnection
 
 	uint32                                       GetId() const               { return m_id; }
 	EEventType                                   GetEventType() const        { return m_eventType; }
@@ -63,11 +70,6 @@ private:
 	bool const                                  m_hasProgrammerSound;
 	CryFixedStringT<MaxControlNameLength> const m_key;
 };
-
-using ParameterIdToIndex = std::map<uint32, int>;
-using TriggerToParameterIndexes = std::map<CTrigger const* const, ParameterIdToIndex>;
-
-extern TriggerToParameterIndexes g_triggerToParameterIndexes;
 } // namespace Fmod
 } // namespace Impl
 } // namespace CryAudio

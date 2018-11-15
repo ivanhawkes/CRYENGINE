@@ -27,7 +27,6 @@
 #include <CryCore/Platform/CryLibrary.h>
 #include <CryCore/Platform/platform_impl.inl>
 
-#include "AIDebugRenderer.h"
 #include "GameRulesSystem.h"
 #include "ScriptBind_ActorSystem.h"
 #include "ScriptBind_ItemSystem.h"
@@ -48,8 +47,6 @@
 #include "Network/GameStatsConfig.h"
 #include "Network/NetworkStallTicker.h"
 
-#include "AI/AIProxyManager.h"
-#include "AI/BehaviorTreeNodes_Action.h"
 #include <CryAISystem/ICommunicationManager.h>
 #include <CryAISystem/IFactionMap.h>
 #include <CryAISystem/BehaviorTree/IBehaviorTree.h>
@@ -72,9 +69,6 @@
 
 #include "DevMode.h"
 #include "ActionGame.h"
-
-#include "AIHandler.h"
-#include "AIProxy.h"
 
 #include "CryActionCVars.h"
 
@@ -129,6 +123,9 @@
 #include "CheckPoint/CheckPointSystem.h"
 #include "GameSession/GameSessionHandler.h"
 
+#include "AI/BehaviorTreeNodes_Action.h"
+#include "AIDebugRenderer.h"
+
 #include "AnimationGraph/DebugHistory.h"
 
 #include "PlayerProfiles/PlayerProfileManager.h"
@@ -146,9 +143,6 @@
 
 #include "SimpleHttpServer/SimpleHttpServerListener.h"
 #include "SimpleHttpServer/SimpleHttpServerWebsocketEchoListener.h"
-
-#include "SignalTimers/SignalTimers.h"
-#include "RangeSignalingSystem/RangeSignaling.h"
 
 #include "LivePreview/RealtimeRemoteUpdate.h"
 
@@ -311,7 +305,8 @@ CCryAction::CCryAction(SSystemInitParams& initParams)
 	m_pCallbackTimer(0),
 	m_pLanQueryListener(0),
 	m_pDevMode(0),
-	m_pTimeDemoRecorder(0),
+	m_pTimeDemoRecorder(nullptr),
+	m_pDefaultTimeDemoRecorder(nullptr),
 	m_pGameQueryListener(0),
 	m_pRuntimeAreaManager(NULL),
 	m_pScriptA(0),
@@ -335,9 +330,7 @@ CCryAction::CCryAction(SSystemInitParams& initParams)
 	m_pMaterialEffectsCVars(0),
 	m_pEnableLoadingScreen(0),
 	m_pShowLanBrowserCVAR(0),
-	m_pDebugSignalTimers(0),
 	m_pAsyncLevelLoad(0),
-	m_pDebugRangeSignaling(0),
 	m_bShowLanBrowser(false),
 	m_isEditing(false),
 	m_bScheduleLevelEnd(false),
@@ -358,7 +351,6 @@ CCryAction::CCryAction(SSystemInitParams& initParams)
 	m_pAINetworkDebugRenderer(0),
 	m_pCooperativeAnimationManager(NULL),
 	m_pGameSessionHandler(0),
-	m_pAIProxyManager(0),
 	m_pCustomActionManager(0),
 	m_pCustomEventManager(0),
 	m_pPhysicsQueues(0),
@@ -403,12 +395,6 @@ void CCryAction::DumpMapsCmd(IConsoleCmdArgs* args)
 		CryLogAlways("  %s [$9%s$o] Scan:%.4s Level:%.4s", level->GetName(), level->GetPath(), (char*)&scanTag, (char*)&levelTag);
 	}
 #endif
-}
-//------------------------------------------------------------------------
-
-void CCryAction::ReloadReadabilityXML(IConsoleCmdArgs*)
-{
-	CAIFaceManager::LoadStatic();
 }
 
 //------------------------------------------------------------------------
@@ -1856,7 +1842,8 @@ bool CCryAction::Initialize(SSystemInitParams& startupParams)
 	if (m_pSystem->IsDevMode())
 		m_pDevMode = new CDevMode();
 
-	m_pTimeDemoRecorder = new CTimeDemoRecorder();
+	m_pDefaultTimeDemoRecorder = stl::make_unique<CTimeDemoRecorder>();
+	SetITimeDemoRecorder(m_pDefaultTimeDemoRecorder.get());
 
 	CScriptRMI::RegisterCVars();
 	CGameObject::CreateCVars();
@@ -1954,9 +1941,6 @@ bool CCryAction::Initialize(SSystemInitParams& startupParams)
 	m_pCustomActionManager = new CCustomActionManager();
 	m_pCustomEventManager = new CCustomEventManager();
 
-	CRangeSignaling::Create();
-	CSignalTimer::Create();
-
 	IMovieSystem* movieSys = gEnv->pMovieSystem;
 	if (movieSys != NULL)
 		movieSys->SetUser(m_pViewSystem);
@@ -1977,10 +1961,6 @@ bool CCryAction::Initialize(SSystemInitParams& startupParams)
 	}
 
 	InitScriptBinds();
-
-	///Disabled as we now use the communication manager exclusively for readabilities
-	//CAIHandler::s_ReadabilityManager.Reload();
-	CAIFaceManager::LoadStatic();
 
 	// m_pGameRulesSystem = new CGameRulesSystem(m_pSystem, this);
 
@@ -2175,25 +2155,7 @@ void CCryAction::InitGameType(bool multiplayer, bool fromInit)
 		if (m_pGameSerialize)
 			m_pGameSerialize->RegisterFactories(this);
 	}
-
-	ICVar* pEnableAI = gEnv->pConsole->GetCVar("sv_AISystem");
-	if (!multiplayer || (pEnableAI && pEnableAI->GetIVal()))
-	{
-		if (!m_pAIProxyManager)
-		{
-			m_pAIProxyManager = new CAIProxyManager;
-			m_pAIProxyManager->Init();
-		}
-	}
-	else
 #endif
-	{
-		if (m_pAIProxyManager)
-		{
-			m_pAIProxyManager->Shutdown();
-			SAFE_DELETE(m_pAIProxyManager);
-		}
-	}
 }
 
 static std::vector<const char*> gs_lipSyncExtensionNamesForExposureToEditor;
@@ -2228,8 +2190,6 @@ bool CCryAction::CompleteInit()
 	if (m_pGameplayAnalyst)
 		m_pGameplayRecorder->RegisterListener(m_pGameplayAnalyst);
 
-	CRangeSignaling::ref().Init();
-	CSignalTimer::ref().Init();
 	// ---------------------------
 
 	m_pMaterialEffects = new CMaterialEffects();
@@ -2241,13 +2201,6 @@ bool CCryAction::CompleteInit()
 	m_pBreakableGlassSystem = new CBreakableGlassSystem();
 
 	InitForceFeedbackSystem();
-
-	ICVar* pEnableAI = gEnv->pConsole->GetCVar("sv_AISystem");
-	if (!gEnv->bMultiplayer || (pEnableAI && pEnableAI->GetIVal()))
-	{
-		m_pAIProxyManager = new CAIProxyManager;
-		m_pAIProxyManager->Init();
-	}
 
 	// in pure game mode we load the equipment packs from disk
 	// in editor mode, this is done in GameEngine.cpp
@@ -2387,6 +2340,12 @@ void CCryAction::ReleaseScriptBinds()
 }
 
 //------------------------------------------------------------------------
+IScriptTable* CCryAction::GetActionScriptBindTable()
+{ 
+	return m_pScriptA ? m_pScriptA->GetMethodsTable() : nullptr; 
+}
+
+//------------------------------------------------------------------------
 bool CCryAction::ShutdownGame()
 {
 	// unload game dll if present
@@ -2497,7 +2456,8 @@ void CCryAction::ShutDown()
 	SAFE_DELETE(m_pAnimationGraphCvars);
 	SAFE_DELETE(m_pGameObjectSystem);
 	SAFE_DELETE(m_pMannequin);
-	SAFE_DELETE(m_pTimeDemoRecorder);
+	SetITimeDemoRecorder(nullptr);
+	m_pDefaultTimeDemoRecorder.reset();
 	SAFE_DELETE(m_pGameSerialize);
 	SAFE_DELETE(m_pPersistantDebug);
 	SAFE_DELETE(m_pPlayerProfileManager);
@@ -2520,15 +2480,6 @@ void CCryAction::ShutDown()
 
 	SAFE_DELETE(m_pDevMode);
 	SAFE_DELETE(m_pCallbackTimer);
-
-	CSignalTimer::Shutdown();
-	CRangeSignaling::Shutdown();
-
-	if (m_pAIProxyManager)
-	{
-		m_pAIProxyManager->Shutdown();
-		SAFE_DELETE(m_pAIProxyManager);
-	}
 
 	SAFE_DELETE(m_pNetMsgDispatcher);
 	SAFE_DELETE(m_pEntityContainerMgr);
@@ -2752,15 +2703,6 @@ bool CCryAction::PostSystemUpdate(bool haveFocus, CEnumFlags<ESystemUpdateFlags>
 		continueRunning = pGame->Update(haveFocus, updateFlags.UnderlyingValue()) > 0;
 	}
 
-	if (!updateFlags.Check(ESYSUPDATE_EDITOR_ONLY)  && updateFlags.Check(ESYSUPDATE_EDITOR_AI_PHYSICS) && !gEnv->bMultiplayer)
-	{
-		CRangeSignaling::ref().SetDebug(m_pDebugRangeSignaling->GetIVal() == 1);
-		CRangeSignaling::ref().Update(frameTime);
-
-		CSignalTimer::ref().SetDebug(m_pDebugSignalTimers->GetIVal() == 1);
-		CSignalTimer::ref().Update(frameTime);
-	}
-
 	return continueRunning;
 }
 
@@ -2854,12 +2796,6 @@ void CCryAction::PostRender(CEnumFlags<ESystemUpdateFlags> updateFlags)
 	const bool bInLevelLoad = IsInLevelLoad();
 	if (!bInLevelLoad)
 		m_pGameObjectSystem->PostUpdate(delta);
-
-	CRangeSignaling::ref().SetDebug(m_pDebugRangeSignaling->GetIVal() == 1);
-	CRangeSignaling::ref().Update(delta);
-
-	CSignalTimer::ref().SetDebug(m_pDebugSignalTimers->GetIVal() == 1);
-	CSignalTimer::ref().Update(delta);
 }
 
 void CCryAction::PostRenderSubmit()
@@ -3712,9 +3648,6 @@ void CCryAction::OnEditorSetGameMode(int iMode)
 	if (GetIForceFeedbackSystem())
 		GetIForceFeedbackSystem()->StopAllEffects();
 
-	CRangeSignaling::ref().OnEditorSetGameMode(iMode != 0);
-	CSignalTimer::ref().OnEditorSetGameMode(iMode != 0);
-
 	if (m_pCooperativeAnimationManager)
 	{
 		m_pCooperativeAnimationManager->Reset();
@@ -3767,9 +3700,6 @@ void CCryAction::InitCVars()
 	REGISTER_FLOAT("g_breakImpulseScale", 1.0f, VF_REQUIRE_LEVEL_RELOAD, "How big do explosions need to be to break things?");
 	REGISTER_INT("g_breakage_particles_limit", 200, 0, "Imposes a limit on particles generated during 2d surfaces breaking");
 	REGISTER_FLOAT("c_shakeMult", 1.0f, VF_CHEAT, "");
-
-	m_pDebugSignalTimers = REGISTER_INT("ai_DebugSignalTimers", 0, VF_CHEAT, "Enable Signal Timers Debug Screen");
-	m_pDebugRangeSignaling = REGISTER_INT("ai_DebugRangeSignaling", 0, VF_CHEAT, "Enable Range Signaling Debug Screen");
 
 	m_pAsyncLevelLoad = REGISTER_INT("g_asynclevelload", 0, VF_CONST_CVAR, "Enable asynchronous level loading");
 	REGISTER_INT("g_levelLoadTimeSliced", 0, VF_NULL, "Enable time-sliced level loading");
@@ -3863,7 +3793,6 @@ void CCryAction::InitCommands()
 	REGISTER_COMMAND("map", MapCmd, VF_BLOCKFRAME, "Load a map");
 	
 	// for testing purposes
-	REGISTER_COMMAND("readabilityReload", ReloadReadabilityXML, 0, "Reloads readability xml files.");
 	REGISTER_COMMAND("unload", UnloadCmd, 0, "Unload current map");
 	REGISTER_COMMAND("dump_maps", DumpMapsCmd, 0, "Dumps currently scanned maps");
 	REGISTER_COMMAND("play", PlayCmd, 0, "Play back a recorded game");
@@ -4274,6 +4203,25 @@ IRealtimeRemoteUpdate* CCryAction::GetIRealTimeRemoteUpdate()
 ITimeDemoRecorder* CCryAction::GetITimeDemoRecorder() const
 {
 	return m_pTimeDemoRecorder;
+}
+
+ITimeDemoRecorder* CCryAction::SetITimeDemoRecorder(ITimeDemoRecorder* pRecorder)
+{
+	if (m_pTimeDemoRecorder != pRecorder)
+	{
+		if (m_pTimeDemoRecorder)
+		{
+			m_pTimeDemoRecorder->OnUnregistered();
+		}
+
+		std::swap(m_pTimeDemoRecorder, pRecorder);
+
+		if (m_pTimeDemoRecorder)
+		{
+			m_pTimeDemoRecorder->OnRegistered();
+		}
+	}
+	return pRecorder;
 }
 
 IPlayerProfileManager* CCryAction::GetIPlayerProfileManager()
@@ -5082,8 +5030,10 @@ bool CCryAction::IsImmersiveMPEnabled()
 //////////////////////////////////////////////////////////////////////////
 bool CCryAction::IsInTimeDemo()
 {
-	if (m_pTimeDemoRecorder && m_pTimeDemoRecorder->IsTimeDemoActive())
-		return true;
+	if (m_pTimeDemoRecorder)
+	{
+		 return m_pTimeDemoRecorder->IsChainLoading() || m_pTimeDemoRecorder->IsPlaying() || m_pTimeDemoRecorder->IsRecording();
+	}
 	return false;
 }
 
@@ -5124,11 +5074,6 @@ ISerializeHelper* CCryAction::GetSerializeHelper() const
 	return new CXmlSerializeHelper();
 }
 
-CSignalTimer* CCryAction::GetSignalTimer()
-{
-	return (&(CSignalTimer::ref()));
-}
-
 ICooperativeAnimationManager* CCryAction::GetICooperativeAnimationManager()
 {
 	return m_pCooperativeAnimationManager;
@@ -5162,17 +5107,6 @@ IGameSessionHandler* CCryAction::GetIGameSessionHandler()
 		m_pGameSessionHandler = new CGameSessionHandler();
 	}
 	return m_pGameSessionHandler;
-}
-
-CRangeSignaling* CCryAction::GetRangeSignaling()
-{
-	return (&(CRangeSignaling::ref()));
-}
-
-IAIActorProxy* CCryAction::GetAIActorProxy(EntityId id) const
-{
-	assert(m_pAIProxyManager);
-	return m_pAIProxyManager->GetAIActorProxy(id);
 }
 
 void CCryAction::OnBreakageSpawnedEntity(IEntity* pEntity, IPhysicalEntity* pPhysEntity, IPhysicalEntity* pSrcPhysEntity)

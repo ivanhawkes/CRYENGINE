@@ -16,6 +16,20 @@ struct SComponentParams;
 class CParticleComponentRuntime;
 struct SInstance;
 
+enum EFeatureType
+{
+	EFT_Generic = 0,          // this feature does nothing in particular. Can have many of this per component.
+	EFT_Spawn   = BIT(0),     // this feature spawns particles. At least one is needed in a component.
+	EFT_Life    = BIT(1),     // this feature changes particles life time. At least one is required per component.
+	EFT_Render  = BIT(2),     // this feature renders particles. Each component can only have either none or just one of this.
+	EFT_Effect  = BIT(3),     // this feature renders particles. Each component can only have either none or just one of this.
+	EFT_Size    = BIT(4),     // this feature changes particles sizes. At least one is required per component.
+	EFT_Motion  = BIT(5),     // this feature moves particles around. Each component can only have either none or just one of this.
+	EFT_Child   = BIT(6),     // this feature spawns instances from parent particles. At least one is needed for child components
+
+	EFT_END     = BIT(7)
+};
+
 class CParticleFeature : public IParticleFeature
 {
 public:
@@ -72,6 +86,8 @@ public:
 
 	virtual void PostInitParticles(CParticleComponentRuntime& runtime) {}
 
+	virtual void PastUpdateParticles(CParticleComponentRuntime& runtime) {}
+
 	virtual void DestroyParticles(CParticleComponentRuntime& runtime) {}
 
 	// Particle update
@@ -117,6 +133,7 @@ struct SFeatureDispatchers
 	TFeatureDispatcher<CParticleComponentRuntime&> PreInitParticles { &CParticleFeature::PreInitParticles };
 	TFeatureDispatcher<CParticleComponentRuntime&> InitParticles { &CParticleFeature::InitParticles };
 	TFeatureDispatcher<CParticleComponentRuntime&> PostInitParticles { &CParticleFeature::PostInitParticles };
+	TFeatureDispatcher<CParticleComponentRuntime&> PastUpdateParticles { &CParticleFeature::PastUpdateParticles };
 	TFeatureDispatcher<CParticleComponentRuntime&> DestroyParticles { &CParticleFeature::DestroyParticles };
 
 	TFeatureDispatcher<CParticleComponentRuntime&> PreUpdateParticles { &CParticleFeature::PreUpdateParticles };

@@ -6,6 +6,7 @@ start_sources()
 sources_platform(ALL)
 add_sources("CryAudioImpl_uber_0.cpp"
 	SOURCE_GROUP "Header Files"
+		"AuxThread.h"
 		"Common.h"
 		"CVars.h"
 		"Debug.h"
@@ -25,21 +26,17 @@ add_sources("CryAudioImpl_uber_0.cpp"
 		"SwitchState.h"
 		"Trigger.h"
 	SOURCE_GROUP "Source Files"
+		"AuxThread.cpp"
 		"Common.cpp"
 		"CryAudioImpl.cpp"
 		"CVars.cpp"
 		"Debug.cpp"
 		"Environment.cpp"
 		"Event.cpp"
-		"File.cpp"
 		"FileIOHandler.cpp"
 		"Impl.cpp"
 		"Listener.cpp"
 		"Object.cpp"
-		"Parameter.cpp"
-		"Setting.cpp"
-		"StandaloneFile.cpp"
-		"SwitchState.cpp"
 		"Trigger.cpp"
 )
 
@@ -157,6 +154,7 @@ if (AUDIO_WWISE)
 		iZTrashFiltersFX
 		iZTrashMultibandDistortionFX
 		AuroHeadphoneFX
+		ResonanceAudioFX
 	)
 
 	set( COMMON_WWISE_LIBS ${WWISE_CORE_LIBS} ${WWISE_PLUGIN_LIBS} )
@@ -199,8 +197,6 @@ if (AUDIO_WWISE)
 
 	set( ANDROID_RELEASE_LIBS ${COMMON_WWISE_LIBS} ${ANDROID_WWISE_LIBS} )
 	set( ANDROID_NONRELEASE_LIBS ${COMM_CENTRAL_LIBS} ${ANDROID_RELEASE_LIBS} )
-
-	target_compile_definitions(${THIS_PROJECT} PRIVATE -DWWISE_FOR_$<UPPER_CASE:$<CONFIG>>)
 	
 	foreach(wwise_lib ${${WWISE_PLATFORM_PREFIX}_RELEASE_LIBS})
 		target_link_libraries( ${THIS_PROJECT} PRIVATE optimized ${wwise_lib} )

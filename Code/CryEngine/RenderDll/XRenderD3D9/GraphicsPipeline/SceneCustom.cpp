@@ -29,6 +29,18 @@ void CSceneCustomStage::Init()
 
 	// Freeze resource-set layout (assert will fire when violating the constraint)
 	m_perPassResources.AcceptChangedBindPoints();
+
+	m_debugViewPass.SetLabel("CUSTOM_DEBUGVIEW");
+	m_debugViewPass.SetFlags(CSceneRenderPass::ePassFlags_VrProjectionPass);
+	m_debugViewPass.SetPassResources(m_pResourceLayout, m_pPerPassResourceSet);
+
+	m_silhouetteMaskPass.SetLabel("CUSTOM_SILHOUETTE");
+	m_silhouetteMaskPass.SetFlags(CSceneRenderPass::ePassFlags_ReverseDepth);
+	m_silhouetteMaskPass.SetPassResources(m_pResourceLayout, m_pPerPassResourceSet);
+
+	m_selectionIDPass.SetLabel("CUSTOM_HIGHLIGHTED_PASS");
+	m_selectionIDPass.SetFlags(CSceneRenderPass::ePassFlags_None);
+	m_selectionIDPass.SetPassResources(m_pResourceLayout, m_pPerPassResourceSet);
 }
 
 bool CSceneCustomStage::CreatePipelineState(const SGraphicsPipelineStateDescription& desc, EPass passID, CDeviceGraphicsPSOPtr& outPSO)
@@ -242,15 +254,14 @@ struct CSelectionPredicate
 
 void CSceneCustomStage::Update()
 {
-	CRenderView* pRenderView = RenderView();
+	const CRenderView* pRenderView = RenderView();
+	const SRenderViewport& viewport = pRenderView->GetViewport();
 
 //	CTexture* pColorTexture = pRenderView->GetColorTarget();
 	CTexture* pDepthTexture = pRenderView->GetDepthTarget();
 
 	// Debug View Pass
-	m_debugViewPass.SetLabel("CUSTOM_DEBUGVIEW");
-	m_debugViewPass.SetupPassContext(m_stageID, ePass_DebugViewSolid, TTYPE_DEBUG, FB_GENERAL);
-	m_debugViewPass.SetPassResources(m_pResourceLayout, m_pPerPassResourceSet);
+	m_debugViewPass.SetViewport(viewport);
 	m_debugViewPass.SetRenderTargets(
 		// Depth
 		pDepthTexture,
@@ -259,9 +270,7 @@ void CSceneCustomStage::Update()
 	);
 
 	// Silhouette Pass
-	m_silhouetteMaskPass.SetLabel("CUSTOM_SILHOUETTE");
-	m_silhouetteMaskPass.SetupPassContext(m_stageID, ePass_Silhouette, TTYPE_CUSTOMRENDERPASS, FB_CUSTOM_RENDER, EFSLIST_CUSTOM);
-	m_silhouetteMaskPass.SetPassResources(m_pResourceLayout, m_pPerPassResourceSet);
+	m_silhouetteMaskPass.SetViewport(viewport);
 	m_silhouetteMaskPass.SetRenderTargets(
 		// Depth
 		pDepthTexture,
@@ -272,9 +281,7 @@ void CSceneCustomStage::Update()
 	if (gEnv->IsEditor())
 	{
 		// Highlighted ID Pass
-		m_selectionIDPass.SetLabel("CUSTOM_HIGHLIGHTED_PASS");
-		m_selectionIDPass.SetupPassContext(m_stageID, ePass_SelectionIDs, TTYPE_DEBUG, FB_GENERAL, EFSLIST_CUSTOM);
-		m_selectionIDPass.SetPassResources(m_pResourceLayout, m_pPerPassResourceSet);
+		m_selectionIDPass.SetViewport(viewport);
 		m_selectionIDPass.SetRenderTargets(
 			// Depth
 			pDepthTexture,
@@ -294,20 +301,13 @@ bool CSceneCustomStage::DoDebugRendering()
 	return (bViewTexelDensity || bViewWireframe);
 }
 
-bool CSceneCustomStage::DoDebugOverlay()
-{
-	bool bDebugDraw = CRenderer::CV_e_DebugDraw != 0;
-
-	return (bDebugDraw);
-}
-
 void CSceneCustomStage::Prepare()
 {
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 
 	bool bViewTexelDensity = CRenderer::CV_r_TexelsPerMeter > 0;
 	bool bViewWireframe = pRenderer->GetWireframeMode() != R_SOLID_MODE;
-	bool bDebugDraw = CRenderer::CV_e_DebugDraw != 0;
+	bool bDebugDraw = IsDebugOverlayEnabled();
 	// should probably somehow allow some editor viewports to not use this pass
 	bool bSelectionIDPass = pRenderer->IsEditorMode() && !gEnv->IsEditorGameMode();
 
@@ -330,9 +330,6 @@ void CSceneCustomStage::ExecuteDebugger()
 	bool bViewWireframe = gcpRendD3D->GetWireframeMode() != R_SOLID_MODE;
 	const bool bReverseDepth = true;
 
-	m_debugViewPass.SetLabel("DEBUG_VIEW");
-	m_debugViewPass.SetViewport(pRenderView->GetViewport());
-
 	{
 		CTypedConstantBuffer<HLSL_PerPassConstantBuffer_Custom, 256> cb(m_pPerPassConstantBuffer);
 		cb->CP_Custom_ViewMode = Vec4(bViewTexelDensity ? 1.f : 0.f, CRenderer::CV_r_TexelsPerMeter, 0.f, 0.f);
@@ -342,20 +339,11 @@ void CSceneCustomStage::ExecuteDebugger()
 	CTexture* pTargetRT = pRenderView->GetColorTarget();
 	CTexture* pTargetDS = CRendererResources::CreateDepthTarget(pTargetRT->GetWidth(), pTargetRT->GetHeight(), ColorF(Clr_FarPlane_Rev.r, 1, 0, 0), eTF_Unknown);
 
-	m_debugViewPass.ExchangeRenderTarget(0, pTargetRT);
-	m_debugViewPass.ExchangeDepthTarget(pTargetDS);
-
-	SetAndBuildPerPassResources(false);
-
 	CClearSurfacePass::Execute(pTargetDS, CLEAR_ZBUFFER | CLEAR_STENCIL, Clr_FarPlane_Rev.r, 1);
 	CClearSurfacePass::Execute(pTargetRT, ColorF(0.2, 0.2, 0.2, 1));
 
-	if (!bViewWireframe)
-		m_debugViewPass.SetupPassContext(m_stageID, ePass_DebugViewSolid, TTYPE_DEBUG, FB_GENERAL);
-	else
-		m_debugViewPass.SetupPassContext(m_stageID, ePass_DebugViewWireframe, TTYPE_DEBUG, FB_GENERAL);
-
-	m_debugViewPass.SetFlags(CSceneRenderPass::ePassFlags_VrProjectionPass);
+	m_debugViewPass.ExchangeRenderTarget(0, pTargetRT);
+	m_debugViewPass.ExchangeDepthTarget(pTargetDS);
 
 	// NOTE: no more external state changes in here, everything should have been setup
 	{
@@ -364,9 +352,13 @@ void CSceneCustomStage::ExecuteDebugger()
 		renderItemDrawer.InitDrawSubmission();
 
 		m_debugViewPass.BeginExecution();
+		if (!bViewWireframe)
+			m_debugViewPass.SetupDrawContext(m_stageID, ePass_DebugViewSolid, TTYPE_DEBUG, FB_GENERAL);
+		else
+			m_debugViewPass.SetupDrawContext(m_stageID, ePass_DebugViewWireframe, TTYPE_DEBUG, FB_GENERAL);
 		m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_GENERAL);
-		m_debugViewPass.DrawTransparentRenderItems(pRenderView, EFSLIST_TRANSP_BW);
-		m_debugViewPass.DrawTransparentRenderItems(pRenderView, EFSLIST_TRANSP_AW);
+		m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_TRANSP_BW);
+		m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_TRANSP_AW);
 		m_debugViewPass.EndExecution();
 
 		renderItemDrawer.JobifyDrawSubmission();
@@ -378,12 +370,11 @@ void CSceneCustomStage::ExecuteDebugger()
 
 void CSceneCustomStage::ExecuteDebugOverlay()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CRenderView* pRenderView = RenderView();
 	auto& renderItemDrawer = pRenderView->GetDrawer();
 	const bool bReverseDepth = true;
-
-	m_debugViewPass.SetLabel("DEBUG_OVERLAY");
-	m_debugViewPass.SetViewport(pRenderView->GetViewport());
 
 	{
 		CTypedConstantBuffer<HLSL_PerPassConstantBuffer_Custom, 256> cb(m_pPerPassConstantBuffer);
@@ -394,15 +385,10 @@ void CSceneCustomStage::ExecuteDebugOverlay()
 	CTexture* pTargetRT = pRenderView->GetRenderOutput()->GetColorTarget();
 	CTexture* pTargetDS = CRendererResources::CreateDepthTarget(pTargetRT->GetWidth(), pTargetRT->GetHeight(), ColorF(Clr_FarPlane_Rev.r, 1, 0, 0), eTF_Unknown);
 
-	m_debugViewPass.ExchangeRenderTarget(0, pTargetRT);
-	m_debugViewPass.ExchangeDepthTarget(pTargetDS);
-
-	SetAndBuildPerPassResources(false);
-
 	CClearSurfacePass::Execute(pTargetDS, CLEAR_ZBUFFER | CLEAR_STENCIL, Clr_FarPlane_Rev.r, 1);
 
-	m_debugViewPass.SetupPassContext(m_stageID, ePass_DebugViewDrawModes, TTYPE_DEBUG, FB_DEBUG);
-	m_debugViewPass.SetFlags(CSceneRenderPass::ePassFlags_VrProjectionPass);
+	m_debugViewPass.ExchangeRenderTarget(0, pTargetRT);
+	m_debugViewPass.ExchangeDepthTarget(pTargetDS);
 
 	// NOTE: no more external state changes in here, everything should have been setup
 	{
@@ -411,9 +397,10 @@ void CSceneCustomStage::ExecuteDebugOverlay()
 		renderItemDrawer.InitDrawSubmission();
 
 		m_debugViewPass.BeginExecution();
+		m_debugViewPass.SetupDrawContext(m_stageID, ePass_DebugViewDrawModes, TTYPE_DEBUG, FB_DEBUG);
 		m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_GENERAL);
-		m_debugViewPass.DrawTransparentRenderItems(pRenderView, EFSLIST_TRANSP_BW);
-		m_debugViewPass.DrawTransparentRenderItems(pRenderView, EFSLIST_TRANSP_AW);
+		m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_TRANSP_BW);
+		m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_TRANSP_AW);
 		m_debugViewPass.EndExecution();
 
 		renderItemDrawer.JobifyDrawSubmission();
@@ -425,6 +412,8 @@ void CSceneCustomStage::ExecuteDebugOverlay()
 
 void CSceneCustomStage::ExecuteSelectionHighlight()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 	CRenderView* pRenderView = RenderView();
 	auto& renderItemDrawer = pRenderView->GetDrawer();
@@ -439,28 +428,11 @@ void CSceneCustomStage::ExecuteSelectionHighlight()
 	CTexture* pTargetRT = CRendererResources::s_ptexSceneSelectionIDs;
 	CTexture* pTargetDS = CRendererResources::CreateDepthTarget(pTargetRT->GetWidth(), pTargetRT->GetHeight(), ColorF(Clr_FarPlane_Rev.r, 1, 0, 0), eTF_Unknown);
 
-	m_selectionIDPass.SetLabel("EDITOR_SELECTION_HIGHLIGHT");
-	m_selectionIDPass.SetViewport(D3DViewPort{
-		0.f,
-		0.f,
-		float(pTargetRT->GetWidth()),
-		float(pTargetRT->GetHeight()),
-		0.0f,
-		1.0f
-	});
-
-	SetAndBuildPerPassResources(false);
-
 	CClearSurfacePass::Execute(pTargetDS, CLEAR_ZBUFFER | CLEAR_STENCIL, Clr_FarPlane_Rev.r, 1);
 	CClearSurfacePass::Execute(pTargetRT, ColorF(0.0f, 0.0f, 0.0f, 0.0f));
 
-	m_selectionIDPass.SetFlags(CSceneRenderPass::ePassFlags_None);
-	m_selectionIDPass.SetRenderTargets(
-		// Depth
-		pTargetDS,
-		// Color 0
-		pTargetRT
-	);
+	m_selectionIDPass.ExchangeRenderTarget(0, pTargetRT);
+	m_selectionIDPass.ExchangeDepthTarget(pTargetDS);
 
 	// NOTE: no more external state changes in here, everything should have been setup
 	{
@@ -476,6 +448,7 @@ void CSceneCustomStage::ExecuteSelectionHighlight()
 
 		// First pass, draw selected object IDs
 		m_selectionIDPass.BeginExecution();
+		m_selectionIDPass.SetupDrawContext(m_stageID, ePass_SelectionIDs, TTYPE_DEBUG, FB_GENERAL);
 		m_selectionIDPass.DrawRenderItems(pRenderView, EFSLIST_HIGHLIGHT, startSelected, numItems);
 		m_selectionIDPass.EndExecution();
 
@@ -514,6 +487,8 @@ void CSceneCustomStage::ExecuteSelectionHighlight()
 
 void CSceneCustomStage::ExecuteSilhouettePass()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CRenderView* pRenderView = RenderView();
 
 	if (!(pRenderView->GetBatchFlags(EFSLIST_CUSTOM) & FB_CUSTOM_RENDER))
@@ -531,16 +506,10 @@ void CSceneCustomStage::ExecuteSilhouettePass()
 		auto& RESTRICT_REFERENCE commandList = GetDeviceObjectFactory().GetCoreCommandList();
 		m_silhouetteMaskPass.PrepareRenderPassForUse(commandList);
 
-		const bool bReverseDepth = true;
-		CSceneRenderPass::EPassFlags passFlags = CSceneRenderPass::ePassFlags_None;
-		passFlags |= bReverseDepth ? CSceneRenderPass::ePassFlags_ReverseDepth : CSceneRenderPass::ePassFlags_None;
-
-		m_silhouetteMaskPass.SetFlags(passFlags);
-		m_silhouetteMaskPass.SetViewport(pRenderView->GetViewport());
-
 		renderItemDrawer.InitDrawSubmission();
 
 		m_silhouetteMaskPass.BeginExecution();
+		m_silhouetteMaskPass.SetupDrawContext(m_stageID, ePass_Silhouette, TTYPE_CUSTOMRENDERPASS, FB_CUSTOM_RENDER);
 		m_silhouetteMaskPass.DrawRenderItems(pRenderView, EFSLIST_CUSTOM);
 		m_silhouetteMaskPass.EndExecution();
 
@@ -553,14 +522,14 @@ void CSceneCustomStage::ExecuteSilhouettePass()
 
 void CSceneCustomStage::ExecuteHelpers()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CRenderView* pRenderView = RenderView();
 	auto& renderItemDrawer = pRenderView->GetDrawer();
 
 	// first check if we actually have anything worth drawing
 	if (!pRenderView->GetRenderItems(EFSLIST_DEBUG_HELPER).size())
 		return;
-
-	m_debugViewPass.SetLabel("DEBUG_HELPERS");
 
 	{
 		bool bViewTexelDensity = CRenderer::CV_r_TexelsPerMeter > 0;
@@ -578,17 +547,13 @@ void CSceneCustomStage::ExecuteHelpers()
 
 	SetAndBuildPerPassResources(false);
 
-	m_debugViewPass.SetupPassContext(m_stageID, ePass_DebugViewSolid, TTYPE_DEBUG, FB_GENERAL);
-
 	auto& RESTRICT_REFERENCE commandList = GetDeviceObjectFactory().GetCoreCommandList();
 	m_debugViewPass.PrepareRenderPassForUse(commandList);
-
-	m_debugViewPass.SetFlags(CSceneRenderPass::ePassFlags_VrProjectionPass);
-	m_debugViewPass.SetViewport(pRenderView->GetViewport());
 
 	renderItemDrawer.InitDrawSubmission();
 
 	m_debugViewPass.BeginExecution();
+	m_debugViewPass.SetupDrawContext(m_stageID, ePass_DebugViewSolid, TTYPE_DEBUG, FB_GENERAL);
 	m_debugViewPass.DrawRenderItems(pRenderView, EFSLIST_DEBUG_HELPER);
 	m_debugViewPass.EndExecution();
 

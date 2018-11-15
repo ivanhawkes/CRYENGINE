@@ -105,7 +105,7 @@ void CD3D9Renderer::InitRenderer()
 	m_pBaseDisplayContext = std::make_shared<CSwapChainBackedRenderDisplayContext>(IRenderer::SDisplayContextDescription{}, "Base-SwapShain", m_uniqueDisplayContextId++);
 	{
 		SDisplayContextKey baseContextKey;
-		baseContextKey.key.emplace<HWND>(m_pBaseDisplayContext->GetWindowHandle());
+		baseContextKey.key.emplace<CRY_HWND>(m_pBaseDisplayContext->GetWindowHandle());
 		m_displayContexts.emplace(std::make_pair(std::move(baseContextKey), m_pBaseDisplayContext));
 	}
 
@@ -604,7 +604,7 @@ void CD3D9Renderer::HandleDisplayPropertyChanges()
 		// Match monitor resolution in borderless full screen mode
 		if (m_windowState == EWindowState::BorderlessFullscreen)
 		{
-			HMONITOR hMonitor = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+			HMONITOR hMonitor = MonitorFromWindow((HWND)m_hWnd, MONITOR_DEFAULTTONEAREST);
 			MONITORINFO monitorInfo;
 			monitorInfo.cbSize = sizeof(monitorInfo);
 			GetMonitorInfo(hMonitor, &monitorInfo);
@@ -974,6 +974,10 @@ void CD3D9Renderer::RT_BeginFrame(const SDisplayContextKey& displayContextKey)
 		}
 	}
 
+#if defined(ENABLE_SIMPLE_GPU_TIMERS)
+	m_pPipelineProfiler->BeginSection("BEGIN");
+#endif
+
 	//////////////////////////////////////////////////////////////////////
 	// Pre-Frame management
 	//////////////////////////////////////////////////////////////////////
@@ -1097,12 +1101,16 @@ void CD3D9Renderer::RT_BeginFrame(const SDisplayContextKey& displayContextKey)
 	//////////////////////////////////////////////////////////////////////
 	ChangeLog();
 
+	m_nStencilMaskRef = STENCIL_VALUE_OUTDOORS + 1;
+
+#if defined(ENABLE_SIMPLE_GPU_TIMERS)
+	m_pPipelineProfiler->EndSection("BEGIN");
+#endif
+
 	if (!m_SceneRecurseCount)
 	{
 		m_SceneRecurseCount++;
 	}
-
-	m_nStencilMaskRef = STENCIL_VALUE_OUTDOORS + 1;
 }
 
 bool CD3D9Renderer::CheckDeviceLost()
@@ -1295,7 +1303,7 @@ void CD3D9Renderer::ResolveHighDynamicRangeDisplay()
 	CRY_ASSERT(pOutput->GetColorTarget() != pDC->GetCurrentBackBuffer());
 
 	// TODO: add HDR meta-data coding to back-buffer copy
-	CStretchRectPass::GetPass().Execute(pOutput->GetColorTarget(), pDC->GetCurrentBackBuffer());
+	GetGraphicsPipeline().m_ResolvePass->Execute(pOutput->GetColorTarget(), pDC->GetCurrentBackBuffer());
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2514,7 +2522,7 @@ void CD3D9Renderer::RT_RenderDebug(bool bRenderStats)
 	if (GetS3DRend().IsStereoEnabled())
 	{
 		SDisplayContextKey displayContextKey;
-		displayContextKey.key.emplace<HWND>(pDC->GetWindowHandle());
+		displayContextKey.key.emplace<CRY_HWND>(pDC->GetWindowHandle());
 		gEnv->pRenderer->GetIRenderAuxGeom(/*eType*/)->SetCurrentDisplayContext(displayContextKey);
 	}
 
@@ -3221,7 +3229,7 @@ static uint32 ComputePresentInterval(bool vsync, uint32 refreshNumerator, uint32
 
 void CD3D9Renderer::RT_EndFrame()
 {
-	CRY_PROFILE_FUNCTION(PROFILE_RENDERER);
+	FUNCTION_PROFILER_RENDERER();
 
 	if (!m_SceneRecurseCount)
 	{
@@ -3293,6 +3301,10 @@ void CD3D9Renderer::RT_EndFrame()
 #endif
 
 	m_SceneRecurseCount--;
+
+#if defined(ENABLE_SIMPLE_GPU_TIMERS)
+	m_pPipelineProfiler->BeginSection("END");
+#endif
 
 #if !defined(RELEASE)
 	int numInvalidDrawcalls =
@@ -3559,6 +3571,10 @@ void CD3D9Renderer::RT_EndFrame()
 		}
 		m_mtxStopAtRenderFrameEnd.Unlock();
 	}
+
+#if defined(ENABLE_SIMPLE_GPU_TIMERS)
+	m_pPipelineProfiler->EndSection("END");
+#endif
 }
 
 void CD3D9Renderer::RT_EndMeasurement()

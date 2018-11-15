@@ -164,7 +164,6 @@ void CD3D9Renderer::RT_GraphicsPipelineShutdown()
 {
 	CREParticle::ResetPool();
 
-	CStretchRectPass::Shutdown();
 	CStretchRegionPass::Shutdown();
 
 	if (m_pStereoRenderer)
@@ -688,6 +687,10 @@ void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 		else if (CSceneCustomStage::DoDebugRendering())
 		{
 			GetGraphicsPipeline().ExecuteDebugger();
+		}
+		else if (CRenderer::CV_r_GraphicsPipelineMobile > 0)
+		{
+			GetGraphicsPipeline().ExecuteMobilePipeline();
 		}
 		else
 		{

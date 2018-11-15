@@ -401,7 +401,6 @@ uint32 CAttachmentManager::ParseXMLAttachmentList(CharacterAttachment* parrAttac
 void CAttachmentManager::InitAttachmentList(const CharacterAttachment* parrAttachments, uint32 numAttachments, const string pathname, uint32 nLoadingFlags, int nKeepModelInMemory)
 {
 	uint32 nLogWarnings = (nLoadingFlags & CA_DisableLogWarnings) == 0;
-	CSkeletonPose& rSkelPose = (CSkeletonPose&)*m_pSkelInstance->GetISkeletonPose();
 	CDefaultSkeleton& rDefaultSkeleton = *m_pSkelInstance->m_pDefaultSkeleton;
 
 	// flush once, because, here we will execute immediate commands
@@ -453,7 +452,6 @@ void CAttachmentManager::InitAttachmentList(const CharacterAttachment* parrAttac
 			pAttachment->HideAttachment(attach.m_AttFlags & FLAGS_ATTACH_HIDE_ATTACHMENT);
 			SimulationParams& ap = pAttachment->GetSimulationParams();
 			ap = attach.ap;
-			CSkeletonPose& rSkelPose = (CSkeletonPose&)*m_pSkelInstance->GetISkeletonPose();
 
 			if (IsSKEL || IsCGA || IsCDF)
 			{
@@ -723,7 +721,6 @@ void CAttachmentManager::InitAttachmentList(const CharacterAttachment* parrAttac
 	}
 	pICharacter->SetHasVertexAnimation(bHasVertexAnimation);
 
-	uint32 count = GetAttachmentCount();
 	ProjectAllAttachment();
 	VerifyProxyLinks();
 
@@ -735,8 +732,8 @@ void CAttachmentManager::InitAttachmentList(const CharacterAttachment* parrAttac
 		m_arrProxies[i].m_ProxyModelRelativePrev = m_arrProxies[i].m_ProxyModelRelative;
 	}
 
-	uint32 numAttachmnets = GetAttachmentCount();
-	for (uint32 i = 0; i < numAttachmnets; i++)
+	uint32 currNumAttachments = GetAttachmentCount();
+	for (uint32 i = 0; i < currNumAttachments; i++)
 	{
 		IAttachment* pIAttachment = GetInterfaceByIndex(i);
 		if (pIAttachment->GetType() == CA_BONE)
@@ -828,8 +825,6 @@ IAttachment* CAttachmentManager::CreateAttachment(const char* szAttName, uint32 
 		CryWarning(VALIDATOR_MODULE_ANIMATION, VALIDATOR_ERROR, "CryAnimation: Attachment CRC32 for '%s' clashes with attachment name '%s' (crc's are created using lower case only), attachment will not be created", strAttachmentName.c_str(), pIAttachmentCRC32->GetName());
 		return 0;
 	}
-
-	CDefaultSkeleton& rDefaultSkeleton = *m_pSkelInstance->m_pDefaultSkeleton;
 
 	//----------------------------------------------------------------------------------
 	if (type == CA_BONE)
@@ -1396,10 +1391,13 @@ void CAttachmentManager::UpdateAllRemapTables()
 void CAttachmentManager::VerifyProxyLinks()
 {
 	//verify and re-adjust proxy links
-	uint32 numAttachmnets = GetAttachmentCount();
-	for (uint32 a = 0; a < numAttachmnets; a++)
+	uint32 numAttachments = GetAttachmentCount();
+	for (uint32 a = 0; a < numAttachments; a++)
 	{
 		IAttachment* pIAttachment = GetInterfaceByIndex(a);
+
+		if (pIAttachment == nullptr)
+			continue;
 
 		if (pIAttachment->GetType() == CA_BONE)
 		{
@@ -1408,6 +1406,7 @@ void CAttachmentManager::VerifyProxyLinks()
 			if (numUsedProxies == 0)
 				continue;
 
+			assert(numUsedProxies <= 100);
 			string arrProxyNames[100];
 			for (uint32 p = 0; p < numUsedProxies; p++)
 			{
@@ -1439,6 +1438,7 @@ void CAttachmentManager::VerifyProxyLinks()
 			if (numUsedProxies == 0)
 				continue;
 
+			assert(numUsedProxies <= 100);
 			string arrProxyNames[100];
 			for (uint32 p = 0; p < numUsedProxies; p++)
 			{
@@ -1465,23 +1465,26 @@ void CAttachmentManager::VerifyProxyLinks()
 
 	}
 
-	const CDefaultSkeleton& rDefaultSkeleton = *m_pSkelInstance->m_pDefaultSkeleton;
-	uint32 numProxies = m_arrProxies.size();
-	for (uint32 i = 0; i < numProxies; i++)
+	if (m_pSkelInstance != nullptr && m_pSkelInstance->m_pDefaultSkeleton != nullptr)
 	{
-		const char* strJointName = m_arrProxies[i].m_strJointName.c_str();
-		int16 nJointID = rDefaultSkeleton.GetJointIDByName(strJointName);
-		if (nJointID < 0)
+		const CDefaultSkeleton& rDefaultSkeleton = *m_pSkelInstance->m_pDefaultSkeleton;
+		uint32 numProxies = m_arrProxies.size();
+		for (uint32 i = 0; i < numProxies; i++)
 		{
-			CryWarning(VALIDATOR_MODULE_ANIMATION, VALIDATOR_ERROR, "CryAnimation: Proxy '%s' specified wrong joint name '%s'", m_arrProxies[i].m_strProxyName.c_str(), strJointName);
-			m_arrProxies.erase(m_arrProxies.begin() + i);
-			numProxies = m_arrProxies.size();
-			--i;
-			continue;
+			const char* strJointName = m_arrProxies[i].m_strJointName.c_str();
+			int16 nJointID = rDefaultSkeleton.GetJointIDByName(strJointName);
+			if (nJointID < 0)
+			{
+				CryWarning(VALIDATOR_MODULE_ANIMATION, VALIDATOR_ERROR, "CryAnimation: Proxy '%s' specified wrong joint name '%s'", m_arrProxies[i].m_strProxyName.c_str(), strJointName);
+				m_arrProxies.erase(m_arrProxies.begin() + i);
+				numProxies = m_arrProxies.size();
+				--i;
+				continue;
+			}
+			m_arrProxies[i].m_nJointID = nJointID;
+			QuatT jointQT = rDefaultSkeleton.GetDefaultAbsJointByID(nJointID);
+			m_arrProxies[i].m_ProxyRelativeDefault = jointQT.GetInverted() * m_arrProxies[i].m_ProxyAbsoluteDefault;
 		}
-		m_arrProxies[i].m_nJointID = nJointID;
-		QuatT jointQT = rDefaultSkeleton.GetDefaultAbsJointByID(nJointID);
-		m_arrProxies[i].m_ProxyRelativeDefault = jointQT.GetInverted() * m_arrProxies[i].m_ProxyAbsoluteDefault;
 	}
 }
 
@@ -1493,7 +1496,9 @@ void CAttachmentManager::PrepareAllRedirectedTransformations(Skeleton::CPoseData
 	m_fTurbulenceGlobal += gf_PI * fAverageFrameTime, m_fTurbulenceLocal = 0;
 
 	DEFINE_PROFILER_FUNCTION();
+#ifndef _RELEASE
 	const QuatTS& rPhysLocation = m_pSkelInstance->m_location;
+#endif
 	uint32 nproxies = m_arrProxies.size();
 	for (uint32 i = 0; i < nproxies; i++)
 	{
@@ -1531,7 +1536,6 @@ void CAttachmentManager::PrepareAllRedirectedTransformations(Skeleton::CPoseData
 
 void CAttachmentManager::GenerateProxyModelRelativeTransformations(Skeleton::CPoseData& rPoseData)
 {
-	const QuatTS& rPhysLocation = m_pSkelInstance->m_location;
 	uint32 nproxies = m_arrProxies.size();
 	for (uint32 i = 0; i < nproxies; i++)
 	{
@@ -1571,12 +1575,7 @@ int CAttachmentManager::GenerateAttachedInstanceContexts()
 	if (m_TypeSortingRequired)
 		SortByType();
 
-	auto& sc = g_pCharacterManager->GetContextSyncQueue();
-
 	int result = 0;
-
-	uint32 m =
-	  m_sortedRanges[eRange_BoneExecuteUnsafe].end - m_sortedRanges[eRange_BoneExecute].begin;
 
 	for (uint32 i = m_sortedRanges[eRange_BoneExecute].begin;
 	     i < m_sortedRanges[eRange_BoneExecuteUnsafe].end; i++)

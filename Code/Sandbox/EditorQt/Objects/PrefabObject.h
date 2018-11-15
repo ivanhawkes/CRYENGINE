@@ -54,7 +54,6 @@ public:
 	virtual void       Done() override;
 
 	virtual void       Display(CObjectRenderHelper& objRenderHelper) override;
-	virtual bool       HitTest(HitContext& hc) override;
 
 	const ColorB&      GetSelectionPreviewHighlightColor() override;
 
@@ -122,7 +121,6 @@ protected:
 	CPrefabObject();
 
 	void         SetPrefabGuid(CryGUID guid) { m_prefabGUID = guid; }
-	bool         HitTestMembers(HitContext& hcOrg);
 	virtual void PostClone(CBaseObject* pFromObject, CObjectCloneContext& ctx);
 	virtual void CalcBoundBox();
 	void         DeleteThis() { delete this; }
@@ -138,6 +136,7 @@ protected:
 private:
 	void DeleteChildrenWithoutUpdating();
 	void AttachLoadedChildrenToPrefab(CObjectArchive& ar, IObjectLayer* pThisLayer);
+	void SetPrefab(CPrefabItem* pPrefab);
 
 protected:
 	_smart_ptr<CPrefabItem>           m_pPrefabItem;
@@ -175,6 +174,7 @@ class CPrefabObjectClassDesc : public CObjectClassDesc
 public:
 	ObjectType     GetObjectType()   { return OBJTYPE_PREFAB; }
 	const char*    ClassName()       { return PREFAB_OBJECT_CLASS_NAME; }
+	const char* GenerateObjectName(const char* szCreationParams);
 	const char*    Category()        { return CATEGORY_PREFABS; }
 	CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CPrefabObject); }
 

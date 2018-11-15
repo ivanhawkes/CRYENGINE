@@ -16,6 +16,10 @@
 #define ASSERT_WWISE_OK(x) (CRY_ASSERT(x == AK_Success))
 #define IS_WWISE_OK(x)     (x == AK_Success)
 
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	#include <CryThreading/CryThread.h>
+#endif // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
 namespace CryAudio
 {
 namespace Impl
@@ -24,9 +28,11 @@ namespace Wwise
 {
 class CImpl;
 class CListener;
+class CObject;
 
 extern CImpl* g_pImpl;
 extern CListener* g_pListener;
+extern CObject* g_pObject;
 
 extern uint32 g_numObjectsWithRelativeVelocity;
 
@@ -39,7 +45,7 @@ inline void FillAKVector(Vec3 const& vCryVector, AkVector& vAKVector)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-inline void FillAKObjectPosition(CObjectTransformation const& transformation, AkSoundPosition& outTransformation)
+inline void FillAKObjectPosition(CTransformation const& transformation, AkSoundPosition& outTransformation)
 {
 	AkVector vec1, vec2;
 	FillAKVector(transformation.GetPosition(), vec1);
@@ -50,7 +56,7 @@ inline void FillAKObjectPosition(CObjectTransformation const& transformation, Ak
 }
 
 ///////////////////////////////////////////////////////////////////////////
-inline void FillAKListenerPosition(CObjectTransformation const& transformation, AkListenerPosition& outTransformation)
+inline void FillAKListenerPosition(CTransformation const& transformation, AkListenerPosition& outTransformation)
 {
 	AkVector vec1, vec2;
 	FillAKVector(transformation.GetPosition(), vec1);
@@ -62,6 +68,14 @@ inline void FillAKListenerPosition(CObjectTransformation const& transformation, 
 
 extern AkGameObjectID g_listenerId; // To be removed once multi-listener support is implemented.
 extern AkGameObjectID g_globalObjectId;
-} // namespace Wwise
-} // namespace Impl
-} // namespace CryAudio
+
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+class CEvent;
+class CObject;
+extern CryCriticalSection g_cs;
+extern std::unordered_map<AkPlayingID, CEvent*> g_playingIds;
+extern std::unordered_map<AkGameObjectID, CObject*> g_gameObjectIds;
+#endif // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+}      // namespace Wwise
+}      // namespace Impl
+}      // namespace CryAudio

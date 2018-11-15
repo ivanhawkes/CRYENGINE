@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "IAudioInterfacesCommonData.h"
+
 /**
  * @namespace CryAudio
  * @brief Most parent audio namespace used throughout the entire engine.
@@ -43,7 +45,7 @@ struct IObject
 	 * @param userData - optional struct used to pass additional data to the internal request.
 	 * @return void
 	 */
-	virtual void SetTransformation(CObjectTransformation const& transformation, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+	virtual void SetTransformation(CTransformation const& transformation, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
 	 * Sets a parameter to a given value on this audio object.
@@ -95,6 +97,24 @@ struct IObject
 	 * @return void
 	 */
 	virtual void SetOcclusionRayOffset(float const offset, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
+	 * Loads a trigger's data. This can be used in "loading on demand" situations to prepare the data referenced by a trigger.
+	 * @param triggerId - ID of the trigger in question.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 * @see UnloadTrigger
+	 */
+	virtual void LoadTrigger(ControlId const triggerId, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
+	/**
+	 * Unloads a trigger's data. This can be used in "unloading on demand" situations to free the data referenced by a trigger.
+	 * @param triggerId - ID of the trigger in question.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 * @see LoadTrigger
+	 */
+	virtual void UnloadTrigger(ControlId const triggerId, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
 	 * Plays the given file on this audio object.

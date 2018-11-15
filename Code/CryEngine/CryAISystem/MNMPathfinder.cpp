@@ -8,6 +8,7 @@
 #include "DebugDrawContext.h"
 #include "AIBubblesSystem/AIBubblesSystem.h"
 #include <CryThreading/IJobManager_JobDelegator.h>
+#include <CryAISystem/NavigationSystem/INavMeshQueryManager.h>
 
 //#pragma optimize("", off)
 //#pragma inline_depth(0)
@@ -313,8 +314,8 @@ bool CMNMPathfinder::CheckIfPointsAreOnStraightWalkableLine(const NavigationMesh
 	const MNM::vector3_t endMeshLoc = navMesh.ToMeshSpace(destination);
 
 	const MNM::real_t verticalRange(2.0f);
-	MNM::TriangleID triStart = navMesh.GetTriangleAt(startMeshLoc, verticalRange, verticalRange, pFilter);
-	MNM::TriangleID triEnd = navMesh.GetTriangleAt(endMeshLoc, verticalRange, verticalRange, pFilter);
+	const MNM::TriangleID triStart =  navMesh.QueryTriangleAt(startMeshLoc, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, pFilter);
+	const MNM::TriangleID triEnd = navMesh.QueryTriangleAt(endMeshLoc, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, pFilter);
 
 	if (!triStart || !triEnd)
 		return false;
@@ -342,7 +343,7 @@ void CMNMPathfinder::SetupNewValidPathRequests()
 		{
 			MNM::PathfinderUtils::ProcessingContext& processingContext = m_processingContextsPool.GetContextAtPosition(id);
 			assert(processingContext.status == MNM::PathfinderUtils::ProcessingContext::Reserved);
-			processingContext.workingSet.aStarOpenList.SetFrameTimeQuota(gAIEnv.CVars.MNMPathFinderQuota);
+			processingContext.workingSet.aStarNodesList.SetFrameTimeQuota(gAIEnv.CVars.MNMPathFinderQuota);
 
 			const EMNMPathResult pathResult = SetupForNextPathRequest(idQueuedRequest, requestToServe, processingContext);
 			if (pathResult != EMNMPathResult::Success)
@@ -481,31 +482,28 @@ void CMNMPathfinder::Update()
 void CMNMPathfinder::OnNavigationMeshChanged(const NavigationMeshID meshId, const MNM::TileID tileId)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
-	
-	const size_t maximumAmountOfSlotsToUpdate = m_processingContextsPool.GetOccupiedSlotsCount();
-	for (size_t i = 0; i < maximumAmountOfSlotsToUpdate; ++i)
+
+	for (size_t i = 0; i < m_processingContextsPool.GetMaxSlots(); ++i)
 	{
 		MNM::PathfinderUtils::ProcessingContext& processingContext = m_processingContextsPool.GetContextAtPosition(i);
+		if (processingContext.status == MNM::PathfinderUtils::ProcessingContext::Invalid)
+			continue;
+
 		MNM::PathfinderUtils::ProcessingRequest& processingRequest = processingContext.processingRequest;
-
-		if (!processingRequest.IsValid())
+		if (!processingRequest.IsValid() || processingRequest.meshID != meshId)
 			continue;
 
-		if (processingRequest.meshID != meshId)
-			continue;
-
-		if (!processingContext.workingSet.aStarOpenList.TileWasVisited(tileId))
+		if (!processingContext.workingSet.aStarNodesList.TileWasVisited(tileId))
 		{
 			bool neighbourTileWasVisited = false;
 
 			const NavigationMesh& mesh = gAIEnv.pNavigationSystem->GetMesh(meshId);
 			const MNM::vector3_t meshCoordinates = mesh.navMesh.GetTileContainerCoordinates(tileId);
-
 			for (size_t side = 0; side < MNM::CNavMesh::SideCount; ++side)
 			{
 				const MNM::TileID neighbourTileId = mesh.navMesh.GetNeighbourTileID(meshCoordinates.x.as_int(), meshCoordinates.y.as_int(), meshCoordinates.z.as_int(), side);
 
-				if (processingContext.workingSet.aStarOpenList.TileWasVisited(neighbourTileId))
+				if (processingContext.workingSet.aStarNodesList.TileWasVisited(neighbourTileId))
 				{
 					neighbourTileWasVisited = true;
 					break;
@@ -519,14 +517,28 @@ void CMNMPathfinder::OnNavigationMeshChanged(const NavigationMeshID meshId, cons
 		//////////////////////////////////////////////////////////////////////////
 		/// Re-start current request for next update
 
+		// If the request was already completed, we don't want to dispatch it because it contains old data
+		if (processingContext.status == MNM::PathfinderUtils::ProcessingContext::Completed)
+		{
+			CancelResultDispatchingForRequest(processingRequest.queuedID);
+		}
+
 		// Copy onto the stack to call function to avoid self delete.
 		MNM::QueuedPathID requestId = processingRequest.queuedID;
-		MNM::PathfinderUtils::QueuedRequest requestParams = processingRequest.data;
+		MNM::PathfinderUtils::QueuedRequest queuedRequest = processingRequest.data;
 
-		const EMNMPathResult result = SetupForNextPathRequest(requestId, requestParams, processingContext);
+		const EMNMPathResult result = SetupForNextPathRequest(requestId, queuedRequest, processingContext);
 		if (result != EMNMPathResult::Success)
 		{
-			PathRequestFailed(requestId, requestParams, result);
+			// Context is released automatically because we set the context as invalid
+			// Processing contexts with a invalid status are considered free by the pool, so they can be reused again
+			processingContext.status = MNM::PathfinderUtils::ProcessingContext::Invalid;
+			MNM::PathfinderUtils::PathfindingFailedEvent failedEvent(requestId, queuedRequest, result);
+			m_pathfindingFailedEventsToDispatch.push_back(failedEvent);
+		}
+		else
+		{
+			processingContext.status = MNM::PathfinderUtils::ProcessingContext::InProgress;
 		}
 	}
 }
@@ -589,7 +601,7 @@ EMNMPathResult CMNMPathfinder::SetupForNextPathRequest(MNM::QueuedPathID request
 	processingRequest.data.requestParams.endLocation = safeEndLocation;
 
 	const MNM::real_t startToEndDist = (MNM::vector3_t(safeEndLocation) - MNM::vector3_t(safeStartLocation)).lenNoOverflow();
-	processingContext.workingSet.aStarOpenList.SetUpForPathSolving(navMesh.GetTriangleCount(), startTriangleId, request.requestParams.startLocation, startToEndDist);
+	processingContext.workingSet.aStarNodesList.SetUpForPathSolving(navMesh.GetTriangleCount(), startTriangleId, request.requestParams.startLocation, startToEndDist);
 
 	return EMNMPathResult::Success;
 }
@@ -597,11 +609,11 @@ EMNMPathResult CMNMPathfinder::SetupForNextPathRequest(MNM::QueuedPathID request
 void CMNMPathfinder::ProcessPathRequest(MNM::PathfinderUtils::ProcessingContext& processingContext)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
-	
+
 	if (processingContext.status != MNM::PathfinderUtils::ProcessingContext::InProgress)
 		return;
 
-	processingContext.workingSet.aStarOpenList.ResetConsumedTimeDuringCurrentFrame();
+	processingContext.workingSet.aStarNodesList.ResetConsumedTimeDuringCurrentFrame();
 
 	MNM::PathfinderUtils::ProcessingRequest& processingRequest = processingContext.processingRequest;
 	assert(processingRequest.IsValid());
@@ -624,6 +636,8 @@ void CMNMPathfinder::ProcessPathRequest(MNM::PathfinderUtils::ProcessingContext&
 		return;
 
 	processingContext.status = MNM::PathfinderUtils::ProcessingContext::FindWayCompleted;
+	processingContext.workingSet.aStarNodesList.PathSolvingDone();
+
 	return;
 }
 
@@ -722,6 +736,9 @@ void CMNMPathfinder::ConstructPathIfWayWasFound(MNM::PathfinderUtils::Processing
 	CPathHolder<PathPointDescriptor> outputPath;
 	if (bPathFound)
 	{
+		++processingContext.constructedPathsCount;
+
+		const CTimeValue timeBeforePathConstruction = gEnv->pTimer->GetAsyncCurTime();
 		bPathConstructed = ConstructPathFromFoundWay(
 		  processingContext.queryResult,
 		  navMesh,
@@ -729,12 +746,23 @@ void CMNMPathfinder::ConstructPathIfWayWasFound(MNM::PathfinderUtils::Processing
 		  processingRequest.data.requestParams.startLocation,
 		  processingRequest.data.requestParams.endLocation,
 		  *&outputPath);
+		const CTimeValue timeAfterPathConstruction = gEnv->pTimer->GetAsyncCurTime();
+		
+		const float constructionPathTime = timeAfterPathConstruction.GetDifferenceInSeconds(timeBeforePathConstruction) * 1000.0f;
+		processingContext.totalTimeConstructPath += constructionPathTime;
+		processingContext.peakTimeConstructPath = max(processingContext.peakTimeConstructPath, constructionPathTime);
 
 		if (bPathConstructed)
 		{
 			if (processingRequest.data.requestParams.beautify && gAIEnv.CVars.BeautifyPath)
 			{
+				const CTimeValue timeBeforeBeautifyPath = gEnv->pTimer->GetAsyncCurTime();
 				outputPath.PullPathOnNavigationMesh(navMesh, gAIEnv.CVars.PathStringPullingIterations, processingRequest.data.requestParams.pCustomPathCostComputer.get());
+				const CTimeValue timeAfterBeautifyPath = gEnv->pTimer->GetAsyncCurTime();
+				
+				const float beautifyPathTime = timeAfterBeautifyPath.GetDifferenceInSeconds(timeBeforeBeautifyPath) * 1000.0f;
+				processingContext.totalTimeBeautifyPath += beautifyPathTime;
+				processingContext.peakTimeBeautifyPath = max(processingContext.peakTimeBeautifyPath, beautifyPathTime);
 			}
 		}
 	}
@@ -765,11 +793,7 @@ void CMNMPathfinder::ConstructPathIfWayWasFound(MNM::PathfinderUtils::Processing
 	successEvent.callback = processingRequest.data.requestParams.resultCallback;
 	successEvent.requestId = processingRequest.queuedID;
 
-	processingRequest.Reset();
-	processingContext.workingSet.aStarOpenList.PathSolvingDone();
-
 	m_pathfindingCompletedEventsToDispatch.push_back(successEvent);
-
 	processingContext.status = MNM::PathfinderUtils::ProcessingContext::Completed;
 	return;
 }
@@ -796,35 +820,48 @@ void CMNMPathfinder::PathRequestFailed(MNM::QueuedPathID requestID, const MNM::P
 void CMNMPathfinder::DebugAllStatistics()
 {
 	float y = 40.0f;
-	IRenderAuxText::Draw2dLabel(100.f, y, 1.4f, Col_White, false, "Currently we have %" PRISIZE_T " queued requests in the MNMPathfinder", m_requestedPathsQueue.size());
+	IRenderAuxText::Draw2dLabel(100.0f, y, 1.4f, Col_White, false, "Currently we have %" PRISIZE_T " queued requests in the MNMPathfinder", m_requestedPathsQueue.size());
 
-	y += 100.0f;
+	y += 50.0f;
 	const size_t maximumAmountOfSlotsToUpdate = m_processingContextsPool.GetMaxSlots();
 	for (size_t i = 0; i < maximumAmountOfSlotsToUpdate; ++i)
 	{
 		MNM::PathfinderUtils::ProcessingContext& processingContext = m_processingContextsPool.GetContextAtPosition(i);
-		DebugStatistics(processingContext, (y + (i * 100.f)));
+		DebugStatistics(processingContext, i, (y + (i * 120.0f)));
 	}
 }
 
-void CMNMPathfinder::DebugStatistics(MNM::PathfinderUtils::ProcessingContext& processingContext, const float textY)
+void CMNMPathfinder::DebugStatistics(MNM::PathfinderUtils::ProcessingContext& processingContext, const int contextNumber, const float textY)
 {
 	stack_string text;
 
-	MNM::AStarContention::ContentionStats stats = processingContext.workingSet.aStarOpenList.GetContentionStats();
+	MNM::AStarContention::ContentionStats stats = processingContext.workingSet.aStarNodesList.GetContentionStats();
+
+	const float avgTimeConstructPath = processingContext.constructedPathsCount > 0 ? processingContext.totalTimeConstructPath / processingContext.constructedPathsCount : 0.0f;
+	const float avgTimeBeautifyPath = processingContext.constructedPathsCount > 0 ? processingContext.totalTimeBeautifyPath / processingContext.constructedPathsCount : 0.0f;
 
 	text.Format(
-	  "MNMPathFinder - Frame time quota (%f ms) - EntityId: %d - Status: %s\n"
-	  "---------\n"
-	  "AStar steps: Average - %d / Maximum - %d\n"
-	  "AStar time:  Average - %.4f ms / Maximum - %.4f ms",
+	  "MNMPathFinder Context %d - Frame time quota (%f ms) - EntityId: %d AgentTypeId: %d - Status: %s\n"
+	  "\tPath count:              %d\n"
+	  "\tAStar steps:             Avg - %d / Max - %d\n"
+	  "\tAStar time:              Avg - %2.5f ms / Max - %2.5f ms\n"
+	  "\tConstruction time:       Avg - %2.5f ms / Max - %2.5f ms\n"
+	  "\tBeautify time:           Avg - %2.5f ms / Max - %2.5f ms",
+	  contextNumber,
 	  stats.frameTimeQuota,
+	  processingContext.processingRequest.data.requestParams.requesterEntityId,
 	  (uint32)processingContext.processingRequest.data.requestParams.agentTypeID,
 	  processingContext.GetStatusAsString(),
+	  processingContext.constructedPathsCount,
 	  stats.averageSearchSteps,
 	  stats.peakSearchSteps,
 	  stats.averageSearchTime,
-	  stats.peakSearchTime);
+	  stats.peakSearchTime,
+	  avgTimeConstructPath,
+	  processingContext.peakTimeConstructPath,
+	  avgTimeBeautifyPath,
+	  processingContext.peakTimeBeautifyPath
+	);
 
 	IRenderAuxText::Draw2dLabel(100.f, textY, 1.4f, Col_White, false, "%s", text.c_str());
 }

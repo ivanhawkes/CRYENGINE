@@ -241,8 +241,8 @@ CPrefabObject::CPrefabObject()
 void CPrefabObject::Done()
 {
 	LOADING_TIME_PROFILE_SECTION_ARGS(GetName().c_str());
-	m_pPrefabItem = 0;
 
+	SetPrefab(nullptr);
 	DeleteAllMembers();
 	CBaseObject::Done();
 }
@@ -311,7 +311,7 @@ bool CPrefabObject::CreateFrom(std::vector<CBaseObject*>& objects)
 void CPrefabObject::CreateFrom(std::vector<CBaseObject*>& objects, Vec3 center, CPrefabItem* pItem)
 {
 	CUndo undo("Create Prefab");
-	CPrefabObject* pPrefab = static_cast<CPrefabObject*>(GetIEditorImpl()->NewObject(PREFAB_OBJECT_CLASS_NAME));
+	CPrefabObject* pPrefab = static_cast<CPrefabObject*>(GetIEditorImpl()->NewObject(PREFAB_OBJECT_CLASS_NAME, pItem->GetGUID().ToString().c_str()));
 	pPrefab->SetPrefab(pItem, false);
 
 	if (!pPrefab)
@@ -711,7 +711,8 @@ void CPrefabObject::SetPrefab(CPrefabItem* pPrefab, bool bForceReload)
 
 	DeleteChildrenWithoutUpdating();
 
-	m_pPrefabItem = pPrefab;
+	SetPrefab(pPrefab);
+	
 	m_prefabGUID = pPrefab->GetGUID();
 	m_prefabName = pPrefab->GetFullName();
 
@@ -736,8 +737,12 @@ void CPrefabObject::SetPrefab(CPrefabItem* pPrefab, bool bForceReload)
 
 	CObjectArchive ar(GetObjectManager(), objectsXml, true);
 	ar.EnableProgressBar(false); // No progress bar is shown when loading objects.
-	CPrefabChildGuidProvider guidProvider = { this };
-	ar.SetGuidProvider(&guidProvider);
+	/*
+	Here we set the guid provider to null so that it will not attempt to regenerate GUIDS in LoadObjects (specifically in the call to NewObject).
+	We need the serialized Id to stay the same as the prefab xml Id until AddMember (called in AttachLoadedChildrenToPrefab) is called
+	AddMember will "slide" the current Id to IdInPrefab (which we need for prefab instance and library update) and generate a new unique Id for the prefab instance
+	*/
+	ar.SetGuidProvider(nullptr); 
 	ar.EnableReconstructPrefabObject(true);
 	// new prefabs are instantiated in current layer to avoid mishaps with missing layers. Then, we just set their layer to our own below
 	ar.LoadInCurrentLayer(true);
@@ -746,6 +751,9 @@ void CPrefabObject::SetPrefab(CPrefabItem* pPrefab, bool bForceReload)
 	GetObjectManager()->ForceID(GetId().hipart >> 32);
 	ar.ResolveObjects();
 
+	//Now actually set a GUID provider
+	CPrefabChildGuidProvider guidProvider = { this };
+	ar.SetGuidProvider(&guidProvider);
 	AttachLoadedChildrenToPrefab(ar, pThisLayer);
 
 	// Forcefully validate TM and then trigger InvalidateTM() on prefab (and all its children).
@@ -760,6 +768,21 @@ void CPrefabObject::SetPrefab(CPrefabItem* pPrefab, bool bForceReload)
 	eventsDelay.Resume();
 
 	pPrefabManager->SetSkipPrefabUpdate(false);
+}
+
+void CPrefabObject::SetPrefab(CPrefabItem* pPrefab)
+{
+	if (m_pPrefabItem)
+	{
+		m_pPrefabItem->signalNameChanged.DisconnectObject(this);
+	}
+
+	if (pPrefab)
+	{
+		pPrefab->signalNameChanged.Connect(this, &CBaseObject::UpdateUIVars);
+	}
+
+	m_pPrefabItem = pPrefab;
 }
 
 void CPrefabObject::AttachLoadedChildrenToPrefab(CObjectArchive& ar, IObjectLayer* pLayer)
@@ -780,10 +803,11 @@ void CPrefabObject::AttachLoadedChildrenToPrefab(CObjectArchive& ar, IObjectLaye
 		}
 		SetObjectPrefabFlagAndLayer(obj);
 	}
-
-	const bool keepPos = false;
-	const bool invalidateTM = false; // Don't invalidate each child independently - we'll do it later.
-	AttachChildren(objects, keepPos, invalidateTM);
+	//This is necessary to avoid prefab item modify and add to be called when loading nested prefab (SetSkipPrefabUpdate will be set to false when exiting from nested SetPrefab) 
+	//As we are loading from an archive we don't need to do any kind of update operation
+	SetModifyInProgress(true);
+	AddMembers(objects, false);
+	SetModifyInProgress(false);
 }
 
 void CPrefabObject::DeleteChildrenWithoutUpdating()
@@ -847,22 +871,6 @@ void CPrefabObject::PostClone(CBaseObject* pFromObject, CObjectCloneContext& ctx
 		else
 			pFromParent->AddMember(this, false);
 	}
-}
-
-bool CPrefabObject::HitTest(HitContext& hc)
-{
-	if (IsOpen())
-	{
-		return CGroup::HitTest(hc);
-	}
-
-	if (CGroup::HitTest(hc))
-	{
-		hc.object = this;
-		return true;
-	}
-
-	return false;
 }
 
 const ColorB& CPrefabObject::GetSelectionPreviewHighlightColor()
@@ -1329,7 +1337,7 @@ void CPrefabObject::CalcBoundBox()
 
 void CPrefabObject::RemoveChild(CBaseObject* child)
 {
-	CBaseObject::RemoveChild(child);
+	CGroup::RemoveChild(child);
 }
 
 void CPrefabObject::GenerateGUIDsForObjectAndChildren(CBaseObject* pObject)
@@ -1340,32 +1348,44 @@ void CPrefabObject::GenerateGUIDsForObjectAndChildren(CBaseObject* pObject)
 
 	objectsToAssign.push_back(pObject);
 
-	if (pObject->IsKindOf(RUNTIME_CLASS(CPrefabObject)))
+	bool isObjectPrefab = pObject->IsKindOf(RUNTIME_CLASS(CPrefabObject));
+
+	if (isObjectPrefab)
 	{
 		CRY_ASSERT_MESSAGE(static_cast<CPrefabObject*>(pObject)->m_pPrefabItem != m_pPrefabItem, "Object has the same prefab item");
 	}
 
-	//We need to find all the children of this object
-	pObject->GetAllChildren(objectsToAssign);
+	SetObjectPrefabFlagAndLayer(pObject);
+	//This is serialized in the IdInPrefab field and also assigned as the new prefab GUID
+	InitObjectPrefabId(pObject);
+	//We need this for search, serialization and other things
+	SetPrefabFlagForLinkedObjects(pObject);
 
-	//Make sure to generate all the GUIDS for the children of this object
-	for (CBaseObject* pObjectToAssign : objectsToAssign)
+	CryGUID newGuid = CPrefabChildGuidProvider(this).GetFor(pObject);
+
+	if (CUndo::IsRecording())
 	{
-		SetObjectPrefabFlagAndLayer(pObjectToAssign);
-		//This is serialized in the IdInPrefab field and also assigned as the new prefab GUID
-		InitObjectPrefabId(pObjectToAssign);
-		//We need this for search, serialization and other things
-		SetPrefabFlagForLinkedObjects(pObjectToAssign);
-
-		CryGUID newGuid = CPrefabChildGuidProvider(this).GetFor(pObjectToAssign);
-		if (CUndo::IsRecording())
-		{
-			CUndo::Record(new CUndoChangeGuid(pObjectToAssign, newGuid));
-		}
-		//Assign the new GUID
-		GetObjectManager()->ChangeObjectId(pObjectToAssign->GetId(), newGuid);
+		CUndo::Record(new CUndoChangeGuid(pObject, newGuid));
 	}
 
+	//Assign the new GUID
+	GetObjectManager()->ChangeObjectId(pObject->GetId(), newGuid);
+
+	if (isObjectPrefab)
+	{
+		CPrefabObject* pPrefabObject = static_cast<CPrefabObject*>(pObject);
+		for (size_t i = 0, childCount = pObject->GetChildCount(); i < childCount; ++i)
+		{
+			pPrefabObject->GenerateGUIDsForObjectAndChildren(pPrefabObject->GetChild(i));
+		}
+	}
+	else
+	{
+		for (size_t i = 0, childCount = pObject->GetChildCount(); i < childCount; ++i)
+		{
+			GenerateGUIDsForObjectAndChildren(pObject->GetChild(i));
+		}
+	}
 }
 
 void CPrefabObject::SetMaterial(IEditorMaterial* pMaterial)
@@ -1486,48 +1506,6 @@ bool CPrefabObject::CanAddMembers(std::vector<CBaseObject*>& objects)
 	return true;
 }
 
-bool CPrefabObject::HitTestMembers(HitContext& hcOrg)
-{
-	float mindist = FLT_MAX;
-
-	HitContext hc = hcOrg;
-
-	CBaseObject* selected = 0;
-	std::vector<CBaseObject*> allChildrenObj;
-	GetAllPrefabFlagedChildren(allChildrenObj);
-	int numberOfChildren = allChildrenObj.size();
-	for (int i = 0; i < numberOfChildren; ++i)
-	{
-		CBaseObject* pObj = allChildrenObj[i];
-
-		if (pObj == this || pObj->IsFrozen() || pObj->IsHidden())
-			continue;
-
-		if (!GetObjectManager()->HitTestObject(pObj, hc))
-			continue;
-
-		if (hc.dist >= mindist)
-			continue;
-
-		mindist = hc.dist;
-
-		if (hc.object)
-			selected = hc.object;
-		else
-			selected = pObj;
-
-		hc.object = 0;
-	}
-
-	if (selected)
-	{
-		hcOrg.object = selected;
-		hcOrg.dist = mindist;
-		return true;
-	}
-	return false;
-}
-
 bool CPrefabObject::SuspendUpdate(bool bForceSuspend)
 {
 	if (m_bSettingPrefabObj)
@@ -1616,6 +1594,20 @@ void CPrefabObject::SetAutoUpdatePrefab(bool autoUpdate)
 		}
 		m_pendingChanges.clear();
 	}
+}
+
+const char* CPrefabObjectClassDesc::GenerateObjectName(const char* szCreationParams)
+{
+	//szCreationParams is the GUID of the prefab item. 
+	//This item might not have been loaded yet, so we need to make sure it is
+	CPrefabItem * item = static_cast<CPrefabItem*>(GetIEditor()->GetPrefabManager()->LoadItem(CryGUID::FromString(szCreationParams)));
+
+	if (item)
+	{
+		return item->GetName();
+	}
+	
+	return ClassName();
 }
 
 void CPrefabObjectClassDesc::EnumerateObjects(IObjectEnumerator* pEnumerator)

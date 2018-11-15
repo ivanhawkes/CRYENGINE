@@ -4,8 +4,6 @@
 #include "Object.h"
 
 #include "Event.h"
-#include "Parameter.h"
-#include "SwitchState.h"
 #include "Environment.h"
 #include "Listener.h"
 #include "Cvars.h"
@@ -26,7 +24,7 @@ namespace Adx2
 static constexpr CriChar8 const* s_szOcclusionAisacName = "occlusion";
 
 //////////////////////////////////////////////////////////////////////////
-CObject::CObject(CObjectTransformation const& transformation)
+CObject::CObject(CTransformation const& transformation)
 	: m_transformation(transformation)
 	, m_occlusion(0.0f)
 	, m_previousAbsoluteVelocity(0.0f)
@@ -45,7 +43,7 @@ CObject::~CObject()
 {
 	if ((m_flags& EObjectFlags::TrackVelocityForDoppler) != 0)
 	{
-		CRY_ASSERT_MESSAGE(g_numObjectsWithDoppler > 0, "g_numObjectsWithDoppler is 0 but an object with doppler tracking still exists.");
+		CRY_ASSERT_MESSAGE(g_numObjectsWithDoppler > 0, "g_numObjectsWithDoppler is 0 but an object with doppler tracking still exists during %s", __FUNCTION__);
 		g_numObjectsWithDoppler--;
 	}
 }
@@ -60,7 +58,7 @@ void CObject::Update(float const deltaTime)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetTransformation(CObjectTransformation const& transformation)
+void CObject::SetTransformation(CTransformation const& transformation)
 {
 	m_position = transformation.GetPosition();
 
@@ -94,9 +92,9 @@ void CObject::SetTransformation(CObjectTransformation const& transformation)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
+void CObject::SetEnvironment(IEnvironmentConnection const* const pIEnvironmentConnection, float const amount)
 {
-	auto const pEnvironment = static_cast<CEnvironment const*>(pIEnvironment);
+	auto const pEnvironment = static_cast<CEnvironment const*>(pIEnvironmentConnection);
 
 	if (pEnvironment != nullptr)
 	{
@@ -114,102 +112,7 @@ void CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float cons
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetParameter(IParameter const* const pIParameter, float const value)
-{
-	auto const pParameter = static_cast<CParameter const*>(pIParameter);
-
-	if (pParameter != nullptr)
-	{
-		EParameterType const type = pParameter->GetType();
-
-		switch (type)
-		{
-		case EParameterType::AisacControl:
-			{
-				criAtomExPlayer_SetAisacControlByName(m_pPlayer, pParameter->GetName(), static_cast<CriFloat32>(pParameter->GetMultiplier() * value + pParameter->GetValueShift()));
-				criAtomExPlayer_UpdateAll(m_pPlayer);
-
-				break;
-			}
-		case EParameterType::Category:
-			{
-				criAtomExCategory_SetVolumeByName(pParameter->GetName(), static_cast<CriFloat32>(pParameter->GetMultiplier() * value + pParameter->GetValueShift()));
-
-				break;
-			}
-		case EParameterType::GameVariable:
-			{
-				criAtomEx_SetGameVariableByName(pParameter->GetName(), static_cast<CriFloat32>(pParameter->GetMultiplier() * value + pParameter->GetValueShift()));
-
-				break;
-			}
-		default:
-			{
-				Cry::Audio::Log(ELogType::Warning, "Adx2 - Unknown EParameterType: %" PRISIZE_T, type);
-
-				break;
-			}
-		}
-	}
-	else
-	{
-		Cry::Audio::Log(ELogType::Error, "Adx2 - Invalid Parameter Data passed to the Adx2 implementation of SetParameter");
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CObject::SetSwitchState(ISwitchState const* const pISwitchState)
-{
-	auto const pSwitchState = static_cast<CSwitchState const*>(pISwitchState);
-
-	if (pSwitchState != nullptr)
-	{
-		ESwitchType const type = pSwitchState->GetType();
-
-		switch (type)
-		{
-		case ESwitchType::Selector:
-			{
-				criAtomExPlayer_SetSelectorLabel(m_pPlayer, pSwitchState->GetName(), pSwitchState->GetLabelName());
-				criAtomExPlayer_UpdateAll(m_pPlayer);
-
-				break;
-			}
-		case ESwitchType::AisacControl:
-			{
-				criAtomExPlayer_SetAisacControlByName(m_pPlayer, pSwitchState->GetName(), pSwitchState->GetValue());
-				criAtomExPlayer_UpdateAll(m_pPlayer);
-
-				break;
-			}
-		case ESwitchType::Category:
-			{
-				criAtomExCategory_SetVolumeByName(pSwitchState->GetName(), pSwitchState->GetValue());
-
-				break;
-			}
-		case ESwitchType::GameVariable:
-			{
-				criAtomEx_SetGameVariableByName(pSwitchState->GetName(), pSwitchState->GetValue());
-
-				break;
-			}
-		default:
-			{
-				Cry::Audio::Log(ELogType::Warning, "Adx2 - Unknown ESwitchType: %" PRISIZE_T, type);
-
-				break;
-			}
-		}
-	}
-	else
-	{
-		Cry::Audio::Log(ELogType::Error, "Adx2 - Invalid SwitchState Data passed to the Adx2 implementation of SetSwitchState");
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
+void CObject::SetOcclusion(float const occlusion)
 {
 	criAtomExPlayer_SetAisacControlByName(m_pPlayer, s_szOcclusionAisacName, static_cast<CriFloat32>(occlusion));
 	criAtomExPlayer_UpdateAll(m_pPlayer);

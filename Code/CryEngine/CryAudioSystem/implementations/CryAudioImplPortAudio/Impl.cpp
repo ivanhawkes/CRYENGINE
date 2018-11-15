@@ -15,6 +15,8 @@
 #include "StandaloneFile.h"
 #include "SwitchState.h"
 #include "GlobalData.h"
+
+#include <FileInfo.h>
 #include <Logger.h>
 #include <sndfile.hh>
 #include <CrySystem/File/ICryPak.h>
@@ -32,23 +34,26 @@ namespace Impl
 {
 namespace PortAudio
 {
-uint32 g_triggerPoolSize = 0;
-uint32 g_triggerPoolSizeLevelSpecific = 0;
+std::vector<CObject*> g_constructedObjects;
+std::vector<CTrigger*> g_triggers;
+
+uint16 g_triggerPoolSize = 0;
+uint16 g_triggerPoolSizeLevelSpecific = 0;
 
 #if defined(INCLUDE_PORTAUDIO_IMPL_PRODUCTION_CODE)
-uint32 g_debugTriggerPoolSize = 0;
+uint16 g_debugTriggerPoolSize = 0;
 #endif  // INCLUDE_PORTAUDIO_IMPL_PRODUCTION_CODE
 
 //////////////////////////////////////////////////////////////////////////
-void CountPoolSizes(XmlNodeRef const pNode, uint32& poolSizes)
+void CountPoolSizes(XmlNodeRef const pNode, uint16& poolSizes)
 {
-	uint32 numTriggers = 0;
+	uint16 numTriggers = 0;
 	pNode->getAttr(s_szTriggersAttribute, numTriggers);
 	poolSizes += numTriggers;
 }
 
 //////////////////////////////////////////////////////////////////////////
-void AllocateMemoryPools(uint32 const objectPoolSize, uint32 const eventPoolSize)
+void AllocateMemoryPools(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Port Audio Object Pool");
 	CObject::CreateAllocator(objectPoolSize);
@@ -115,8 +120,9 @@ bool GetSoundInfo(char const* const szPath, SF_INFO& sfInfo, PaStreamParameters&
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::Init(uint32 const objectPoolSize, uint32 const eventPoolSize)
+ERequestStatus CImpl::Init(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
+	g_constructedObjects.reserve(static_cast<size_t>(objectPoolSize));
 	AllocateMemoryPools(objectPoolSize, eventPoolSize);
 
 	char const* szAssetDirectory = gEnv->pSystem->GetIProjectManager()->GetCurrentAssetDirectoryRelative();
@@ -181,7 +187,7 @@ void CImpl::SetLibraryData(XmlNodeRef const pNode, bool const isLevelSpecific)
 {
 	if (isLevelSpecific)
 	{
-		uint32 triggerLevelPoolSize;
+		uint16 triggerLevelPoolSize;
 		CountPoolSizes(pNode, triggerLevelPoolSize);
 
 		g_triggerPoolSizeLevelSpecific = std::max(g_triggerPoolSizeLevelSpecific, triggerLevelPoolSize);
@@ -213,49 +219,58 @@ void CImpl::OnAfterLibraryDataChanged()
 	g_debugTriggerPoolSize = g_triggerPoolSize;
 #endif  // INCLUDE_PORTAUDIO_IMPL_PRODUCTION_CODE
 
-	g_triggerPoolSize = std::max<uint32>(1, g_triggerPoolSize);
+	g_triggerPoolSize = std::max<uint16>(1, g_triggerPoolSize);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::OnLoseFocus()
+void CImpl::OnLoseFocus()
 {
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::OnGetFocus()
+void CImpl::OnGetFocus()
 {
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::MuteAll()
+void CImpl::MuteAll()
 {
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::UnmuteAll()
+void CImpl::UnmuteAll()
 {
-	return ERequestStatus::Success;
+}
+
+///////////////////////////////////////////////////////////////////////////
+void CImpl::PauseAll()
+{
+}
+
+///////////////////////////////////////////////////////////////////////////
+void CImpl::ResumeAll()
+{
 }
 
 ///////////////////////////////////////////////////////////////////////////
 ERequestStatus CImpl::StopAllSounds()
 {
+	for (auto const pObject : g_constructedObjects)
+	{
+		pObject->StopAllTriggers();
+	}
+
 	return ERequestStatus::Success;
 }
 
-///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::PauseAll()
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetGlobalParameter(IParameterConnection const* const pIParameterConnection, float const value)
 {
-	return ERequestStatus::Success;
 }
 
-///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::ResumeAll()
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
 {
-	return ERequestStatus::Success;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -341,14 +356,17 @@ void CImpl::GetInfo(SImplInfo& implInfo) const
 ///////////////////////////////////////////////////////////////////////////
 IObject* CImpl::ConstructGlobalObject()
 {
-	return new CObject();
+	auto pObject = new CObject();
+	stl::push_back_unique(g_constructedObjects, pObject);
+
+	return static_cast<IObject*>(pObject);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IObject* CImpl::ConstructObject(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
+IObject* CImpl::ConstructObject(CTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 	auto pObject = new CObject();
-	stl::push_back_unique(m_constructedObjects, pObject);
+	stl::push_back_unique(g_constructedObjects, pObject);
 
 	return static_cast<IObject*>(pObject);
 }
@@ -357,12 +375,12 @@ IObject* CImpl::ConstructObject(CObjectTransformation const& transformation, cha
 void CImpl::DestructObject(IObject const* const pIObject)
 {
 	auto const pObject = static_cast<CObject const*>(pIObject);
-	stl::find_and_erase(m_constructedObjects, pObject);
+	stl::find_and_erase(g_constructedObjects, pObject);
 	delete pObject;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IListener* CImpl::ConstructListener(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
+IListener* CImpl::ConstructListener(CTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 	g_pListener = new CListener(transformation);
 
@@ -379,13 +397,13 @@ IListener* CImpl::ConstructListener(CObjectTransformation const& transformation,
 ///////////////////////////////////////////////////////////////////////////
 void CImpl::DestructListener(IListener* const pIListener)
 {
-	CRY_ASSERT_MESSAGE(pIListener == g_pListener, "pIListener is not g_pListener");
+	CRY_ASSERT_MESSAGE(pIListener == g_pListener, "pIListener is not g_pListener during %s", __FUNCTION__);
 	delete g_pListener;
 	g_pListener = nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////
-IEvent* CImpl::ConstructEvent(CATLEvent& event)
+IEvent* CImpl::ConstructEvent(CryAudio::CEvent& event)
 {
 	return static_cast<IEvent*>(new CEvent(event));
 }
@@ -397,15 +415,15 @@ void CImpl::DestructEvent(IEvent const* const pIEvent)
 }
 
 //////////////////////////////////////////////////////////////////////////
-IStandaloneFile* CImpl::ConstructStandaloneFile(CATLStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITrigger const* pITrigger /*= nullptr*/)
+IStandaloneFileConnection* CImpl::ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection /*= nullptr*/)
 {
-	return static_cast<IStandaloneFile*>(new CStandaloneFile);
+	return static_cast<IStandaloneFileConnection*>(new CStandaloneFile);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DestructStandaloneFile(IStandaloneFile const* const pIStandaloneFile)
+void CImpl::DestructStandaloneFileConnection(IStandaloneFileConnection const* const pIStandaloneFileConnection)
 {
-	delete pIStandaloneFile;
+	delete pIStandaloneFileConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -419,7 +437,7 @@ void CImpl::GamepadDisconnected(DeviceId const deviceUniqueID)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radius)
+ITriggerConnection const* CImpl::ConstructTriggerConnection(XmlNodeRef const pRootNode, float& radius)
 {
 	CTrigger* pTrigger = nullptr;
 	char const* const szTag = pRootNode->getTag();
@@ -468,7 +486,7 @@ ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radiu
 				name.c_str(),
 				isLocalized);
 
-			m_triggers.push_back(pTrigger);
+			g_triggers.push_back(pTrigger);
 		}
 	}
 	else
@@ -476,14 +494,14 @@ ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radiu
 		Cry::Audio::Log(ELogType::Warning, "Unknown PortAudio tag: %s", szTag);
 	}
 
-	return static_cast<ITrigger*>(pTrigger);
+	return static_cast<ITriggerConnection*>(pTrigger);
 }
 
 //////////////////////////////////////////////////////////////////////////
-ITrigger const* CImpl::ConstructTrigger(ITriggerInfo const* const pITriggerInfo)
+ITriggerConnection const* CImpl::ConstructTriggerConnection(ITriggerInfo const* const pITriggerInfo)
 {
 #if defined(INCLUDE_PORTAUDIO_IMPL_PRODUCTION_CODE)
-	ITrigger const* pITrigger = nullptr;
+	ITriggerConnection const* pITriggerConnection = nullptr;
 	auto const pTriggerInfo = static_cast<STriggerInfo const*>(pITriggerInfo);
 
 	if (pTriggerInfo != nullptr)
@@ -506,74 +524,74 @@ ITrigger const* CImpl::ConstructTrigger(ITriggerInfo const* const pITriggerInfo)
 
 		if (GetSoundInfo(path.c_str(), sfInfo, streamParameters))
 		{
-			pITrigger = static_cast<ITrigger const*>(new CTrigger(StringToId(path.c_str()), 0, static_cast<double>(sfInfo.samplerate), EEventType::Start, path.c_str(), streamParameters, folderName.c_str(), name.c_str(), pTriggerInfo->isLocalized));
+			pITriggerConnection = static_cast<ITriggerConnection const*>(new CTrigger(StringToId(path.c_str()), 0, static_cast<double>(sfInfo.samplerate), EEventType::Start, path.c_str(), streamParameters, folderName.c_str(), name.c_str(), pTriggerInfo->isLocalized));
 		}
 	}
 
-	return pITrigger;
+	return pITriggerConnection;
 #else
 	return nullptr;
 #endif  // INCLUDE_PORTAUDIO_IMPL_PRODUCTION_CODE
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructTrigger(ITrigger const* const pITrigger)
+void CImpl::DestructTriggerConnection(ITriggerConnection const* const pITriggerConnection)
 {
-	delete pITrigger;
+	delete pITriggerConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
+IParameterConnection const* CImpl::ConstructParameterConnection(XmlNodeRef const pRootNode)
 {
-	return static_cast<IParameter*>(new CParameter);
+	return static_cast<IParameterConnection*>(new CParameter);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructParameter(IParameter const* const pIParameter)
+void CImpl::DestructParameterConnection(IParameterConnection const* const pIParameterConnection)
 {
-	delete pIParameter;
+	delete pIParameterConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
+ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef const pRootNode)
 {
-	return static_cast<ISwitchState*>(new CSwitchState);
+	return static_cast<ISwitchStateConnection*>(new CSwitchState);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructSwitchState(ISwitchState const* const pISwitchState)
+void CImpl::DestructSwitchStateConnection(ISwitchStateConnection const* const pISwitchStateConnection)
 {
-	delete pISwitchState;
+	delete pISwitchStateConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IEnvironment const* CImpl::ConstructEnvironment(XmlNodeRef const pRootNode)
+IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef const pRootNode)
 {
-	return static_cast<IEnvironment*>(new CEnvironment);
+	return static_cast<IEnvironmentConnection*>(new CEnvironment);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructEnvironment(IEnvironment const* const pIEnvironment)
+void CImpl::DestructEnvironmentConnection(IEnvironmentConnection const* const pIEnvironmentConnection)
 {
-	delete pIEnvironment;
+	delete pIEnvironmentConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ISetting const* CImpl::ConstructSetting(XmlNodeRef const pRootNode)
+ISettingConnection const* CImpl::ConstructSettingConnection(XmlNodeRef const pRootNode)
 {
-	return static_cast<ISetting*>(new CSetting);
+	return static_cast<ISettingConnection*>(new CSetting);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DestructSetting(ISetting const* const pISetting)
+void CImpl::DestructSettingConnection(ISettingConnection const* const pISettingConnection)
 {
-	delete pISetting;
+	delete pISettingConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CImpl::OnRefresh()
 {
-	m_triggers.clear();
+	g_triggers.clear();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -607,7 +625,7 @@ void CImpl::SetLanguage(char const* const szLanguage)
 //////////////////////////////////////////////////////////////////////////
 void CImpl::UpdateLocalizedTriggers()
 {
-	for (auto const pTrigger : m_triggers)
+	for (auto const pTrigger : g_triggers)
 	{
 		if (pTrigger->m_isLocalized)
 		{

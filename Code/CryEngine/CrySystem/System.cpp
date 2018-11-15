@@ -228,7 +228,7 @@ CSystem::CSystem(const SSystemInitParams& startupParams)
 	m_pSystemEventDispatcher->RegisterListener(this, "CSystem");
 
 	//////////////////////////////////////////////////////////////////////////
-	// Clear environment.
+		// Clear environment.
 	//////////////////////////////////////////////////////////////////////////
 	memset(&m_env, 0, sizeof(m_env));
 
@@ -1301,14 +1301,14 @@ void CSystem::SleepIfInactive()
 #if CRY_PLATFORM_WINDOWS
 	if (GetIRenderer())
 	{
-		WIN_HWND hRendWnd = GetIRenderer()->GetHWND();
+		CRY_HWND hRendWnd = GetIRenderer()->GetHWND();
 		if (!hRendWnd)
 			return;
 
 		// Loop here waiting for window to be activated.
 		for (int nLoops = 0; nLoops < 5; nLoops++)
 		{
-			WIN_HWND hActiveWnd = ::GetActiveWindow();
+			CRY_HWND hActiveWnd = ::GetActiveWindow();
 			if (hActiveWnd == hRendWnd)
 				break;
 
@@ -1806,11 +1806,6 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 		g_breakListenerOn = false;
 	}
 #endif //EXCLUDE_UPDATE_ON_CONSOLE
-#if CRY_PLATFORM_WINDOWS
-	// enable/disable SSE fp exceptions (#nan and /0)
-	// need to do it each frame since sometimes they are being reset
-	_mm_setcsr(_mm_getcsr() & ~0x280 | (g_cvars.sys_float_exceptions > 0 ? 0 : 0x280));
-#endif
 
 	m_nUpdateCounter++;
 #ifndef EXCLUDE_UPDATE_ON_CONSOLE
@@ -3063,7 +3058,7 @@ ESystemConfigSpec CSystem::GetMaxConfigSpec() const
 }
 
 //////////////////////////////////////////////////////////////////////////
-IProjectManager* CSystem::GetIProjectManager()
+Cry::IProjectManager* CSystem::GetIProjectManager()
 {
 	return m_pProjectManager;
 }
@@ -3403,7 +3398,7 @@ void CSystem::UnregisterWindowMessageHandler(IWindowMessageHandler* pHandler)
 }
 
 //////////////////////////////////////////////////////////////////////////
-int CSystem::PumpWindowMessage(bool bAll, WIN_HWND opaqueHWnd)
+int CSystem::PumpWindowMessage(bool bAll, CRY_HWND opaqueHWnd)
 {
 #if CRY_PLATFORM_WINDOWS
 	int count = 0;
@@ -3510,7 +3505,7 @@ enum class EMouseWheelOrigin
 		#define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 	#endif
 
-bool CSystem::HandleMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* pResult)
+bool CSystem::HandleMessage(CRY_HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* pResult)
 {
 	static bool sbInSizingModalLoop;
 	int x = GET_X_LPARAM(lParam);
@@ -3651,7 +3646,7 @@ bool CSystem::HandleMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
 				case EMouseWheelOrigin::WindowSpace:
 					{
 						POINT p{ x, y };
-						ScreenToClient(hWnd, &p);
+						ScreenToClient((HWND)hWnd, &p);
 						x = p.x;
 						y = p.y;
 						break;
@@ -3659,9 +3654,9 @@ bool CSystem::HandleMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
 				case EMouseWheelOrigin::WindowSpaceClamped:
 					{
 						POINT p{ x, y };
-						ScreenToClient(hWnd, &p);
+						ScreenToClient((HWND)hWnd, &p);
 						RECT r;
-						GetClientRect(hWnd, &r);
+						GetClientRect((HWND)hWnd, &r);
 						x = crymath::clamp<int>(p.x, 0, r.right - r.left);
 						y = crymath::clamp<int>(p.y, 0, r.bottom - r.top);
 						break;
@@ -3696,7 +3691,7 @@ bool CSystem::HandleMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
 
 //////////////////////////////////////////////////////////////////////////
 #if CRY_PLATFORM_WINDOWS
-static LRESULT WINAPI WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+static LRESULT WINAPI WndProc(CRY_HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	CSystem* pSystem = 0;
 	if (gEnv)
@@ -3734,14 +3729,14 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
 	// Handle with the default procedure
 	#if defined(UNICODE) || defined(_UNICODE)
-	assert(IsWindowUnicode(hWnd) && "Window should be Unicode when compiling with UNICODE");
+	assert(IsWindowUnicode((HWND)hWnd) && "Window should be Unicode when compiling with UNICODE");
 	#else
-	if (!IsWindowUnicode(hWnd))
+	if (!IsWindowUnicode((HWND)hWnd))
 	{
-		return DefWindowProcA(hWnd, uMsg, wParam, lParam);
+		return DefWindowProcA((HWND)hWnd, uMsg, wParam, lParam);
 	}
 	#endif
-	return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+	return DefWindowProcW((HWND)hWnd, uMsg, wParam, lParam);
 }
 #endif
 

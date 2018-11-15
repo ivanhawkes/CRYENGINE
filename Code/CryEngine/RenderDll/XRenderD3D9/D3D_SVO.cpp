@@ -66,6 +66,8 @@ void CSvoRenderer::SetEditingHelper(const Sphere& sp)
 
 void CSvoRenderer::UpdateCompute(CRenderView* pRenderView)
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	InitCVarValues();
 
 	if (!e_svoEnabled)
@@ -764,6 +766,8 @@ void CSvoRenderer::DrawPonts(PodArray<SVF_P3F_C4B_T2F>& arrVerts)
 
 void CSvoRenderer::UpdateRender(CRenderView* pRenderView)
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	m_pRenderView = pRenderView;
 	int nPrevAsync = CRenderer::CV_r_shadersasynccompiling;
 	if (gEnv->IsEditor())
@@ -1514,6 +1518,9 @@ uint64 CSvoRenderer::GetRunTimeFlags(bool bDiffuseMode, bool bPixelShader)
 
 	if (e_svoTI_ShadowsFromHeightmap && bPixelShader)
 		rtFlags |= g_HWSR_MaskBit[HWSR_QUALITY1];
+
+	if (e_svoTI_TranslucentBrightness && bPixelShader)
+		rtFlags |= g_HWSR_MaskBit[HWSR_NO_TESSELLATION];
 
 	return rtFlags;
 }

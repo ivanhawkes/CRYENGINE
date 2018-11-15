@@ -2,8 +2,9 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <ISettingConnection.h>
 #include <PoolObject.h>
+#include <CryAudio/IAudioInterfacesCommonData.h>
 
 namespace CryAudio
 {
@@ -11,7 +12,7 @@ namespace Impl
 {
 namespace Adx2
 {
-class CSetting final : public ISetting, public CPoolObject<CSetting, stl::PSyncNone>
+class CSetting final : public ISettingConnection, public CPoolObject<CSetting, stl::PSyncNone>
 {
 public:
 
@@ -21,13 +22,16 @@ public:
 	CSetting& operator=(CSetting const&) = delete;
 	CSetting& operator=(CSetting&&) = delete;
 
-	explicit CSetting(char const* const szName);
+	explicit CSetting(char const* const szName)
+		: m_name(szName)
+	{}
+
 	virtual ~CSetting() override = default;
 
-	// ISetting
+	// ISettingConnection
 	virtual void Load() const override;
 	virtual void Unload() const override;
-	// ~ISetting
+	// ~ISettingConnection
 
 private:
 

@@ -69,25 +69,6 @@ void STextureAnimation::Update()
 //////////////////////////////////////////////////////////////////////////
 // SModuleParams
 
-SComponentParams::SComponentParams()
-{
-	m_usesGPU              = false;
-	m_renderObjectFlags    = 0;
-	m_instanceDataStride   = 0;
-	m_maxParticlesBurst    = 0;
-	m_maxParticlesPerFrame = 0;
-	m_maxParticleRate      = 0.0f;
-	m_scaleParticleCount   = 1.0f;
-	m_renderStateFlags     = OS_ALPHA_BLEND;
-	m_requiredShaderType   = eST_All;
-	m_maxParticleSize      = 0.0f;
-	m_maxParticleAlpha     = 1.0f;
-	m_meshCentered         = false;
-	m_diffuseMap           = "%ENGINE%/EngineAssets/Textures/white.dds";
-	m_particleObjFlags     = 0;
-	m_renderObjectSortBias = 0.0f;
-}
-
 void SComponentParams::Serialize(Serialization::IArchive& ar)
 {
 	auto* pComponent = static_cast<CParticleComponent*>(ar.context<IParticleComponent>());
@@ -214,12 +195,28 @@ void CParticleComponent::SetParent(IParticleComponent* pParentComponent)
 {
 	if (m_parent == pParentComponent)
 		return;
+	if (pParentComponent && !pParentComponent->CanBeParent(this))
+		return;
 	if (m_parent)
 		stl::find_and_erase(m_parent->m_children, this);
 	m_parent = static_cast<CParticleComponent*>(pParentComponent);
 	if (m_parent)
 		stl::push_back_unique(m_parent->m_children, this);
 	SetChanged();
+}
+
+bool CParticleComponent::CanBeParent(IParticleComponent* child) const
+{
+	if (m_params.m_usesGPU)
+		return false;
+	if (child)
+	{
+		// Prevent cycles
+		for (const IParticleComponent* parent = this; parent; parent = parent->GetParent())
+			if (parent == child)
+				return false;
+	}
+	return true;
 }
 
 void CParticleComponent::GetMaxParticleCounts(int& total, int& perFrame, float minFPS, float maxFPS) const

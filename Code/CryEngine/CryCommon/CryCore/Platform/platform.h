@@ -411,7 +411,7 @@ void            CryFindRootFolderAndSetAsCurrentWorkingDirectory();
 
 inline void     CryHeapCheck()
 {
-#if CRY_PLATFORM_WINDOWS // todo: this might be readded with later xdks?
+#if CRY_PLATFORM_WINDOWS // todo: this might be read with later xdks?
 	int Result = _heapchk();
 	assert(Result != _HEAPBADBEGIN);
 	assert(Result != _HEAPBADNODE);
@@ -584,6 +584,8 @@ ILINE T* non_const(const T* t)
 typedef unsigned char          uchar;
 typedef unsigned int           uint;
 typedef const char*            cstr;
+
+#define CRY_MEMORY_ALLOCATION_ALIGNMENT 16
 
 //! Align function works on integer or pointer values. Only supports power-of-two alignment.
 template<typename T>

@@ -394,21 +394,23 @@ void CShadowMapStage::PrepareShadowPasses(SShadowFrustumToRender& frustumToRende
 
 			if (PrepareOutputsForPass(frustumToRender, side, curPass))
 			{
-				curPass.SetupPassContext(m_stageID, passID, TTYPE_SHADOWGEN, FB_MASK, EFSLIST_SHADOW_GEN);
 				curPass.m_pFrustumToRender = &frustumToRender;
 				curPass.m_nShadowFrustumSide = side;
+				curPass.m_eShadowPassID = passID;
 
 				PrepareShadowPassForFrustum(frustumToRender, side, curPass);
 				UpdateShadowFrustumFromPass(curPass, *pFrustum);
 
 				curPass.m_bRequiresRender =
-				  (CRendererCVars::CV_r_ShadowMapsUpdate && !pShadowView->GetRenderItems(side).empty()) ||
+				  (CRendererCVars::CV_r_ShadowMapsUpdate && !pShadowView->GetRenderItems(ERenderListID(side)).empty()) ||
 				   pFrustum->m_eFrustumType == ShadowMapFrustum::e_GsmDynamicDistance ||
 				  (pFrustum->m_eFrustumType == ShadowMapFrustum::e_GsmCached && !pFrustum->bIncrementalUpdate);
 
 				cry_strcpy(curPass.m_ProfileLabel, profileLabel);
 
 				curPass.SetLabel(curPass.m_ProfileLabel);
+				curPass.SetPassResources(m_pResourceLayout, curPass.GetResources());
+
 				curPass.PrepareResources(pMainView);
 				curPass.PrepareRenderPassForUse(GetDeviceObjectFactory().GetCoreCommandList());
 			}
@@ -712,6 +714,7 @@ CShadowMapStage::CShadowMapPass::CShadowMapPass(CShadowMapStage* pStage)
 {
 	m_pFrustumToRender = nullptr;
 	m_nShadowFrustumSide = 0;
+	m_eShadowPassID = EPass(0);
 	m_pShadowMapStage = pStage;
 
 	m_pPerPassResourceSet = GetDeviceObjectFactory().CreateResourceSet(CDeviceResourceSet::EFlags_ForceSetAllState);
@@ -723,6 +726,7 @@ CShadowMapStage::CShadowMapPass::CShadowMapPass(CShadowMapPass&& other)
 	: CSceneRenderPass(std::move(other))
 	, m_pFrustumToRender(std::move(other.m_pFrustumToRender))
 	, m_nShadowFrustumSide(std::move(other.m_nShadowFrustumSide))
+	, m_eShadowPassID(std::move(other.m_eShadowPassID))
 	, m_bRequiresRender(std::move(other.m_bRequiresRender))
 	, m_pPerPassConstantBuffer(std::move(other.m_pPerPassConstantBuffer))
 	, m_pPerViewConstantBuffer(std::move(other.m_pPerViewConstantBuffer))
@@ -830,7 +834,7 @@ void CShadowMapStage::CopyShadowMap(const CShadowMapPass& sourcePass, CShadowMap
 	CRY_ASSERT(pSrc->nShadowMapLod == pDst->nShadowMapLod);
 
 	const bool bEmptySrcFrustum = !pSrc->ShouldSample();
-	const auto& renderItems = reinterpret_cast<CRenderView*>(targetPass.m_pFrustumToRender->pShadowsView.get())->GetRenderItems(0);
+	const auto& renderItems = reinterpret_cast<CRenderView*>(targetPass.m_pFrustumToRender->pShadowsView.get())->GetRenderItems(ERenderListID(0));
 	const auto& depthTarget = targetPass.GetPassDesc().GetDepthTarget();
 
 	// do we need to merge static shadows into the dynamic shadow map?
@@ -864,10 +868,7 @@ void CShadowMapStage::CopyShadowMap(const CShadowMapPass& sourcePass, CShadowMap
 			m_CopyShadowMapPass.Execute();
 		}
 
-		pDst->shadowPoolPack[0] = { 
-			0, 0, 
-			static_cast<uint32>(pDst->nTextureWidth), static_cast<uint32>(pDst->nTextureHeight) 
-		};
+		pDst->shadowCascade = TRect_tpl<float>{ 0, 0, static_cast<float>(pDst->nTextureWidth), static_cast<float>(pDst->nTextureHeight) };
 	}
 	else
 	{
@@ -884,13 +885,13 @@ void CShadowMapStage::CopyShadowMap(const CShadowMapPass& sourcePass, CShadowMap
 		  crop.w = 2.0f * pDst->nTextureHeight / float(pSrc->nTextureHeight)
 		  );
 
-		pDst->shadowPoolPack[0].Min = {
-			static_cast<uint32>((crop.x * 0.5f + 0.5f) * pSrc->pDepthTex->GetWidth() + 0.5f),
-			static_cast<uint32>((-(crop.y + crop.w) * 0.5f + 0.5f) * pSrc->pDepthTex->GetHeight() + 0.5f)
+		pDst->shadowCascade.Min = {
+			(crop.x * 0.5f + 0.5f) * pSrc->pDepthTex->GetWidth() + 0.5f,
+			(-(crop.y + crop.w) * 0.5f + 0.5f) * pSrc->pDepthTex->GetHeight() + 0.5f
 		};
-		pDst->shadowPoolPack[0].Max = pDst->shadowPoolPack[0].Min + Vec2_tpl<uint32>{
-			static_cast<uint32>(pDst->nTextureWidth),
-			static_cast<uint32>(pDst->nTextureHeight)
+		pDst->shadowCascade.Max = pDst->shadowCascade.Min + Vec2_tpl<float>{
+			static_cast<float>(pDst->nTextureWidth),
+			static_cast<float>(pDst->nTextureHeight)
 		};
 
 		pDst->pDepthTex = pSrc->pDepthTex;
@@ -985,10 +986,8 @@ void CShadowMapStage::ClearShadowMaps(PassGroupList& shadowMapPasses)
 
 void CShadowMapStage::Execute()
 {
+	FUNCTION_PROFILER_RENDERER();
 	PROFILE_LABEL_SCOPE("SHADOWMAPS");
-
-	if (!m_pResourceLayout)
-		return;
 
 	CD3D9Renderer* rd = gcpRendD3D;
 	const int nThreadID = gRenDev->GetRenderThreadID();
@@ -1004,8 +1003,8 @@ void CShadowMapStage::Execute()
 			CRenderView* pShadowsView = reinterpret_cast<CRenderView*>(curPass.GetFrustum()->pShadowsView.get());
 
 			curPass.PreRender();
-			curPass.SetPassResources(m_pResourceLayout, curPass.GetResources());
 			curPass.BeginExecution();
+			curPass.SetupDrawContext(m_stageID, curPass.m_eShadowPassID, TTYPE_SHADOWGEN, FB_MASK);
 			curPass.DrawRenderItems(pShadowsView, (ERenderListID)curPass.m_nShadowFrustumSide);
 			curPass.EndExecution();
 
@@ -1028,8 +1027,8 @@ void CShadowMapStage::Execute()
 				CRenderView* pShadowsView = reinterpret_cast<CRenderView*>(curPass.GetFrustum()->pShadowsView.get());
 
 				curPass.PreRender();
-				curPass.SetPassResources(m_pResourceLayout, curPass.GetResources());
 				curPass.BeginExecution();
+				curPass.SetupDrawContext(m_stageID, curPass.m_eShadowPassID, TTYPE_SHADOWGEN, FB_MASK);
 				curPass.DrawRenderItems(pShadowsView, (ERenderListID)curPass.m_nShadowFrustumSide);
 				curPass.EndExecution();
 			}

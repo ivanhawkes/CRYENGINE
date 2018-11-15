@@ -7,6 +7,7 @@
 #include "Event.h"
 #include "Trigger.h"
 #include "Parameter.h"
+#include "SwitchState.h"
 #include "Listener.h"
 #include "Cvars.h"
 
@@ -19,7 +20,7 @@ namespace Impl
 namespace Adx2
 {
 CryLockT<CRYLOCK_RECURSIVE> g_mutex;
-std::unordered_map<CriAtomExPlaybackId, CATLEvent*> g_activeEvents;
+std::unordered_map<CriAtomExPlaybackId, CryAudio::CEvent*> g_activeEvents;
 
 //////////////////////////////////////////////////////////////////////////
 void VoiceEventCallback(
@@ -37,11 +38,11 @@ void VoiceEventCallback(
 
 		if (iter != g_activeEvents.end())
 		{
-			auto const pAtlEvent = iter->second;
+			auto const pEvent = iter->second;
 			g_activeEvents.erase(iter);
 			g_mutex.Unlock();
 
-			gEnv->pAudioSystem->ReportFinishedEvent(*pAtlEvent, true);
+			gEnv->pAudioSystem->ReportFinishedEvent(*pEvent, true);
 		}
 		else
 		{
@@ -61,7 +62,7 @@ CBaseObject::CBaseObject()
 	ZeroStruct(m_3dAttributes);
 	m_p3dSource = criAtomEx3dSource_Create(&g_3dSourceConfig, nullptr, 0);
 	m_pPlayer = criAtomExPlayer_Create(&g_playerConfig, nullptr, 0);
-	CRY_ASSERT_MESSAGE(m_pPlayer != nullptr, "m_pPlayer is null pointer");
+	CRY_ASSERT_MESSAGE(m_pPlayer != nullptr, "m_pPlayer is null pointer during %s", __FUNCTION__);
 	m_events.reserve(2);
 	criAtomEx_SetVoiceEventCallback(VoiceEventCallback, nullptr);
 }
@@ -78,11 +79,106 @@ CBaseObject::~CBaseObject()
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent)
+void CBaseObject::SetParameter(IParameterConnection const* const pIParameterConnection, float const value)
+{
+	auto const pParameter = static_cast<CParameter const*>(pIParameterConnection);
+
+	if (pParameter != nullptr)
+	{
+		EParameterType const type = pParameter->GetType();
+
+		switch (type)
+		{
+		case EParameterType::AisacControl:
+			{
+				criAtomExPlayer_SetAisacControlByName(m_pPlayer, pParameter->GetName(), static_cast<CriFloat32>(pParameter->GetMultiplier() * value + pParameter->GetValueShift()));
+				criAtomExPlayer_UpdateAll(m_pPlayer);
+
+				break;
+			}
+		case EParameterType::Category:
+			{
+				criAtomExCategory_SetVolumeByName(pParameter->GetName(), static_cast<CriFloat32>(pParameter->GetMultiplier() * value + pParameter->GetValueShift()));
+
+				break;
+			}
+		case EParameterType::GameVariable:
+			{
+				criAtomEx_SetGameVariableByName(pParameter->GetName(), static_cast<CriFloat32>(pParameter->GetMultiplier() * value + pParameter->GetValueShift()));
+
+				break;
+			}
+		default:
+			{
+				Cry::Audio::Log(ELogType::Warning, "Adx2 - Unknown EParameterType: %" PRISIZE_T, type);
+
+				break;
+			}
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Adx2 - Invalid Parameter Data passed to the Adx2 implementation of %s", __FUNCTION__);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::SetSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
+{
+	auto const pSwitchState = static_cast<CSwitchState const*>(pISwitchStateConnection);
+
+	if (pSwitchState != nullptr)
+	{
+		ESwitchType const type = pSwitchState->GetType();
+
+		switch (type)
+		{
+		case ESwitchType::Selector:
+			{
+				criAtomExPlayer_SetSelectorLabel(m_pPlayer, pSwitchState->GetName(), pSwitchState->GetLabelName());
+				criAtomExPlayer_UpdateAll(m_pPlayer);
+
+				break;
+			}
+		case ESwitchType::AisacControl:
+			{
+				criAtomExPlayer_SetAisacControlByName(m_pPlayer, pSwitchState->GetName(), pSwitchState->GetValue());
+				criAtomExPlayer_UpdateAll(m_pPlayer);
+
+				break;
+			}
+		case ESwitchType::Category:
+			{
+				criAtomExCategory_SetVolumeByName(pSwitchState->GetName(), pSwitchState->GetValue());
+
+				break;
+			}
+		case ESwitchType::GameVariable:
+			{
+				criAtomEx_SetGameVariableByName(pSwitchState->GetName(), pSwitchState->GetValue());
+
+				break;
+			}
+		default:
+			{
+				Cry::Audio::Log(ELogType::Warning, "Adx2 - Unknown ESwitchType: %" PRISIZE_T, type);
+
+				break;
+			}
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Adx2 - Invalid SwitchState Data passed to the Adx2 implementation of %s", __FUNCTION__);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+ERequestStatus CBaseObject::ExecuteTrigger(ITriggerConnection const* const pITriggerConnection, IEvent* const pIEvent)
 {
 	ERequestStatus requestResult = ERequestStatus::Failure;
 
-	auto const pTrigger = static_cast<CTrigger const*>(pITrigger);
+	auto const pTrigger = static_cast<CTrigger const*>(pITriggerConnection);
 	auto const pEvent = static_cast<CEvent*>(pIEvent);
 
 	if ((pTrigger != nullptr) && (pEvent != nullptr))
@@ -147,13 +243,13 @@ void CBaseObject::StopAllTriggers()
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::PlayFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CBaseObject::PlayFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
 	return ERequestStatus::Failure;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::StopFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CBaseObject::StopFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
 	return ERequestStatus::Failure;
 }
@@ -215,7 +311,7 @@ bool CBaseObject::StartEvent(CTrigger const* const pTrigger, CEvent* const pEven
 					UpdateVelocityTracking();
 
 					g_mutex.Lock();
-					g_activeEvents[id] = &pEvent->GetATLEvent();
+					g_activeEvents[id] = &pEvent->GetEvent();
 					g_mutex.Unlock();
 
 					eventStarted = true;
@@ -357,7 +453,7 @@ void CBaseObject::UpdateVelocityTracking()
 			criAtomEx3dSource_SetVelocity(m_p3dSource, &zeroVelocity);
 			criAtomEx3dSource_Update(m_p3dSource);
 
-			CRY_ASSERT_MESSAGE(g_numObjectsWithDoppler > 0, "g_numObjectsWithDoppler is 0 but an object with doppler tracking still exists.");
+			CRY_ASSERT_MESSAGE(g_numObjectsWithDoppler > 0, "g_numObjectsWithDoppler is 0 but an object with doppler tracking still exists during %s", __FUNCTION__);
 			g_numObjectsWithDoppler--;
 		}
 	}

@@ -455,11 +455,40 @@ CTimeDemoRecorder::CTimeDemoRecorder()
 	, m_fixedTimeStep(0)
 	, m_pTimeDemoInfo(nullptr)
 	, m_numLoops(0)
+	, m_maxLoops(0)
+	, m_numOrientations(0)
+	, m_demo_scroll_pause(0)
+	, m_demo_quit(0)
+	, m_finish_replaysizer(0)
+	, m_finish_replaystop(0)
+	, m_demo_screenshot_frame(0)
+	, m_demo_max_frames(0)
+	, m_demo_savestats(0)
+	, m_demo_ai(0)
+	, m_demo_restart_level(0)
+	, m_demo_panoramic(0)
+	, m_demo_fixed_timestep(0)
+	, m_demo_vtune(0)
+	, m_demo_time_of_day(0)
+	, m_demo_gameState(0)
+	, m_demo_profile(0)
+	, m_demo_noinfo(0)
+	, m_demo_save_every_frame(0)
+	, m_demo_use_hmd_rotation(0)
 	, m_bAIEnabled(false)
 	, m_bDelayedPlayFlag(false)
 	, m_prevGodMode(0)
 	, m_nCurrentDemoLevel(0)
 	, m_lastChainDemoTime(0.0f)
+{
+}
+
+//////////////////////////////////////////////////////////////////////////
+CTimeDemoRecorder::~CTimeDemoRecorder()
+{
+}
+
+void CTimeDemoRecorder::OnRegistered()
 {
 	s_pTimeDemoRecorder = this;
 
@@ -521,8 +550,7 @@ CTimeDemoRecorder::CTimeDemoRecorder()
 	                  OnChange_demo_num_orientations);
 }
 
-//////////////////////////////////////////////////////////////////////////
-CTimeDemoRecorder::~CTimeDemoRecorder()
+void CTimeDemoRecorder::OnUnregistered()
 {
 	IConsole* pConsole = gEnv->pConsole;
 

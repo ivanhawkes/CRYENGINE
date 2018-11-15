@@ -108,7 +108,6 @@ public:
 	void Update() { m_model->Update(); }
 
 private:
-	void OnIndexClicked(const QModelIndex& index);
 	void OnSaveCurrentFilter();
 	void OnLoadSelectedFilter();
 	void OnDeleteSelectedFilter();
@@ -1040,6 +1039,10 @@ QVariant QFilteringPanel::GetFilterState() const
 
 void QFilteringPanel::SetFilterState(const QVariant& state)
 {
+	if (m_attributes.empty())
+	{
+		return;
+	}
 	if (state.isValid() && state.type() == QVariant::List)
 	{
 		QVariantList filtersList = state.value<QVariantList>();

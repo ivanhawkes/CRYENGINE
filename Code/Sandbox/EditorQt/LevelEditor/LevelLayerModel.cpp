@@ -139,7 +139,7 @@ QVariant CLevelLayerModel::GetHeaderData(int section, Qt::Orientation orientatio
 		if (section == eObjectColumns_Visible)
 			return CryIcon("icons:General/Visibility_True.ico");
 		if (section == eObjectColumns_Frozen)
-			return CryIcon("icons:Navigation/Basics_Select_False.ico");
+			return CryIcon("icons:General/editable.ico");
 		if (section == eObjectColumns_VCS)
 			return CryIcon("icons:VersionControl/icon.ico");
 	}
@@ -1189,6 +1189,13 @@ void CLevelLayerModel::OnObjectEvent(const std::vector<CBaseObject*>& objects, c
 			{
 				int irow = m_rootObjects.size();
 
+				// If the batch process is still running, avoid inserting rows since we're already in the middle of a transaction
+				if (m_isRuningBatchProcess)
+				{
+					AddObject(pObject);
+					return;
+				}
+
 				beginInsertRows(QModelIndex(), irow, irow);
 				AddObject(pObject);
 				endInsertRows();
@@ -1197,8 +1204,11 @@ void CLevelLayerModel::OnObjectEvent(const std::vector<CBaseObject*>& objects, c
 			else if (evt.m_poldLayer == m_pLayer)
 			{
 				int irow = RowFromObject(pObject);
-				if (irow == -1)
+
+				// If the batch process is still running, avoid removing rows since we're already in the middle of a transaction
+				if (m_isRuningBatchProcess || irow == -1)
 				{
+					RemoveObject(pObject);
 					return; //Object must be in another layer
 				}
 

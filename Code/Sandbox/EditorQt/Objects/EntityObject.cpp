@@ -48,8 +48,8 @@
 // CryEngine
 #include <Cry3DEngine/I3DEngine.h>
 #include <Cry3DEngine/IGeomCache.h>
-#include <CryAISystem/IAIActor.h>
 #include <CryAISystem/IAIObject.h>
+#include <CryAISystem/IAIActor.h>
 #include <CryAnimation/IVertexAnimation.h>
 #include <CryExtension/ICryFactoryRegistry.h>
 #include <CryMovie/IMovieSystem.h>
@@ -100,6 +100,7 @@ public:
 	EntityLinkTool()
 		: CPickObjectTool(&m_picker)
 	{
+		SetMultiplePicks(true);
 	}
 
 	~EntityLinkTool()
@@ -2031,7 +2032,6 @@ void CEntityObject::SpawnEntity()
 			return;
 		}
 
-		BindIEntityChilds();
 		UpdateIEntityLinks(false);
 
 		// Make sure the entity is already attached to it's parent so we can update it's transform
@@ -2117,7 +2117,6 @@ void CEntityObject::DeleteEntity()
 
 	if (m_pEntity)
 	{
-		UnbindIEntity();
 		m_pEntity->ClearFlags(ENTITY_FLAG_UNREMOVABLE);
 		IEntitySystem* pEntitySystem = gEnv->pEntitySystem;
 		pEntitySystem->RemoveEntity(m_pEntity->GetId(), true);
@@ -2993,8 +2992,7 @@ void CEntityObject::PostLoad(CObjectArchive& ar)
 		// Force entities to register them-self in sectors.
 		// force entity to be registered in terrain sectors again.
 		XFormGameEntity();
-		BindToParent();
-		BindIEntityChilds();
+
 		if (m_pEntityScript)
 		{
 			m_pEntityScript->SetEventsTable(this);
@@ -3477,19 +3475,6 @@ void CEntityObject::DrawDefault(SDisplayContext& dc, COLORREF labelColor)
 	{
 		const Vec3 wp = m_pEntity->GetWorldPos();
 
-		if (gEnv->pAISystem)
-		{
-			ISmartObjectManager* pSmartObjectManager = gEnv->pAISystem->GetSmartObjectManager();
-			if (!pSmartObjectManager->ValidateSOClassTemplate(m_pEntity))
-			{
-				DrawLabel(dc, wp, RGB(255, 0, 0), 1.f, 4);
-			}
-			if (IsSelected() || IsHighlighted())
-			{
-				pSmartObjectManager->DrawSOClassTemplate(m_pEntity);
-			}
-		}
-
 		// Draw "ghosted" data around the entity's actual position in simulation mode
 		if (GetIEditorImpl()->GetGameEngine()->GetSimulationMode())
 		{
@@ -3788,30 +3773,6 @@ void CEntityObject::InvalidateTM(int nWhyFlags)
 	m_bEntityXfromValid = false;
 }
 
-//! Attach new child node.
-void CEntityObject::OnAttachChild(CBaseObject* pChild)
-{
-	using namespace Private_EntityObject;
-	CUndo::Record(new CUndoAttachEntity(this, true));
-
-	if (pChild && pChild->IsKindOf(RUNTIME_CLASS(CEntityObject)))
-	{
-		((CEntityObject*)pChild)->BindToParent();
-	}
-	else if (pChild && pChild->IsKindOf(RUNTIME_CLASS(CGroup)))
-	{
-		((CGroup*)pChild)->BindToParent();
-	}
-}
-
-// Detach this node from parent.
-void CEntityObject::OnDetachThis()
-{
-	using namespace Private_EntityObject;
-	CUndo::Record(new CUndoAttachEntity(this, false));
-	UnbindIEntity();
-}
-
 void CEntityObject::OnLink(CBaseObject* pParent)
 {
 	if (!m_pEntity)
@@ -3892,83 +3853,6 @@ void CEntityObject::UpdateTransform()
 		{
 			const Matrix34& entityTM = pEntity->GetLocalTM();
 			SetLocalTM(entityTM, eObjectUpdateFlags_Animated);
-		}
-	}
-}
-
-void CEntityObject::BindToParent()
-{
-	if (!m_pEntity)
-	{
-		return;
-	}
-
-	CBaseObject* parent = GetParent();
-	if (parent)
-	{
-		if (parent->IsKindOf(RUNTIME_CLASS(CEntityObject)))
-		{
-			CEntityObject* parentEntity = (CEntityObject*)parent;
-
-			IEntity* ientParent = parentEntity->GetIEntity();
-			if (ientParent)
-			{
-				XFormGameEntity();
-				const int flags = ((m_attachmentType == eAT_GeomCacheNode) ? IEntity::ATTACHMENT_GEOMCACHENODE : 0)
-				                  | ((m_attachmentType == eAT_CharacterBone) ? IEntity::ATTACHMENT_CHARACTERBONE : 0);
-				SChildAttachParams attachParams(flags | IEntity::ATTACHMENT_KEEP_TRANSFORMATION, m_attachmentTarget.GetString());
-				ientParent->AttachChild(m_pEntity, attachParams);
-				XFormGameEntity();
-			}
-		}
-	}
-}
-
-void CEntityObject::BindIEntityChilds()
-{
-	if (!m_pEntity)
-	{
-		return;
-	}
-
-	int numChilds = GetChildCount();
-	for (int i = 0; i < numChilds; i++)
-	{
-		CBaseObject* pChild = GetChild(i);
-		if (pChild && pChild->IsKindOf(RUNTIME_CLASS(CEntityObject)))
-		{
-			CEntityObject* pChildEntity = static_cast<CEntityObject*>(pChild);
-			IEntity* ientChild = pChildEntity->GetIEntity();
-
-			if (ientChild)
-			{
-				pChildEntity->XFormGameEntity();
-				const int flags = ((pChildEntity->m_attachmentType == eAT_GeomCacheNode) ? IEntity::ATTACHMENT_GEOMCACHENODE : 0)
-				                  | ((pChildEntity->m_attachmentType == eAT_CharacterBone) ? IEntity::ATTACHMENT_CHARACTERBONE : 0);
-				SChildAttachParams attachParams(flags, pChildEntity->m_attachmentTarget.GetString());
-				m_pEntity->AttachChild(ientChild, attachParams);
-				pChildEntity->XFormGameEntity();
-			}
-		}
-	}
-}
-
-void CEntityObject::UnbindIEntity()
-{
-	if (!m_pEntity)
-	{
-		return;
-	}
-
-	CBaseObject* parent = GetParent();
-	if (parent && parent->IsKindOf(RUNTIME_CLASS(CEntityObject)))
-	{
-		CEntityObject* parentEntity = (CEntityObject*)parent;
-
-		IEntity* ientParent = parentEntity->GetIEntity();
-		if (ientParent)
-		{
-			m_pEntity->DetachThis(IEntity::ATTACHMENT_KEEP_TRANSFORMATION);
 		}
 	}
 }

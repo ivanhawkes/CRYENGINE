@@ -53,6 +53,7 @@ public:
 	                                 EPass passId = ePass_Forward,
 	                                 const std::function<void(CDeviceGraphicsPSODesc& psoDesc, const SGraphicsPipelineStateDescription& desc)> &customState = nullptr);
 
+	void         ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex);
 	void         ExecuteOpaque();
 	void         ExecuteTransparentBelowWater();
 	void         ExecuteTransparentAboveWater();
@@ -67,6 +68,9 @@ public:
 	void         SetSkyRE(CREHDRSky* pHDRSkyRE);
 	void         SetSkyMat(IMaterial* pMat);
 
+	bool IsTransparentLoResEnabled() const { return CRendererCVars::CV_r_ParticlesHalfRes > 0; }
+	bool IsTransparentDepthFixupEnabled() const { return CRendererCVars::CV_r_TranspDepthFixup > 0; }
+
 	void FillCloudShadingParams(SCloudShadingParams& cloudParams, bool enable = true) const;
 
 private:
@@ -77,7 +81,6 @@ private:
 	void SetHDRSkyParameters();
 	void SetMatParameters();
 
-	void ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex);
 
 
 private:
@@ -106,6 +109,7 @@ private:
 	CSceneRenderPass         m_forwardOpaquePass;
 	CSceneRenderPass         m_forwardOpaquePassMobile;
 	CSceneRenderPass         m_forwardOverlayPass;
+	CSceneRenderPass         m_forwardOverlayPassMobile;
 	CSceneRenderPass         m_forwardTransparentBWPass;
 	CSceneRenderPass         m_forwardTransparentAWPass;
 	CSceneRenderPass         m_forwardTransparentLoResPass;

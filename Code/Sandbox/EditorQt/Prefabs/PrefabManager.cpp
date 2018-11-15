@@ -12,6 +12,7 @@
 #include <AssetSystem/AssetImportContext.h>
 #include <AssetSystem/Browser/AssetBrowserDialog.h>
 #include <Controls/QuestionDialog.h>
+#include <FileUtils.h>
 #include <PathUtils.h>
 
 namespace Private_PrefabManager
@@ -797,7 +798,7 @@ void CPrefabManager::importAssetsFromLevel(XmlNodeRef& levelRoot)
 
 			ImportPrefabLibrary(libNode, path);
 
-			CFileUtil::BackupFile(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), path).c_str());
+			FileUtils::BackupFile(PathUtil::Make(PathUtil::GetGameProjectAssetsPath(), path).c_str());
 		}
 		else
 		{
@@ -891,9 +892,10 @@ void CPrefabManager::ExpandGroup(CBaseObject* pObject, CSelectionGroup& selectio
 	if (pObject->IsKindOf(RUNTIME_CLASS(CGroup)) && !pObject->IsKindOf(RUNTIME_CLASS(CPrefabObject)))
 	{
 		CGroup* pGroup = static_cast<CGroup*>(pObject);
-		const TBaseObjects& groupMembers = pGroup->GetMembers();
-		for (int i = 0, count = groupMembers.size(); i < count; ++i)
-			ExpandGroup(groupMembers[i], selection);
+		for (int i = 0, count = pGroup->GetChildCount(); i < count; ++i)
+		{
+			ExpandGroup(pGroup->GetChild(i), selection);
+		}
 	}
 }
 

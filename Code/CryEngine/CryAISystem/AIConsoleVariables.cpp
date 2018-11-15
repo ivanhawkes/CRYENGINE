@@ -12,8 +12,6 @@ void AIConsoleVars::Init()
 {
 	AILogProgress("[AISYSTEM] Initialization: Creating console vars");
 
-	IConsole* pConsole = gEnv->pConsole;
-
 	REGISTER_CVAR2("ai_CompatibilityMode", &CompatibilityMode, "", VF_NULL,
 	               "Set AI features to behave in earlier milestones - please use sparingly");
 
@@ -344,6 +342,7 @@ void AIConsoleVars::Init()
 	DefineConstIntCVarName("ai_DebugDrawNavigationQueriesList", DebugDrawNavigationQueriesList, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
 		"Displays a navigation queries list in the screen with all batches and elapsed times.\n"
 		"Requires ai_debugDraw, ai_debugDrawNavigation and ai_storeNavigationQueriesHistory to be enabled.\n"
+		"Note that, by their nature, instant queries won't be listed here.\n"
 		"Usage: ai_DebugDrawNavigationQueriesList [0/1]\n"
 		"Default is 0 (off)\n"
 		"0 - off\n"
@@ -396,6 +395,13 @@ void AIConsoleVars::Init()
 	                       "Default is 0 (off)\n"
 	                       "0 - off\n"
 	                       "1 - on\n");
+	DefineConstIntCVarName("ai_DebugDrawSignalsHistory", DebugDrawSignalsHistory, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
+                           "Displays a history of the 20 most recent signals sent by AI. \n"
+                           "Most recent signals are displayed at the top of the list. As time passes, old signals will turn gray.\n"
+                           "Usage: ai_DebugDrawSignalsList [0/1]\n"
+                           "Default is 0 (off)\n"
+                           "0 - off\n"
+                           "1 - on\n");
 	DefineConstIntCVarName("ai_DebugDrawCoverPlanes", DebugDrawCoverPlanes, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
 	                       "Displays cover planes.\n"
 	                       "Usage: ai_DebugDrawCoverPlanes [0/1]\n"
@@ -604,11 +610,6 @@ void AIConsoleVars::Init()
 
 	DefineConstIntCVarName("ai_DebugDrawDamageControl", DebugDrawDamageControl, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
 	                       "Debugs the damage control system 0=disabled, 1=collect, 2=collect&draw.");
-
-	DefineConstIntCVarName("ai_DrawFakeTracers", DrawFakeTracers, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
-	                       "Draws fake tracers around the player.");
-	DefineConstIntCVarName("ai_DrawFakeHitEffects", DrawFakeHitEffects, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
-	                       "Draws fake hit effects the player.");
 	DefineConstIntCVarName("ai_DrawFakeDamageInd", DrawFakeDamageInd, 0, VF_CHEAT | VF_CHEAT_NOCHECK,
 	                       "Draws fake damage indicators on the player.");
 	DefineConstIntCVarName("ai_DrawPlayerRanges", DrawPlayerRanges, 0, VF_CHEAT | VF_CHEAT_NOCHECK,

@@ -29,6 +29,7 @@
 #include "SmartObjectOffMeshNavigation.h"
 
 #include "Navigation/NavigationSystem/NavigationSystem.h"
+#include "Navigation/MNM/NavMeshQueryManager.h"
 
 #include <numeric>
 #include <algorithm>
@@ -1094,12 +1095,16 @@ Vec3 GetSafePositionInMesh(const NavigationMesh& mesh, const Vec3& testPosition,
 	const MNM::real_t vRange(verticalRange);
 	const MNM::real_t hRange(horizontalRange);
 
-	if (!mesh.navMesh.GetTriangleAt(testLocationFixedPoint, vRange, vRange, pFilter))
+	const MNM::TriangleID triangleId = mesh.navMesh.QueryTriangleAt(testLocationFixedPoint, vRange, vRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, pFilter);
+
+	if (triangleId.IsValid())
 	{
-		MNM::vector3_t closestLocation;
-		if (mesh.navMesh.GetClosestTriangle(testLocationFixedPoint, vRange, hRange, pFilter, nullptr, &closestLocation))
+		const MNM::aabb_t localAabb(MNM::vector3_t(-hRange, -hRange, -vRange), MNM::vector3_t(hRange, hRange, vRange));
+		const MNM::SClosestTriangle closestTriangle = mesh.navMesh.QueryClosestTriangle(testLocationFixedPoint, localAabb, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, MNM::real_t::max(), pFilter);
+
+		if (closestTriangle.id.IsValid())
 		{
-			safePosition = mesh.navMesh.ToWorldSpace(closestLocation).GetVec3();
+			safePosition = mesh.navMesh.ToWorldSpace(closestTriangle.position.GetVec3()).GetVec3();
 		}
 	}
 
@@ -1191,9 +1196,6 @@ bool CNavPath::CheckPath(const TPathPoints& pathList, float radius, const INavMe
 
 	if (usingMNM)
 	{
-		const size_t MaxWayTriangleCount = 512;
-		MNM::TriangleID way[MaxWayTriangleCount] = { 0 };
-
 		const NavigationMesh& mesh = gAIEnv.pNavigationSystem->GetMesh(GetMeshID());
 
 		const MNM::real_t verticalRange(3.0f);
@@ -1218,15 +1220,15 @@ bool CNavPath::CheckPath(const TPathPoints& pathList, float radius, const INavMe
 					endLocation = mesh.navMesh.ToMeshSpace(to);
 
 					triangleStartID = triangleEndID;
-					triangleEndID = mesh.navMesh.GetTriangleAt(endLocation, verticalRange, verticalRange, pFilter);
+					triangleEndID = mesh.navMesh.QueryTriangleAt(endLocation, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, pFilter);
 				}
 				else
 				{
 					startLocation = mesh.navMesh.ToMeshSpace(from);
 					endLocation = mesh.navMesh.ToMeshSpace(to);
 
-					triangleStartID = mesh.navMesh.GetTriangleAt(startLocation, verticalRange, verticalRange, pFilter);
-					triangleEndID = mesh.navMesh.GetTriangleAt(endLocation, verticalRange, verticalRange, pFilter);
+					triangleStartID = mesh.navMesh.QueryTriangleAt(startLocation, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, pFilter);
+					triangleEndID = mesh.navMesh.QueryTriangleAt(endLocation, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, pFilter);
 				}
 
 				if (!triangleStartID || !triangleEndID)
@@ -1662,7 +1664,6 @@ float CNavPath::GetDistToSmartObject(bool b2D) const
 	const TPathPoints::const_iterator pathEndIt = m_pathPoints.end();
 	for (; pathIt != pathEndIt; ++pathIt)
 	{
-		Vec3 thisPos = pathIt->vPos;
 		dist += b2D ? Distance::Point_Point2D(curPos, pathIt->vPos) : Distance::Point_Point(curPos, pathIt->vPos);
 
 		TPathPoints::const_iterator pathItNext = pathIt;

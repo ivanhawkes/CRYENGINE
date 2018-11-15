@@ -355,6 +355,11 @@
         <file alias="General/Pointer_Up_Numeric.ico">icons/general_Pointer_Up_Numeric.ico</file>
         <file alias="General/Pointer_Up_Numeric_Tinted.ico">icons/general_Pointer_Up_Numeric_Tinted.ico</file>
         <file alias="General/Pointer_Up_Tinted.ico">icons/general_Pointer_Up_Tinted.ico</file>
+        <file alias="General/Project_Default.ico">icons/general_project_default.ico</file>
+        <file alias="General/Project_Language_Cpp.ico">icons/general_project_language_subicon_cpp.ico</file>
+        <file alias="General/Project_Language_CSharp.ico">icons/general_project_language_subicon_csharp.ico</file>
+        <file alias="General/Project_Language_Unknown.ico">icons/general_project_language_subicon_unknown.ico</file>
+        <file alias="General/Project_Language_VisualScripting.ico">icons/general_project_language_subicon_visualscripting.ico</file>
         <file alias="General/Python.ico">icons/general_Python.ico</file>
         <file alias="General/Redo_Classic.ico">icons/general_Redo_Classic.ico</file>
         <file alias="General/Reload.ico">icons/general_Reload.ico</file>
@@ -376,6 +381,8 @@
         <file alias="General/Sun.ico">icons/general_Sun.ico</file>
         <file alias="General/SymLink.ico">icons/general_SymLink.ico</file>
         <file alias="General/Sync_Square.ico">icons/general_Sync_Square.ico</file>
+        <file alias="general_sync_selection.ico">icons/general_sync_selection.ico</file>
+        <file alias="General/Template_Default.ico">icons/general_template_default.ico</file>
         <file alias="General/Tick.ico">icons/general_Tick.ico</file>
         <file alias="General/Tick_Box.ico">icons/general_Tick_Box.ico</file>
         <file alias="General/Tick_Box_Tinted.ico">icons/general_Tick_Box_Tinted.ico</file>
@@ -446,6 +453,13 @@
         <file alias="Layouts/layout_leveldesign.ico">icons/layout_leveldesign.ico</file>
         <file alias="Layouts/layout_modelling.ico">icons/layout_modelling.ico</file>
 
+        <!--Level Explorer-->
+        <file alias="level_explorer_active_layer_content_only.ico">icons/level_explorer_active_layer_content_only.ico</file>
+        <file alias="level_explorer_focus_active_layer.ico">icons/level_explorer_focus_active_layer.ico</file>
+        <file alias="level_explorer_full_hierarchy.ico">icons/level_explorer_full_hierarchy.ico</file>
+        <file alias="level_explorer_layers_only.ico">icons/level_explorer_layers_only.ico</file>
+        <file alias="level_explorer_objects_only.ico">icons/level_explorer_objects_only.ico</file>
+
         <!--Logo-->
         <file alias="Logo/Cryengine_Logo.png">icons/logo_cryengine.png</file>
         <file alias="Logo/Cryengine_Logo_Bottom.png">icons/logo_cryengine_bottom.png</file>
@@ -478,8 +492,6 @@
         <file alias="Navigation/Basics_Rotate.ico">icons/navigation_basics_rotate.ico</file>
         <file alias="Navigation/Basics_Scale.ico">icons/navigation_basics_scale.ico</file>
         <file alias="Navigation/Basics_Select.ico">icons/navigation_basics_select.ico</file>
-        <file alias="Navigation/Basics_Select_Tinted.ico">icons/general_lock_false_tinted.ico</file>
-        <file alias="Navigation/Basics_Select_False.ico">icons/general_lock_true.ico</file>
         <file alias="Navigation/Basics_Select_False_Tinted.ico">icons/general_lock_true_tinted.ico</file>
         <file alias="Navigation/Coordinates_Local.ico">icons/navigation_coordinates_local.ico</file>
         <file alias="Navigation/Coordinates_Parent.ico">icons/navigation_coordinates_parent.ico</file>
@@ -822,7 +834,7 @@
         <file alias="Window/Window_Restore.ico">icons/window_restore.ico</file>
         <file alias="Window/Window_Split.ico">icons/window_split.ico</file>
 
-        <!--Version Contro-->
+        <!--Version Control-->
         <file alias="VersionControl/icon.ico">icons/versioncontrol_icon.ico</file>
         <file alias="VersionControl/checked_out.ico">icons/versioncontrol_checked_out.ico</file>
         <file alias="VersionControl/checked_out_modified.ico">icons/versioncontrol_checked_out_modified.ico</file>

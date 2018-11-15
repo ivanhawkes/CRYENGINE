@@ -13,6 +13,12 @@
 #include <CryRenderer/IRenderAuxGeom.h>
 #include "XConsoleVariable.h"
 #include <regex>
+#include <fstream>
+#include <sstream>
+
+#if CRY_PLATFORM_WINDOWS
+#include <CryString/CryWinStringUtils.h>
+#endif
 
 #define BACKGROUND_SERVER_CHAR '/'
 

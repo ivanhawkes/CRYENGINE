@@ -82,12 +82,7 @@ static constexpr char const* s_szNumStatesAttribute = "states";
 static constexpr char const* s_szNumEnvironmentsAttribute = "environments";
 static constexpr char const* s_szNumPreloadsAttribute = "preloads";
 static constexpr char const* s_szNumSettingsAttribute = "settings";
-static constexpr char const* s_szNumTriggerConnectionsAttribute = "trigger_connections";
-static constexpr char const* s_szNumParameterConnectionsAttribute = "parameter_connections";
-static constexpr char const* s_szNumStateConnectionsAttribute = "state_connections";
-static constexpr char const* s_szNumEnvironmentConnectionsAttribute = "environment_connections";
-static constexpr char const* s_szNumPreloadConnectionsAttribute = "preload_connections";
-static constexpr char const* s_szNumSettingConnectionsAttribute = "setting_connections";
+static constexpr char const* s_szNumFilesAttribute = "files";
 static constexpr char const* s_szTypeAttribute = "type";
 
 static constexpr char const* s_szDataLoadType = "autoload";
@@ -191,23 +186,23 @@ enum class EOcclusionType : EnumFlagsType
 };
 CRY_CREATE_ENUM_FLAG_OPERATORS(EOcclusionType);
 
-class CObjectTransformation
+class CTransformation
 {
 public:
 
-	CObjectTransformation()
+	CTransformation()
 		: m_position(0.0f, 0.0f, 0.0f)
 		, m_forward(0.0f, 1.0f, 0.0f)
 		, m_up(0.0f, 0.0f, 1.0f)
 	{}
 
-	CObjectTransformation(Vec3 const& position)
+	CTransformation(Vec3 const& position)
 		: m_position(position)
 		, m_forward(0.0f, 1.0f, 0.0f)
 		, m_up(0.0f, 0.0f, 1.0f)
 	{}
 
-	CObjectTransformation(Matrix34 const& transformation)
+	CTransformation(Matrix34 const& transformation)
 		: m_position(transformation.GetColumn3())
 		, m_forward(transformation.GetColumn1()) //!< Assuming forward vector = (0,1,0), also assuming unscaled.
 		, m_up(transformation.GetColumn2())      //!< Assuming up vector = (0,0,1).
@@ -216,7 +211,7 @@ public:
 		m_up.NormalizeFast();
 	}
 
-	bool IsEquivalent(CObjectTransformation const& transformation, float const epsilon = VEC_EPSILON) const
+	bool IsEquivalent(CTransformation const& transformation, float const epsilon = VEC_EPSILON) const
 	{
 		return m_position.IsEquivalent(transformation.GetPosition(), epsilon) &&
 		       m_forward.IsEquivalent(transformation.GetForward(), epsilon) &&
@@ -230,11 +225,11 @@ public:
 		       m_up.IsEquivalent(transformation.GetColumn2(), epsilon);
 	}
 
-	ILINE Vec3 const&                   GetPosition() const { return m_position; }
-	ILINE Vec3 const&                   GetForward() const  { return m_forward; }
-	ILINE Vec3 const&                   GetUp() const       { return m_up; }
+	ILINE Vec3 const&             GetPosition() const { return m_position; }
+	ILINE Vec3 const&             GetForward() const  { return m_forward; }
+	ILINE Vec3 const&             GetUp() const       { return m_up; }
 
-	static CObjectTransformation const& GetEmptyObject()    { static CObjectTransformation const emptyInstance; return emptyInstance; }
+	static CTransformation const& GetEmptyObject()    { static CTransformation const emptyInstance; return emptyInstance; }
 
 private:
 

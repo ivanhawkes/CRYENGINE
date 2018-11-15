@@ -252,17 +252,17 @@ CObjectLayer* CObjectLayerManager::CreateLayer(const char* szName, EObjectLayerT
 
 	CObjectLayer* pLayer = CObjectLayer::Create(szName, layerType);
 	AddLayer(pLayer);
+
+	if (CUndo::IsRecording())
+		CUndo::Record(new CUndoLayerCreateDelete(pLayer, true));
+
 	if (pParent)
 		pParent->AddChild(pLayer);
-
-	pLayer->SetVisible(true);
 
 	// If it's the only layer in the level or there's no active layer
 	if (isOnlyLayer || !GetCurrentLayer())
 		SetCurrentLayer(pLayer);
 
-	if (CUndo::IsRecording())
-		CUndo::Record(new CUndoLayerCreateDelete(pLayer, true));
 	return pLayer;
 }
 
@@ -798,11 +798,11 @@ void CObjectLayerManager::SaveLayer(CObjectArchive* pArchive, CObjectLayer* pLay
 
 	if (CFileUtil::OverwriteFile(file))
 	{
-		CFileUtil::CreateDirectory(path);
+		GetISystem()->GetIPak()->MakeDir(path);
 
 		// Make a backup of file.
 		if (gEditorFilePreferences.filesBackup)
-			CFileUtil::BackupFile(file);
+			FileUtils::BackupFile(file);
 
 		// Serialize this layer.
 		XmlNodeRef rootFileNode = XmlHelpers::CreateXmlNode("ObjectLayer");

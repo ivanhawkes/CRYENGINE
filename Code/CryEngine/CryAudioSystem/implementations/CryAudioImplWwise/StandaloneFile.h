@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <IStandaloneFileConnection.h>
 
 namespace CryAudio
 {
@@ -10,7 +10,7 @@ namespace Impl
 {
 namespace Wwise
 {
-class CStandaloneFile final : public IStandaloneFile
+class CStandaloneFile final : public IStandaloneFileConnection
 {
 public:
 

@@ -2,8 +2,8 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
-#include <SharedAudioData.h>
+#include <IObject.h>
+#include <SharedData.h>
 #include <PoolObject.h>
 
 namespace CryAudio
@@ -47,14 +47,16 @@ public:
 	void RemoveFile(CBaseStandaloneFile const* const pStandaloneFile);
 
 	// CryAudio::Impl::IObject
-	virtual void                         Update(float const deltaTime) override;
-	virtual void                         SetTransformation(CObjectTransformation const& transformation) override {}
-	virtual CObjectTransformation const& GetTransformation() const override                                      { return CObjectTransformation::GetEmptyObject(); }
-	virtual ERequestStatus               ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent) override;
-	virtual void                         StopAllTriggers() override;
-	virtual ERequestStatus               PlayFile(IStandaloneFile* const pIStandaloneFile) override;
-	virtual ERequestStatus               StopFile(IStandaloneFile* const pIStandaloneFile) override;
-	virtual ERequestStatus               SetName(char const* const szName) override;
+	virtual void                   Update(float const deltaTime) override;
+	virtual void                   SetTransformation(CTransformation const& transformation) override {}
+	virtual CTransformation const& GetTransformation() const override                                { return CTransformation::GetEmptyObject(); }
+	virtual void                   SetParameter(IParameterConnection const* const pIParameterConnection, float const value) override;
+	virtual void                   SetSwitchState(ISwitchStateConnection const* const pISwitchStateConnection) override;
+	virtual ERequestStatus         ExecuteTrigger(ITriggerConnection const* const pITriggerConnection, IEvent* const pIEvent) override;
+	virtual void                   StopAllTriggers() override;
+	virtual ERequestStatus         PlayFile(IStandaloneFileConnection* const pIStandaloneFileConnection) override;
+	virtual ERequestStatus         StopFile(IStandaloneFileConnection* const pIStandaloneFileConnection) override;
+	virtual ERequestStatus         SetName(char const* const szName) override;
 
 	// Below data is only used when INCLUDE_FMOD_IMPL_PRODUCTION_CODE is defined!
 	virtual void DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY, char const* const szTextFilter) override {}
@@ -84,8 +86,6 @@ protected:
 	float m_occlusion = 0.0f;
 	float m_absoluteVelocity = 0.0f;
 };
-
-using Objects = std::vector<CBaseObject*>;
 } // namespace Fmod
 } // namespace Impl
 } // namespace CryAudio

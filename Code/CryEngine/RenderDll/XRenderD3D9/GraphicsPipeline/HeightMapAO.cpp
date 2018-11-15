@@ -15,13 +15,12 @@ void CHeightMapAOStage::Update()
 
 void CHeightMapAOStage::Execute()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CD3D9Renderer* const __restrict pRenderer = gcpRendD3D;
 
 	CRY_ASSERT(!m_bHeightMapAOExecuted);
 	m_bHeightMapAOExecuted = true;
-
-	if (!CRenderer::CV_r_HeightMapAO)
-		return;
 
 	if (CDeferredShading::Instance().GetResolvedStencilRT() == nullptr)
 	{
@@ -55,7 +54,8 @@ void CHeightMapAOStage::Execute()
 		m_pHeightMapAOScreenDepthTex = pDepthTextures[resolutionIndex];
 		m_pHeightMapAOTex = CRendererResources::s_ptexHeightMapAO[1];
 
-		if (pHeightmapRenderView->GetRenderItems(0).size() > 0)
+		// Q: What is the 0-list?
+		if (pHeightmapRenderView->GetRenderItems(ERenderListID(0)).size() > 0)
 		{
 			PROFILE_LABEL_SCOPE("GENERATE_MIPS");
 

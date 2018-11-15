@@ -9,6 +9,8 @@
 #include "Parameter.h"
 #include "SwitchState.h"
 #include "Trigger.h"
+#include "VcaParameter.h"
+#include "VcaState.h"
 
 #include <Logger.h>
 #include <CryAudio/IAudioSystem.h>
@@ -36,7 +38,7 @@ FMOD_RESULT F_CALLBACK EventCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_
 
 		if (pEvent != nullptr)
 		{
-			gEnv->pAudioSystem->ReportFinishedEvent(pEvent->GetATLEvent(), true);
+			gEnv->pAudioSystem->ReportFinishedEvent(pEvent->GetEvent(), true);
 		}
 	}
 
@@ -57,7 +59,7 @@ FMOD_RESULT F_CALLBACK ProgrammerSoundCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE t
 		{
 			if (type == FMOD_STUDIO_EVENT_CALLBACK_CREATE_PROGRAMMER_SOUND)
 			{
-				CRY_ASSERT_MESSAGE(pInOutParameters != nullptr, "pInOutParameters is null pointer");
+				CRY_ASSERT_MESSAGE(pInOutParameters != nullptr, "pInOutParameters is null pointer during %s", __FUNCTION__);
 				auto const pInOutProperties = reinterpret_cast<FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES*>(pInOutParameters);
 				char const* const szKey = pEvent->GetTrigger()->GetKey().c_str();
 
@@ -75,7 +77,7 @@ FMOD_RESULT F_CALLBACK ProgrammerSoundCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE t
 			}
 			else if (type == FMOD_STUDIO_EVENT_CALLBACK_DESTROY_PROGRAMMER_SOUND)
 			{
-				CRY_ASSERT_MESSAGE(pInOutParameters != nullptr, "pInOutParameters is null pointer");
+				CRY_ASSERT_MESSAGE(pInOutParameters != nullptr, "pInOutParameters is null pointer during %s", __FUNCTION__);
 				auto const pInOutProperties = reinterpret_cast<FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES*>(pInOutParameters);
 
 				auto* pSound = reinterpret_cast<FMOD::Sound*>(pInOutProperties->sound);
@@ -86,7 +88,7 @@ FMOD_RESULT F_CALLBACK ProgrammerSoundCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE t
 			else if ((type == FMOD_STUDIO_EVENT_CALLBACK_START_FAILED) || (type == FMOD_STUDIO_EVENT_CALLBACK_STOPPED))
 			{
 				ASSERT_FMOD_OK;
-				gEnv->pAudioSystem->ReportFinishedEvent(pEvent->GetATLEvent(), true);
+				gEnv->pAudioSystem->ReportFinishedEvent(pEvent->GetEvent(), true);
 			}
 		}
 	}
@@ -162,9 +164,9 @@ bool CBaseObject::SetEvent(CEvent* const pEvent)
 		m_events.push_back(pEvent);
 
 		FMOD::Studio::EventInstance* const pEventInstance = pEvent->GetInstance();
-		CRY_ASSERT_MESSAGE(pEventInstance != nullptr, "Event instance doesn't exist.");
+		CRY_ASSERT_MESSAGE(pEventInstance != nullptr, "Event instance doesn't exist during %s", __FUNCTION__);
 		CTrigger const* const pTrigger = pEvent->GetTrigger();
-		CRY_ASSERT_MESSAGE(pTrigger != nullptr, "Trigger doesn't exist.");
+		CRY_ASSERT_MESSAGE(pTrigger != nullptr, "Trigger doesn't exist during %s", __FUNCTION__);
 
 		FMOD::Studio::EventDescription* pEventDescription = nullptr;
 		FMOD_RESULT fmodResult = pEventInstance->getDescription(&pEventDescription);
@@ -341,10 +343,218 @@ void CBaseObject::Update(float const deltaTime)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent)
+void CBaseObject::SetParameter(IParameterConnection const* const pIParameterConnection, float const value)
+{
+	auto const pBaseParameter = static_cast<CBaseParameter const*>(pIParameterConnection);
+
+	if (pBaseParameter != nullptr)
+	{
+		EParameterType const type = pBaseParameter->GetType();
+
+		if (type == EParameterType::Parameter)
+		{
+			auto const pParameter = static_cast<CParameter const*>(pBaseParameter);
+			uint32 const parameterId = pParameter->GetId();
+			FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
+
+			for (auto const pEvent : m_events)
+			{
+				FMOD::Studio::EventInstance* const pEventInstance = pEvent->GetInstance();
+				CRY_ASSERT_MESSAGE(pEventInstance != nullptr, "Event instance doesn't exist during %s", __FUNCTION__);
+				CTrigger const* const pTrigger = pEvent->GetTrigger();
+				CRY_ASSERT_MESSAGE(pTrigger != nullptr, "Trigger doesn't exist during %s", __FUNCTION__);
+
+				FMOD::Studio::EventDescription* pEventDescription = nullptr;
+				fmodResult = pEventInstance->getDescription(&pEventDescription);
+				ASSERT_FMOD_OK;
+
+				if (g_triggerToParameterIndexes.find(pTrigger) != g_triggerToParameterIndexes.end())
+				{
+					ParameterIdToIndex& parameters = g_triggerToParameterIndexes[pTrigger];
+
+					if (parameters.find(parameterId) != parameters.end())
+					{
+						fmodResult = pEventInstance->setParameterValueByIndex(parameters[parameterId], pParameter->GetValueMultiplier() * value + pParameter->GetValueShift());
+						ASSERT_FMOD_OK;
+					}
+					else
+					{
+						int parameterCount = 0;
+						fmodResult = pEventInstance->getParameterCount(&parameterCount);
+						ASSERT_FMOD_OK;
+
+						for (int index = 0; index < parameterCount; ++index)
+						{
+							FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
+							fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
+							ASSERT_FMOD_OK;
+
+							if (parameterId == StringToId(parameterDescription.name))
+							{
+								parameters.emplace(parameterId, index);
+								fmodResult = pEventInstance->setParameterValueByIndex(index, pParameter->GetValueMultiplier() * value + pParameter->GetValueShift());
+								ASSERT_FMOD_OK;
+								break;
+							}
+						}
+					}
+				}
+				else
+				{
+					int parameterCount = 0;
+					fmodResult = pEventInstance->getParameterCount(&parameterCount);
+					ASSERT_FMOD_OK;
+
+					for (int index = 0; index < parameterCount; ++index)
+					{
+						FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
+						fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
+						ASSERT_FMOD_OK;
+
+						if (parameterId == StringToId(parameterDescription.name))
+						{
+							g_triggerToParameterIndexes[pTrigger].emplace(std::make_pair(parameterId, index));
+							fmodResult = pEventInstance->setParameterValueByIndex(index, pParameter->GetValueMultiplier() * value + pParameter->GetValueShift());
+							ASSERT_FMOD_OK;
+							break;
+						}
+					}
+				}
+			}
+
+			auto const iter(m_parameters.find(pParameter));
+
+			if (iter != m_parameters.end())
+			{
+				iter->second = value;
+			}
+			else
+			{
+				m_parameters.emplace(pParameter, value);
+			}
+		}
+		else if (type == EParameterType::VCA)
+		{
+			auto const pVca = static_cast<CVcaParameter const*>(pBaseParameter);
+			FMOD_RESULT const fmodResult = pVca->GetVca()->setVolume(pVca->GetValueMultiplier() * value + pVca->GetValueShift());
+			ASSERT_FMOD_OK;
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Invalid AudioObjectData or ParameterData passed to the Fmod implementation of SetParameter");
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::SetSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
+{
+	auto const pBaseSwitchState = static_cast<CBaseSwitchState const*>(pISwitchStateConnection);
+
+	if (pBaseSwitchState != nullptr)
+	{
+		EStateType const type = pBaseSwitchState->GetType();
+
+		if (type == EStateType::State)
+		{
+			auto const pSwitchState = static_cast<CSwitchState const*>(pBaseSwitchState);
+			uint32 const parameterId = pSwitchState->GetId();
+			FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
+
+			for (auto const pEvent : m_events)
+			{
+				FMOD::Studio::EventInstance* const pEventInstance = pEvent->GetInstance();
+				CRY_ASSERT_MESSAGE(pEventInstance != nullptr, "Event instance doesn't exist during %s", __FUNCTION__);
+				CTrigger const* const pTrigger = pEvent->GetTrigger();
+				CRY_ASSERT_MESSAGE(pTrigger != nullptr, "Trigger doesn't exist during %s", __FUNCTION__);
+
+				FMOD::Studio::EventDescription* pEventDescription = nullptr;
+				fmodResult = pEventInstance->getDescription(&pEventDescription);
+				ASSERT_FMOD_OK;
+
+				if (g_triggerToParameterIndexes.find(pTrigger) != g_triggerToParameterIndexes.end())
+				{
+					ParameterIdToIndex& parameters = g_triggerToParameterIndexes[pTrigger];
+
+					if (parameters.find(parameterId) != parameters.end())
+					{
+						fmodResult = pEventInstance->setParameterValueByIndex(parameters[parameterId], pSwitchState->GetValue());
+						ASSERT_FMOD_OK;
+					}
+					else
+					{
+						int parameterCount = 0;
+						fmodResult = pEventInstance->getParameterCount(&parameterCount);
+						ASSERT_FMOD_OK;
+
+						for (int index = 0; index < parameterCount; ++index)
+						{
+							FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
+							fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
+							ASSERT_FMOD_OK;
+
+							if (parameterId == StringToId(parameterDescription.name))
+							{
+								parameters.emplace(parameterId, index);
+								fmodResult = pEventInstance->setParameterValueByIndex(index, pSwitchState->GetValue());
+								ASSERT_FMOD_OK;
+								break;
+							}
+						}
+					}
+				}
+				else
+				{
+					int parameterCount = 0;
+					fmodResult = pEventInstance->getParameterCount(&parameterCount);
+					ASSERT_FMOD_OK;
+
+					for (int index = 0; index < parameterCount; ++index)
+					{
+						FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
+						fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
+						ASSERT_FMOD_OK;
+
+						if (parameterId == StringToId(parameterDescription.name))
+						{
+							g_triggerToParameterIndexes[pTrigger].emplace(std::make_pair(parameterId, index));
+							fmodResult = pEventInstance->setParameterValueByIndex(index, pSwitchState->GetValue());
+							ASSERT_FMOD_OK;
+							break;
+						}
+					}
+				}
+			}
+
+			auto const iter(m_switches.find(pSwitchState->GetId()));
+
+			if (iter != m_switches.end())
+			{
+				iter->second = pSwitchState;
+			}
+			else
+			{
+				m_switches.emplace(pSwitchState->GetId(), pSwitchState);
+			}
+		}
+		else if (type == EStateType::VCA)
+		{
+			auto const pVca = static_cast<CVcaState const*>(pBaseSwitchState);
+			FMOD_RESULT const fmodResult = pVca->GetVca()->setVolume(pVca->GetValue());
+			ASSERT_FMOD_OK;
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Invalid switch pointer passed to the Fmod implementation of SetSwitchState");
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+ERequestStatus CBaseObject::ExecuteTrigger(ITriggerConnection const* const pITriggerConnection, IEvent* const pIEvent)
 {
 	ERequestStatus requestResult = ERequestStatus::Failure;
-	auto const pTrigger = static_cast<CTrigger const*>(pITrigger);
+	auto const pTrigger = static_cast<CTrigger const*>(pITriggerConnection);
 	auto const pEvent = static_cast<CEvent*>(pIEvent);
 
 	if ((pTrigger != nullptr) && (pEvent != nullptr))
@@ -395,7 +605,7 @@ ERequestStatus CBaseObject::ExecuteTrigger(ITrigger const* const pITrigger, IEve
 					pEvent->SetId(pTrigger->GetId());
 					pEvent->SetObject(this);
 
-					CRY_ASSERT_MESSAGE(std::find(m_pendingEvents.begin(), m_pendingEvents.end(), pEvent) == m_pendingEvents.end(), "Event was already in the pending list");
+					CRY_ASSERT_MESSAGE(std::find(m_pendingEvents.begin(), m_pendingEvents.end(), pEvent) == m_pendingEvents.end(), "Event was already in the pending list during %s", __FUNCTION__);
 					m_pendingEvents.push_back(pEvent);
 					requestResult = ERequestStatus::Success;
 				}
@@ -431,7 +641,7 @@ ERequestStatus CBaseObject::ExecuteTrigger(ITrigger const* const pITrigger, IEve
 #if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
 					fmodResult = pEventDescription->getInstanceCount(&count);
 					ASSERT_FMOD_OK;
-					CRY_ASSERT_MESSAGE(count < capacity, "Instance count (%d) is higher or equal than array capacity (%d).", count, capacity);
+					CRY_ASSERT_MESSAGE(count < capacity, "Instance count (%d) is higher or equal than array capacity (%d) during %s", count, capacity, __FUNCTION__);
 #endif          // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
 
 					FMOD::Studio::EventInstance* eventInstances[capacity];
@@ -476,16 +686,16 @@ void CBaseObject::StopAllTriggers()
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::PlayFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CBaseObject::PlayFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
-	CBaseStandaloneFile* const pStandaloneFile = static_cast<CBaseStandaloneFile* const>(pIStandaloneFile);
+	auto const pStandaloneFile = static_cast<CBaseStandaloneFile*>(pIStandaloneFileConnection);
 
 	if (pStandaloneFile != nullptr)
 	{
 		pStandaloneFile->m_pObject = this;
 		pStandaloneFile->StartLoading();
 
-		CRY_ASSERT_MESSAGE(std::find(m_pendingFiles.begin(), m_pendingFiles.end(), pStandaloneFile) == m_pendingFiles.end(), "standalone file was already in the pending standalone files list");
+		CRY_ASSERT_MESSAGE(std::find(m_pendingFiles.begin(), m_pendingFiles.end(), pStandaloneFile) == m_pendingFiles.end(), "Standalone file was already in the pending standalone files list during %s", __FUNCTION__);
 		m_pendingFiles.push_back(pStandaloneFile);
 		return ERequestStatus::Success;
 	}
@@ -498,9 +708,9 @@ ERequestStatus CBaseObject::PlayFile(IStandaloneFile* const pIStandaloneFile)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::StopFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CBaseObject::StopFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
-	CBaseStandaloneFile* const pStandaloneFile = static_cast<CBaseStandaloneFile* const>(pIStandaloneFile);
+	auto const pStandaloneFile = static_cast<CBaseStandaloneFile*>(pIStandaloneFileConnection);
 
 	if (pStandaloneFile != nullptr)
 	{

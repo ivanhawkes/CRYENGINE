@@ -19,6 +19,7 @@
 #include "VcaParameter.h"
 #include "VcaState.h"
 #include "GlobalData.h"
+#include <FileInfo.h>
 #include <Logger.h>
 #include <CrySystem/File/ICryPak.h>
 #include <CrySystem/IProjectManager.h>
@@ -47,46 +48,48 @@ char const* const CImpl::s_szSnapshotPrefix = "snapshot:/";
 char const* const CImpl::s_szBusPrefix = "bus:/";
 char const* const CImpl::s_szVcaPrefix = "vca:/";
 
+std::vector<CBaseObject*> g_constructedObjects;
+
 static constexpr size_t s_maxFileSize = size_t(1) << size_t(31);
 
 //////////////////////////////////////////////////////////////////////////
 void CountPoolSizes(XmlNodeRef const pNode, SPoolSizes& poolSizes)
 {
-	uint32 numTriggers = 0;
+	uint16 numTriggers = 0;
 	pNode->getAttr(s_szTriggersAttribute, numTriggers);
 	poolSizes.triggers += numTriggers;
 
-	uint32 numParameters = 0;
+	uint16 numParameters = 0;
 	pNode->getAttr(s_szParametersAttribute, numParameters);
 	poolSizes.parameters += numParameters;
 
-	uint32 numSwitchStates = 0;
+	uint16 numSwitchStates = 0;
 	pNode->getAttr(s_szSwitchStatesAttribute, numSwitchStates);
 	poolSizes.switchStates += numSwitchStates;
 
-	uint32 numEnvBuses = 0;
+	uint16 numEnvBuses = 0;
 	pNode->getAttr(s_szEnvBusesAttribute, numEnvBuses);
 	poolSizes.envBuses += numEnvBuses;
 
-	uint32 numEnvParameters = 0;
+	uint16 numEnvParameters = 0;
 	pNode->getAttr(s_szEnvParametersAttribute, numEnvParameters);
 	poolSizes.envParameters += numEnvParameters;
 
-	uint32 numVcaParameters = 0;
+	uint16 numVcaParameters = 0;
 	pNode->getAttr(s_szVcaParametersAttribute, numVcaParameters);
 	poolSizes.vcaParameters += numVcaParameters;
 
-	uint32 numVcaStates = 0;
+	uint16 numVcaStates = 0;
 	pNode->getAttr(s_szVcaStatesAttribute, numVcaStates);
 	poolSizes.vcaStates += numVcaStates;
 
-	uint32 numFiles = 0;
+	uint16 numFiles = 0;
 	pNode->getAttr(s_szFilesAttribute, numFiles);
 	poolSizes.files += numFiles;
 }
 
 //////////////////////////////////////////////////////////////////////////
-void AllocateMemoryPools(uint32 const objectPoolSize, uint32 const eventPoolSize)
+void AllocateMemoryPools(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Fmod Object Pool");
 	CObject::CreateAllocator(objectPoolSize);
@@ -142,9 +145,7 @@ CImpl::CImpl()
 	, m_pMasterAssetsBank(nullptr)
 	, m_pMasterStreamsBank(nullptr)
 	, m_pMasterStringsBank(nullptr)
-	, m_isMuted(false)
 {
-	m_constructedObjects.reserve(256);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -158,8 +159,9 @@ void CImpl::Update()
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::Init(uint32 const objectPoolSize, uint32 const eventPoolSize)
+ERequestStatus CImpl::Init(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
+	g_constructedObjects.reserve(static_cast<size_t>(objectPoolSize));
 	AllocateMemoryPools(objectPoolSize, eventPoolSize);
 
 	m_regularSoundBankFolder = AUDIO_SYSTEM_DATA_ROOT;
@@ -312,66 +314,50 @@ void CImpl::OnAfterLibraryDataChanged()
 	g_debugPoolSizes = g_poolSizes;
 #endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
 
-	g_poolSizes.triggers = std::max<uint32>(1, g_poolSizes.triggers);
-	g_poolSizes.parameters = std::max<uint32>(1, g_poolSizes.parameters);
-	g_poolSizes.switchStates = std::max<uint32>(1, g_poolSizes.switchStates);
-	g_poolSizes.envBuses = std::max<uint32>(1, g_poolSizes.envBuses);
-	g_poolSizes.envParameters = std::max<uint32>(1, g_poolSizes.envParameters);
-	g_poolSizes.vcaParameters = std::max<uint32>(1, g_poolSizes.vcaParameters);
-	g_poolSizes.vcaStates = std::max<uint32>(1, g_poolSizes.vcaStates);
-	g_poolSizes.files = std::max<uint32>(1, g_poolSizes.files);
+	g_poolSizes.triggers = std::max<uint16>(1, g_poolSizes.triggers);
+	g_poolSizes.parameters = std::max<uint16>(1, g_poolSizes.parameters);
+	g_poolSizes.switchStates = std::max<uint16>(1, g_poolSizes.switchStates);
+	g_poolSizes.envBuses = std::max<uint16>(1, g_poolSizes.envBuses);
+	g_poolSizes.envParameters = std::max<uint16>(1, g_poolSizes.envParameters);
+	g_poolSizes.vcaParameters = std::max<uint16>(1, g_poolSizes.vcaParameters);
+	g_poolSizes.vcaStates = std::max<uint16>(1, g_poolSizes.vcaStates);
+	g_poolSizes.files = std::max<uint16>(1, g_poolSizes.files);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::OnLoseFocus()
-{
-	if (!m_isMuted)
-	{
-		MuteMasterBus(true);
-	}
-
-	return ERequestStatus::Success;
-}
-
-///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::OnGetFocus()
-{
-	if (!m_isMuted)
-	{
-		MuteMasterBus(false);
-	}
-
-	return ERequestStatus::Success;
-}
-
-///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::MuteAll()
+void CImpl::OnLoseFocus()
 {
 	MuteMasterBus(true);
-	m_isMuted = true;
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::UnmuteAll()
+void CImpl::OnGetFocus()
 {
 	MuteMasterBus(false);
-	m_isMuted = false;
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::PauseAll()
+void CImpl::MuteAll()
+{
+	MuteMasterBus(true);
+}
+
+///////////////////////////////////////////////////////////////////////////
+void CImpl::UnmuteAll()
+{
+	MuteMasterBus(false);
+}
+
+///////////////////////////////////////////////////////////////////////////
+void CImpl::PauseAll()
 {
 	PauseMasterBus(true);
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::ResumeAll()
+void CImpl::ResumeAll()
 {
 	PauseMasterBus(false);
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -388,6 +374,42 @@ ERequestStatus CImpl::StopAllSounds()
 	}
 
 	return (fmodResult == FMOD_OK) ? ERequestStatus::Success : ERequestStatus::Failure;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetGlobalParameter(IParameterConnection const* const pIParameterConnection, float const value)
+{
+	auto const pParameter = static_cast<CBaseParameter const*>(pIParameterConnection);
+
+	if (pParameter != nullptr)
+	{
+		for (auto const pObject : g_constructedObjects)
+		{
+			pObject->SetParameter(pParameter, value);
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Invalid parameter pointer passed to the Fmod implementation of %s", __FUNCTION__);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
+{
+	auto const pSwitchState = static_cast<CBaseSwitchState const*>(pISwitchStateConnection);
+
+	if (pSwitchState != nullptr)
+	{
+		for (auto const pObject : g_constructedObjects)
+		{
+			pObject->SetSwitchState(pISwitchStateConnection);
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Invalid switch state pointer passed to the Fmod implementation of %s", __FUNCTION__);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -547,22 +569,22 @@ void CImpl::GetInfo(SImplInfo& implInfo) const
 ///////////////////////////////////////////////////////////////////////////
 IObject* CImpl::ConstructGlobalObject()
 {
-	CBaseObject* const pObject = new CGlobalObject(m_constructedObjects);
+	new CGlobalObject;
 
-	if (!stl::push_back_unique(m_constructedObjects, pObject))
+	if (!stl::push_back_unique(g_constructedObjects, static_cast<CBaseObject*>(g_pObject)))
 	{
 		Cry::Audio::Log(ELogType::Warning, "Trying to construct an already registered object.");
 	}
 
-	return static_cast<IObject*>(pObject);
+	return static_cast<IObject*>(g_pObject);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IObject* CImpl::ConstructObject(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
+IObject* CImpl::ConstructObject(CTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
-	CBaseObject* pObject = new CObject(transformation);
+	CBaseObject* const pObject = new CObject(transformation);
 
-	if (!stl::push_back_unique(m_constructedObjects, pObject))
+	if (!stl::push_back_unique(g_constructedObjects, pObject))
 	{
 		Cry::Audio::Log(ELogType::Warning, "Trying to construct an already registered object.");
 	}
@@ -575,7 +597,7 @@ void CImpl::DestructObject(IObject const* const pIObject)
 {
 	auto const pObject = static_cast<CBaseObject const*>(pIObject);
 
-	if (!stl::find_and_erase(m_constructedObjects, pObject))
+	if (!stl::find_and_erase(g_constructedObjects, pObject))
 	{
 		Cry::Audio::Log(ELogType::Warning, "Trying to delete a non-existing object.");
 	}
@@ -584,7 +606,7 @@ void CImpl::DestructObject(IObject const* const pIObject)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IListener* CImpl::ConstructListener(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
+IListener* CImpl::ConstructListener(CTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 	static int id = 0;
 	g_pListener = new CListener(transformation, id++);
@@ -602,13 +624,13 @@ IListener* CImpl::ConstructListener(CObjectTransformation const& transformation,
 ///////////////////////////////////////////////////////////////////////////
 void CImpl::DestructListener(IListener* const pIListener)
 {
-	CRY_ASSERT_MESSAGE(pIListener == g_pListener, "pIListener is not g_pListener");
+	CRY_ASSERT_MESSAGE(pIListener == g_pListener, "pIListener is not g_pListener during %s", __FUNCTION__);
 	delete g_pListener;
 	g_pListener = nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////
-IEvent* CImpl::ConstructEvent(CATLEvent& event)
+IEvent* CImpl::ConstructEvent(CryAudio::CEvent& event)
 {
 	return static_cast<IEvent*>(new CEvent(&event));
 }
@@ -621,7 +643,7 @@ void CImpl::DestructEvent(IEvent const* const pIEvent)
 }
 
 //////////////////////////////////////////////////////////////////////////
-IStandaloneFile* CImpl::ConstructStandaloneFile(CATLStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITrigger const* pITrigger /*= nullptr*/)
+IStandaloneFileConnection* CImpl::ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection /*= nullptr*/)
 {
 	string filePath;
 
@@ -636,23 +658,23 @@ IStandaloneFile* CImpl::ConstructStandaloneFile(CATLStandaloneFile& standaloneFi
 
 	CBaseStandaloneFile* pFile = nullptr;
 
-	if (pITrigger != nullptr)
+	if (pITriggerConnection != nullptr)
 	{
-		pFile = new CProgrammerSoundFile(filePath, static_cast<CTrigger const* const>(pITrigger)->GetGuid(), standaloneFile);
+		pFile = new CProgrammerSoundFile(filePath, static_cast<CTrigger const* const>(pITriggerConnection)->GetGuid(), standaloneFile);
 	}
 	else
 	{
 		pFile = new CStandaloneFile(filePath, standaloneFile);
 	}
 
-	return static_cast<IStandaloneFile*>(pFile);
+	return static_cast<IStandaloneFileConnection*>(pFile);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DestructStandaloneFile(IStandaloneFile const* const pIStandaloneFile)
+void CImpl::DestructStandaloneFileConnection(IStandaloneFileConnection const* const pIStandaloneFileConnection)
 {
-	CRY_ASSERT(pIStandaloneFile != nullptr);
-	delete pIStandaloneFile;
+	CRY_ASSERT(pIStandaloneFileConnection != nullptr);
+	delete pIStandaloneFileConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -666,7 +688,7 @@ void CImpl::GamepadDisconnected(DeviceId const deviceUniqueID)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radius)
+ITriggerConnection const* CImpl::ConstructTriggerConnection(XmlNodeRef const pRootNode, float& radius)
 {
 	CTrigger* pTrigger = nullptr;
 	char const* const szTag = pRootNode->getTag();
@@ -753,14 +775,14 @@ ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radiu
 		Cry::Audio::Log(ELogType::Warning, "Unknown Fmod tag: %s", szTag);
 	}
 
-	return static_cast<ITrigger*>(pTrigger);
+	return static_cast<ITriggerConnection*>(pTrigger);
 }
 
 //////////////////////////////////////////////////////////////////////////
-ITrigger const* CImpl::ConstructTrigger(ITriggerInfo const* const pITriggerInfo)
+ITriggerConnection const* CImpl::ConstructTriggerConnection(ITriggerInfo const* const pITriggerInfo)
 {
 #if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
-	ITrigger const* pITrigger = nullptr;
+	ITriggerConnection const* pITriggerConnection = nullptr;
 	auto const pTriggerInfo = static_cast<STriggerInfo const*>(pITriggerInfo);
 
 	if (pTriggerInfo != nullptr)
@@ -771,7 +793,7 @@ ITrigger const* CImpl::ConstructTrigger(ITriggerInfo const* const pITriggerInfo)
 
 		if (m_pSystem->lookupID(path.c_str(), &guid) == FMOD_OK)
 		{
-			pITrigger = static_cast<ITrigger const*>(new CTrigger(StringToId(path.c_str()), EEventType::Start, nullptr, guid));
+			pITriggerConnection = static_cast<ITriggerConnection const*>(new CTrigger(StringToId(path.c_str()), EEventType::Start, nullptr, guid));
 		}
 		else
 		{
@@ -779,24 +801,24 @@ ITrigger const* CImpl::ConstructTrigger(ITriggerInfo const* const pITriggerInfo)
 		}
 	}
 
-	return pITrigger;
+	return pITriggerConnection;
 #else
 	return nullptr;
 #endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructTrigger(ITrigger const* const pITrigger)
+void CImpl::DestructTriggerConnection(ITriggerConnection const* const pITriggerConnection)
 {
-	auto const pTrigger = static_cast<CTrigger const*>(pITrigger);
+	auto const pTrigger = static_cast<CTrigger const*>(pITriggerConnection);
 	g_triggerToParameterIndexes.erase(pTrigger);
 	delete pTrigger;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
+IParameterConnection const* CImpl::ConstructParameterConnection(XmlNodeRef const pRootNode)
 {
-	IParameter* pIParameter = nullptr;
+	IParameterConnection* pIParameterConnection = nullptr;
 	char const* const szTag = pRootNode->getTag();
 
 	if (_stricmp(szTag, s_szParameterTag) == 0)
@@ -807,7 +829,7 @@ IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
 		pRootNode->getAttr(s_szMutiplierAttribute, multiplier);
 		pRootNode->getAttr(s_szShiftAttribute, shift);
 
-		pIParameter = static_cast<IParameter*>(new CParameter(StringToId(szName), multiplier, shift));
+		pIParameterConnection = static_cast<IParameterConnection*>(new CParameter(StringToId(szName), multiplier, shift));
 	}
 	else if (_stricmp(szTag, s_szVcaTag) == 0)
 	{
@@ -827,7 +849,7 @@ IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
 			pRootNode->getAttr(s_szMutiplierAttribute, multiplier);
 			pRootNode->getAttr(s_szShiftAttribute, shift);
 
-			pIParameter = static_cast<IParameter*>(new CVcaParameter(StringToId(fullName.c_str()), multiplier, shift, pVca));
+			pIParameterConnection = static_cast<IParameterConnection*>(new CVcaParameter(StringToId(fullName.c_str()), multiplier, shift, pVca));
 		}
 		else
 		{
@@ -839,15 +861,15 @@ IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
 		Cry::Audio::Log(ELogType::Warning, "Unknown Fmod tag: %s", szTag);
 	}
 
-	return pIParameter;
+	return pIParameterConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructParameter(IParameter const* const pIParameter)
+void CImpl::DestructParameterConnection(IParameterConnection const* const pIParameterConnection)
 {
-	auto const pParameter = static_cast<CBaseParameter const*>(pIParameter);
+	auto const pParameter = static_cast<CBaseParameter const*>(pIParameterConnection);
 
-	for (auto const pObject : m_constructedObjects)
+	for (auto const pObject : g_constructedObjects)
 	{
 		pObject->RemoveParameter(pParameter);
 	}
@@ -856,9 +878,9 @@ void CImpl::DestructParameter(IParameter const* const pIParameter)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
+ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef const pRootNode)
 {
-	ISwitchState* pISwitchState = nullptr;
+	ISwitchStateConnection* pISwitchStateConnection = nullptr;
 	char const* const szTag = pRootNode->getTag();
 
 	if (_stricmp(szTag, s_szParameterTag) == 0)
@@ -866,7 +888,7 @@ ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
 		char const* const szName = pRootNode->getAttr(s_szNameAttribute);
 		char const* const szValue = pRootNode->getAttr(s_szValueAttribute);
 		float const value = static_cast<float>(atof(szValue));
-		pISwitchState = static_cast<ISwitchState*>(new CSwitchState(StringToId(szName), value));
+		pISwitchStateConnection = static_cast<ISwitchStateConnection*>(new CSwitchState(StringToId(szName), value));
 	}
 	else if (_stricmp(szTag, s_szVcaTag) == 0)
 	{
@@ -884,7 +906,7 @@ ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
 			char const* const szValue = pRootNode->getAttr(s_szValueAttribute);
 			float const value = static_cast<float>(atof(szValue));
 
-			pISwitchState = static_cast<ISwitchState*>(new CVcaState(StringToId(fullName.c_str()), value, pVca));
+			pISwitchStateConnection = static_cast<ISwitchStateConnection*>(new CVcaState(StringToId(fullName.c_str()), value, pVca));
 		}
 		else
 		{
@@ -896,15 +918,15 @@ ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
 		Cry::Audio::Log(ELogType::Warning, "Unknown Fmod tag: %s", szTag);
 	}
 
-	return pISwitchState;
+	return pISwitchStateConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructSwitchState(ISwitchState const* const pISwitchState)
+void CImpl::DestructSwitchStateConnection(ISwitchStateConnection const* const pISwitchStateConnection)
 {
-	auto const pSwitchState = static_cast<CBaseSwitchState const*>(pISwitchState);
+	auto const pSwitchState = static_cast<CBaseSwitchState const*>(pISwitchStateConnection);
 
-	for (auto const pObject : m_constructedObjects)
+	for (auto const pObject : g_constructedObjects)
 	{
 		pObject->RemoveSwitch(pSwitchState);
 	}
@@ -913,7 +935,7 @@ void CImpl::DestructSwitchState(ISwitchState const* const pISwitchState)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IEnvironment const* CImpl::ConstructEnvironment(XmlNodeRef const pRootNode)
+IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef const pRootNode)
 {
 	CEnvironment* pEnvironment = nullptr;
 	char const* const szTag = pRootNode->getTag();
@@ -952,15 +974,15 @@ IEnvironment const* CImpl::ConstructEnvironment(XmlNodeRef const pRootNode)
 		Cry::Audio::Log(ELogType::Warning, "Unknown Fmod tag: %s", szTag);
 	}
 
-	return static_cast<IEnvironment*>(pEnvironment);
+	return static_cast<IEnvironmentConnection*>(pEnvironment);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructEnvironment(IEnvironment const* const pIEnvironment)
+void CImpl::DestructEnvironmentConnection(IEnvironmentConnection const* const pIEnvironmentConnection)
 {
-	auto const pEnvironment = static_cast<CEnvironment const*>(pIEnvironment);
+	auto const pEnvironment = static_cast<CEnvironment const*>(pIEnvironmentConnection);
 
-	for (auto const pObject : m_constructedObjects)
+	for (auto const pObject : g_constructedObjects)
 	{
 		pObject->RemoveEnvironment(pEnvironment);
 	}
@@ -969,15 +991,15 @@ void CImpl::DestructEnvironment(IEnvironment const* const pIEnvironment)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ISetting const* CImpl::ConstructSetting(XmlNodeRef const pRootNode)
+ISettingConnection const* CImpl::ConstructSettingConnection(XmlNodeRef const pRootNode)
 {
-	return static_cast<ISetting*>(new CSetting);
+	return static_cast<ISettingConnection*>(new CSetting);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DestructSetting(ISetting const* const pISetting)
+void CImpl::DestructSettingConnection(ISettingConnection const* const pISettingConnection)
 {
-	delete pISetting;
+	delete pISettingConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////

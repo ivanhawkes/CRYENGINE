@@ -14,16 +14,10 @@
 // Temporary using statement to not break YASLI_ENUM_BEGIN_NESTED below
 // Before fixing, validate that serialization to disk is the same, it currently serializes a string.
 using namespace Cry;
-using namespace Cry::ProjectManagerInternals;
 
 #if CRY_PLATFORM_WINDOWS
 #include <Shlwapi.h>
 #endif
-
-YASLI_ENUM_BEGIN_NESTED(IPluginManager, EPluginType, "PluginType")
-YASLI_ENUM_VALUE_NESTED(IPluginManager, EPluginType::Native, "Native")
-YASLI_ENUM_VALUE_NESTED(IPluginManager, EPluginType::Managed, "Managed")
-YASLI_ENUM_END()
 
 CProjectManager::CProjectManager()
 	: m_sys_project(nullptr)
@@ -89,21 +83,6 @@ void CProjectManager::SaveProjectChanges()
 	gEnv->pSystem->GetArchiveHost()->SaveJsonFile(m_project.filePath, Serialization::SStruct(m_project));
 }
 
-bool SProject::Serialize(Serialization::IArchive& ar)
-{
-	// Only save to the latest format
-	if (ar.isOutput())
-	{
-		version = LatestProjectFileVersion;
-	}
-
-	ar(version, "version", "version");
-
-	SProjectFileParser<LatestProjectFileVersion> parser;
-	parser.Serialize(ar, *this);
-	return true;
-}
-
 bool CProjectManager::ParseProjectFile()
 {
 	RegisterCVars();
@@ -112,7 +91,7 @@ bool CProjectManager::ParseProjectFile()
 
 	const ICmdLineArg* arg = gEnv->pSystem->GetICmdLine()->FindArg(eCLAT_Pre, "project");
 	string projectFile = arg != nullptr ? arg->GetValue() : m_sys_project->GetString();
-	if (projectFile.size() == 0)
+	if (projectFile.empty())
 	{
 		CryLogAlways("\nRunning CRYENGINE without a project!");
 		CryLogAlways("	Using Engine Folder %s", szEngineRootDirectory);

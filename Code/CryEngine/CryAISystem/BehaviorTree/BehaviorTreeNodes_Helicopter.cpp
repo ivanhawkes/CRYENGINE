@@ -114,8 +114,8 @@ public:
 		CPipeUser* pPipeUser = context.entity.GetAI()->CastToCPipeUser();
 
 		const Vec3 currentPosition = pPipeUser->GetPos();
-		const Vec3 velocity = pPipeUser->GetVelocity();
-		const float speed = velocity.GetLength();
+		//const Vec3 velocity = pPipeUser->GetVelocity();
+		//const float speed = velocity.GetLength();
 
 		pPipeUser->m_State.predictedCharacterStates.nStates = 0;
 		const Vec3 currentPositionToTargetPosition = runtimeData.targetPosition - currentPosition;
@@ -351,7 +351,7 @@ public:
 			return;
 		}
 
-		runtimeData.lastUpdateTime = gEnv->pTimer->GetFrameStartTime();
+		runtimeData.lastUpdateTime = GetAISystem()->GetFrameStartTime();
 
 		const FlyHelpers::PathEntityIn pathEntityIn = FlyHelpers::CreatePathEntityIn(pPipeUser);
 		runtimeData.pathFollower.Init(path, m_params, pathEntityIn);
@@ -378,7 +378,7 @@ public:
 		CPipeUser* pPipeUser = context.entity.GetAI()->CastToCPipeUser();
 		const FlyHelpers::PathEntityIn pathEntityIn = FlyHelpers::CreatePathEntityIn(pPipeUser);
 
-		const CTimeValue timeNow = gEnv->pTimer->GetFrameStartTime();
+		const CTimeValue timeNow = GetAISystem()->GetFrameStartTime();
 		const CTimeValue timeDelta = timeNow - runtimeData.lastUpdateTime;
 		runtimeData.lastUpdateTime = timeNow;
 
@@ -501,8 +501,6 @@ public:
 		RuntimeData& runtimeData = GetRuntimeData<RuntimeData>(context);
 
 		runtimeData.targetEntityId = 0;
-
-		CPipeUser* pPipeUser = context.entity.GetAI()->CastToCPipeUser();
 
 		IEntity* pEntity = gEnv->pEntitySystem->GetEntity(context.entityId);
 		CRY_ASSERT(pEntity);

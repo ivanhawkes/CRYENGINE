@@ -54,6 +54,9 @@ using namespace BehaviorTree;
 %template(NavigationAgentTypeID) TNavigationID<AgentTypeIDTag>;
 %template(NavigationVolumeID) TNavigationID<VolumeIDTag>;
 %template(TileGeneratorExtensionID) TNavigationID<TileGeneratorExtensionIDTag>;
+%template(TileIDTag) TNavigationID<TileIDTag>;
+%template(TileTriangleIDTag) TNavigationID<TileTriangleIDTag>;
+%template(OffMeshLinkIDTag) TNavigationID<OffMeshLinkIDTag>;
 %feature("director") IAISystemComponent;
 %include "../../../../CryEngine/CryCommon/CryAISystem/IAISystemComponent.h"
 %feature("director") IAIEventListener;
@@ -62,6 +65,7 @@ using namespace BehaviorTree;
 %ignore IAISystem::SerializeObjectIDs;
 %ignore IAISystem::Serialize;
 %ignore IAISystem::NavCapMask::Serialize;
+%ignore IAISystem::ESubsystemUpdateFlag;
 %include "../../../../CryEngine/CryCommon/CryAISystem/IAISystem.h"
 %feature("director") IAICommunicationHandler::IEventListener;
 %include "../../../../CryEngine/CryCommon/CryAISystem/IAgent.h"

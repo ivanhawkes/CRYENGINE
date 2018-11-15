@@ -69,6 +69,14 @@ void CPrefabItem::SetPrefabClassName(string prefabClassNameString)
 	m_PrefabClassName = prefabClassNameString;
 }
 
+void CPrefabItem::SetName(const string& name)
+{
+	// There is no much point of creating undo here, because setting a new prefab name should always be done along with renaming the prefab library, which does not support undo.
+	CBaseLibraryItem::SetName(name, true);
+
+	signalNameChanged();
+}
+
 void CPrefabItem::Serialize(SerializeContext& ctx)
 {
 	CBaseLibraryItem::Serialize(ctx);
@@ -185,8 +193,10 @@ void CPrefabItem::CheckVersionAndUpgrade()
 void CPrefabItem::UpdateFromPrefabObject(CPrefabObject* pPrefabObject, const SObjectChangedContext& context)
 {
 	CPrefabManager* const pPrefabManager = GetIEditorImpl()->GetPrefabManager();
+	//make sure that we are not modifying a prefab on level load
+	const bool documentReady = GetIEditor()->IsDocumentReady();
 	// Skip other prefab types
-	if (!pPrefabObject || pPrefabObject->IsModifyInProgress()
+	if (!documentReady || !pPrefabObject || pPrefabObject->IsModifyInProgress()
 	    || !pPrefabManager || pPrefabManager->ShouldSkipPrefabUpdate())
 	{
 		return;
@@ -425,14 +435,17 @@ void CPrefabItem::ModifyInstancedPrefab(CSelectionGroup& objectsInPrefabAsFlatSe
 				//Clone the objects, fix the flags and add it to the current item, this works only for TOP LEVEL ITEMS,
 				//groups will call modify on themselves and regenerate all the objects inside them if something is added
 				CObjectArchive loadAr(pObjManager, changedObject, true);
-				CPrefabChildGuidProvider guidProvider(pPrefabObject);
-				loadAr.SetGuidProvider(&guidProvider);
 				loadAr.EnableProgressBar(false);
 
 				// PrefabGUID -> GUID
 				RemapIDsInNodeAndChildren(changedObject, guidMapping, true);
 
-				// Load/Clone
+				/*
+				Here we set the guid provider to null so that it will not attempt to regenerate GUIDS in LoadObject(specifically in the call to NewObject).
+				We need the serialized Id to stay the same as the prefab xml Id until AddMember is called
+				AddMember will "slide" the current Id to IdInPrefab (which we need for prefab instance and library update) and generate a new unique Id for the prefab instance
+				*/
+				loadAr.SetGuidProvider(nullptr);
 				CBaseObject* pClone = loadAr.LoadObject(changedObject);
 				loadAr.ResolveObjects();
 
@@ -440,8 +453,11 @@ void CPrefabItem::ModifyInstancedPrefab(CSelectionGroup& objectsInPrefabAsFlatSe
 
 				pPrefabObject->SetObjectPrefabFlagAndLayer(pClone);
 
+				//Actually set the guid provider now
+				CPrefabChildGuidProvider guidProvider(pPrefabObject);
+				loadAr.SetGuidProvider(&guidProvider);
 				if (!pClone->GetParent())
-					pPrefabObject->AttachChild(pClone, false);
+					pPrefabObject->AddMember(pClone, false);
 
 				// GUID -> PrefabGUID
 				RemapIDsInNodeAndChildren(changedObject, guidMapping, false);

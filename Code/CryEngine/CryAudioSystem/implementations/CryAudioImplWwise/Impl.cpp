@@ -4,6 +4,7 @@
 #include "Impl.h"
 #include "CVars.h"
 #include "FileIOHandler.h"
+#include "AuxThread.h"
 #include "Common.h"
 #include "Environment.h"
 #include "Event.h"
@@ -15,12 +16,12 @@
 #include "StandaloneFile.h"
 #include "SwitchState.h"
 #include "Trigger.h"
+
+#include <FileInfo.h>
 #include <Logger.h>
-#include <SharedAudioData.h>
+#include <SharedData.h>
 #include <CrySystem/File/ICryPak.h>
 #include <CrySystem/IProjectManager.h>
-#include <CryThreading/IThreadManager.h>
-#include <CryThreading/IThreadConfigManager.h>
 
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	#include "Debug.h"
@@ -44,11 +45,11 @@
 	#define OCULUS_SPATIALIZER_DLL "OculusSpatializerWwise.dll"
 #endif // WWISE_USE_OCULUS
 
-#if !defined(WWISE_FOR_RELEASE)
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	#include <AK/Comm/AkCommunication.h> // Communication between Wwise and the game (excluded in release build)
 	#include <AK/Tools/Common/AkMonitorError.h>
 	#include <AK/Tools/Common/AkPlatformFuncs.h>
-#endif // WWISE_FOR_RELEASE
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
 /////////////////////////////////////////////////////////////////////////////////
 //                              MEMORY HOOKS SETUP
@@ -117,7 +118,7 @@ void APUFreeHook(void* in_pMemAddress)
 #endif  // CRY_PLATFORM_DURANGO
 }
 
-#if !defined(WWISE_FOR_RELEASE)
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 static void ErrorMonitorCallback(
 	AK::Monitor::ErrorCode in_eErrorCode,   ///< Error code number value
 	const AkOSChar* in_pszError,            ///< Message or error string to be displayed
@@ -128,11 +129,17 @@ static void ErrorMonitorCallback(
 {
 	char* szTemp = nullptr;
 	CONVERT_OSCHAR_TO_CHAR(in_pszError, szTemp);
+
+	CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+	CryAudio::Impl::Wwise::CEvent const* const pEvent = stl::find_in_map(CryAudio::Impl::Wwise::g_playingIds, in_playingID, nullptr);
+	CryAudio::Impl::Wwise::CObject const* const pObject = stl::find_in_map(CryAudio::Impl::Wwise::g_gameObjectIds, in_gameObjID, nullptr);
+	char const* const szEventName = (pEvent != nullptr) ? pEvent->GetName() : "Unknown PlayingID";
+	char const* const szObjectName = (pObject != nullptr) ? pObject->GetName() : "Unknown GameObjID";
 	Cry::Audio::Log(
 		((in_eErrorLevel& AK::Monitor::ErrorLevel_Error) != 0) ? CryAudio::ELogType::Error : CryAudio::ELogType::Comment,
-		"<Wwise> %s ErrorCode: %d PlayingID: %u GameObjID: %" PRISIZE_T, szTemp, in_eErrorCode, in_playingID, in_gameObjID);
+		"<Wwise> %s | ErrorCode: %d | PlayingID: %u (%s) | GameObjID: %" PRISIZE_T " (%s)", szTemp, in_eErrorCode, in_playingID, szEventName, in_gameObjID, szObjectName);
 }
-#endif // WWISE_FOR_RELEASE
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -140,82 +147,7 @@ namespace Impl
 {
 namespace Wwise
 {
-class CAuxWwiseAudioThread final : public IThread
-{
-public:
-
-	CAuxWwiseAudioThread()
-		: m_bQuit(false)
-		, m_threadState(EAuxWwiseAudioThreadState::Wait)
-	{}
-
-	virtual ~CAuxWwiseAudioThread() override = default;
-
-	enum class EAuxWwiseAudioThreadState : EnumFlagsType
-	{
-		Wait,
-		Start,
-		Stop,
-	};
-
-	void Init()
-	{
-		if (!gEnv->pThreadManager->SpawnThread(this, "AuxWwiseAudioThread"))
-		{
-			CryFatalError(R"(Error spawning "AuxWwiseAudioThread" thread.)");
-		}
-	}
-
-	virtual void ThreadEntry() override
-	{
-		while (!m_bQuit)
-		{
-			m_lock.Lock();
-
-			if (m_threadState == EAuxWwiseAudioThreadState::Stop)
-			{
-				m_threadState = EAuxWwiseAudioThreadState::Wait;
-				m_sem.Notify();
-			}
-
-			while (m_threadState == EAuxWwiseAudioThreadState::Wait)
-			{
-				m_sem.Wait(m_lock);
-			}
-
-			m_lock.Unlock();
-
-			if (m_bQuit)
-			{
-				break;
-			}
-
-			g_pImpl->Update();
-		}
-	}
-
-	void SignalStopWork()
-	{
-		m_bQuit = true;
-		m_threadState = EAuxWwiseAudioThreadState::Start;
-		m_sem.Notify();
-		gEnv->pThreadManager->JoinThread(this, eJM_Join);
-	}
-
-	bool IsActive()
-	{
-		// JoinThread returns true if thread is not running.
-		// JoinThread returns false if thread is still running
-		return !gEnv->pThreadManager->JoinThread(this, eJM_TryJoin);
-	}
-
-	volatile bool             m_bQuit;
-	EAuxWwiseAudioThreadState m_threadState;
-	CryMutex                  m_lock;
-	CryConditionVariable      m_sem;
-};
-
-CAuxWwiseAudioThread g_auxAudioThread;
+CAuxThread g_auxAudioThread;
 std::map<AkUniqueID, float> g_maxAttenuations;
 
 SPoolSizes g_poolSizes;
@@ -228,29 +160,29 @@ SPoolSizes g_debugPoolSizes;
 //////////////////////////////////////////////////////////////////////////
 void CountPoolSizes(XmlNodeRef const pNode, SPoolSizes& poolSizes)
 {
-	uint32 numTriggers = 0;
+	uint16 numTriggers = 0;
 	pNode->getAttr(s_szTriggersAttribute, numTriggers);
 	poolSizes.triggers += numTriggers;
 
-	uint32 numParameters = 0;
+	uint16 numParameters = 0;
 	pNode->getAttr(s_szParametersAttribute, numParameters);
 	poolSizes.parameters += numParameters;
 
-	uint32 numSwitchStates = 0;
+	uint16 numSwitchStates = 0;
 	pNode->getAttr(s_szSwitchStatesAttribute, numSwitchStates);
 	poolSizes.switchStates += numSwitchStates;
 
-	uint32 numEnvironments = 0;
+	uint16 numEnvironments = 0;
 	pNode->getAttr(s_szEnvironmentsAttribute, numEnvironments);
 	poolSizes.environments += numEnvironments;
 
-	uint32 numFiles = 0;
+	uint16 numFiles = 0;
 	pNode->getAttr(s_szFilesAttribute, numFiles);
 	poolSizes.files += numFiles;
 }
 
 //////////////////////////////////////////////////////////////////////////
-void AllocateMemoryPools(uint32 const objectPoolSize, uint32 const eventPoolSize)
+void AllocateMemoryPools(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Object Pool");
 	CObject::CreateAllocator(objectPoolSize);
@@ -356,7 +288,7 @@ CSwitchState const* ParseWwiseRtpcSwitch(XmlNodeRef const pNode)
 	{
 		Cry::Audio::Log(
 			ELogType::Warning,
-			"The Wwise Rtpc %s inside ATLSwitchState does not have a valid name.",
+			"The Wwise Rtpc %s inside SwitchState does not have a valid name.",
 			szName);
 	}
 
@@ -365,11 +297,12 @@ CSwitchState const* ParseWwiseRtpcSwitch(XmlNodeRef const pNode)
 
 ///////////////////////////////////////////////////////////////////////////
 CImpl::CImpl()
-	: m_gameObjectId(1)
+	: m_gameObjectId(2) // Start with id 2, because id 1 would get ignored when setting a parameter on all constructed objects.
 	, m_initBankId(AK_INVALID_BANK_ID)
-#if !defined(WWISE_FOR_RELEASE)
+	, m_toBeReleased(false)
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	, m_bCommSystemInitialized(false)
-#endif // !WWISE_FOR_RELEASE
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 #if defined(WWISE_USE_OCULUS)
 	, m_pOculusSpatializerLibrary(nullptr)
 #endif // WWISE_USE_OCULUS
@@ -418,7 +351,7 @@ void CImpl::Update()
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::Init(uint32 const objectPoolSize, uint32 const eventPoolSize)
+ERequestStatus CImpl::Init(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
 	// If something fails so severely during initialization that we need to fall back to the NULL implementation
 	// we will need to shut down what has been initialized so far. Therefore make sure to call Shutdown() before returning eARS_FAILURE!
@@ -607,7 +540,7 @@ ERequestStatus CImpl::Init(uint32 const objectPoolSize, uint32 const eventPoolSi
 		return ERequestStatus::Failure;
 	}
 
-#if !defined(WWISE_FOR_RELEASE)
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	if (g_cvars.m_enableCommSystem == 1)
 	{
 		m_bCommSystemInitialized = true;
@@ -631,7 +564,7 @@ ERequestStatus CImpl::Init(uint32 const objectPoolSize, uint32 const eventPoolSi
 			m_bCommSystemInitialized = false;
 		}
 	}
-#endif  // !WWISE_FOR_RELEASE
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
 #if defined(WWISE_USE_OCULUS)
 	m_pOculusSpatializerLibrary = CryLoadLibrary(OCULUS_SPATIALIZER_DLL);
@@ -729,7 +662,7 @@ void CImpl::ShutDown()
 {
 	AKRESULT wwiseResult = AK_Fail;
 
-#if !defined(WWISE_FOR_RELEASE)
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	if (m_bCommSystemInitialized)
 	{
 		AK::Comm::Term();
@@ -743,7 +676,7 @@ void CImpl::ShutDown()
 
 		m_bCommSystemInitialized = false;
 	}
-#endif  // !WWISE_FOR_RELEASE
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
 	AK::MusicEngine::Term();
 
@@ -813,6 +746,12 @@ void CImpl::ShutDown()
 #endif  // WWISE_USE_OCULUS
 }
 
+//////////////////////////////////////////////////////////////////////////
+void CImpl::OnBeforeRelease()
+{
+	m_toBeReleased = true;
+}
+
 ///////////////////////////////////////////////////////////////////////////
 void CImpl::Release()
 {
@@ -868,53 +807,47 @@ void CImpl::OnAfterLibraryDataChanged()
 	g_debugPoolSizes = g_poolSizes;
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
-	g_poolSizes.triggers = std::max<uint32>(1, g_poolSizes.triggers);
-	g_poolSizes.parameters = std::max<uint32>(1, g_poolSizes.parameters);
-	g_poolSizes.switchStates = std::max<uint32>(1, g_poolSizes.switchStates);
-	g_poolSizes.environments = std::max<uint32>(1, g_poolSizes.environments);
-	g_poolSizes.files = std::max<uint32>(1, g_poolSizes.files);
+	g_poolSizes.triggers = std::max<uint16>(1, g_poolSizes.triggers);
+	g_poolSizes.parameters = std::max<uint16>(1, g_poolSizes.parameters);
+	g_poolSizes.switchStates = std::max<uint16>(1, g_poolSizes.switchStates);
+	g_poolSizes.environments = std::max<uint16>(1, g_poolSizes.environments);
+	g_poolSizes.files = std::max<uint16>(1, g_poolSizes.files);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::OnLoseFocus()
+void CImpl::OnLoseFocus()
 {
 	// With Wwise we drive this via events.
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::OnGetFocus()
+void CImpl::OnGetFocus()
 {
 	// With Wwise we drive this via events.
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::MuteAll()
+void CImpl::MuteAll()
 {
 	// With Wwise we drive this via events.
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::UnmuteAll()
+void CImpl::UnmuteAll()
 {
 	// With Wwise we drive this via events.
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::PauseAll()
+void CImpl::PauseAll()
 {
 	// With Wwise we drive this via events.
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ERequestStatus CImpl::ResumeAll()
+void CImpl::ResumeAll()
 {
 	// With Wwise we drive this via events.
-	return ERequestStatus::Success;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -923,6 +856,101 @@ ERequestStatus CImpl::StopAllSounds()
 	AK::SoundEngine::StopAll();
 
 	return ERequestStatus::Success;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetGlobalParameter(IParameterConnection const* const pIParameterConnection, float const value)
+{
+	auto const pParameter = static_cast<CParameter const*>(pIParameterConnection);
+
+	if (pParameter != nullptr)
+	{
+		auto const rtpcValue = static_cast<AkRtpcValue>(pParameter->mult * value + pParameter->shift);
+
+		AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(pParameter->id, rtpcValue, AK_INVALID_GAME_OBJECT);
+
+		if (!IS_WWISE_OK(wwiseResult))
+		{
+			Cry::Audio::Log(
+				ELogType::Warning,
+				"Wwise - failed to set the Rtpc %" PRISIZE_T " globally to value %f",
+				pParameter->id,
+				static_cast<AkRtpcValue>(value));
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Wwise - Invalid RtpcData passed to the Wwise implementation of %s", __FUNCTION__);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
+{
+	auto const pSwitchState = static_cast<CSwitchState const*>(pISwitchStateConnection);
+
+	if (pSwitchState != nullptr)
+	{
+		switch (pSwitchState->type)
+		{
+		case ESwitchType::StateGroup:
+			{
+				AKRESULT const wwiseResult = AK::SoundEngine::SetState(
+					pSwitchState->stateOrSwitchGroupId,
+					pSwitchState->stateOrSwitchId);
+
+				if (!IS_WWISE_OK(wwiseResult))
+				{
+					Cry::Audio::Log(
+						ELogType::Warning,
+						"Wwise failed to set the StateGroup %" PRISIZE_T "to state %" PRISIZE_T,
+						pSwitchState->stateOrSwitchGroupId,
+						pSwitchState->stateOrSwitchId);
+				}
+
+				break;
+			}
+		case ESwitchType::SwitchGroup:
+			{
+				Cry::Audio::Log(ELogType::Warning, "Wwise - SwitchGroups cannot get set globally!");
+
+				break;
+			}
+		case ESwitchType::Rtpc:
+			{
+				AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(
+					pSwitchState->stateOrSwitchGroupId,
+					static_cast<AkRtpcValue>(pSwitchState->rtpcValue),
+					AK_INVALID_GAME_OBJECT);
+
+				if (!IS_WWISE_OK(wwiseResult))
+				{
+					Cry::Audio::Log(
+						ELogType::Warning,
+						"Wwise - failed to set the Rtpc %" PRISIZE_T " globally to value %f",
+						pSwitchState->stateOrSwitchGroupId,
+						static_cast<AkRtpcValue>(pSwitchState->rtpcValue),
+						AK_INVALID_GAME_OBJECT);
+				}
+
+				break;
+			}
+		case ESwitchType::None:
+			{
+				break;
+			}
+		default:
+			{
+				Cry::Audio::Log(ELogType::Warning, "Wwise - Unknown ESwitchType: %" PRISIZE_T, pSwitchState->type);
+
+				break;
+			}
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Wwise - Invalid SwitchState passed to the Wwise implementation of %s", __FUNCTION__);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1069,9 +1097,10 @@ void CImpl::GetInfo(SImplInfo& implInfo) const
 IObject* CImpl::ConstructGlobalObject()
 {
 	g_globalObjectId = m_gameObjectId++;
+	char const* const szName = "GlobalObject";
 
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	AKRESULT const wwiseResult = AK::SoundEngine::RegisterGameObj(g_globalObjectId, "GlobalObject");
+	AKRESULT const wwiseResult = AK::SoundEngine::RegisterGameObj(g_globalObjectId, szName);
 
 	if (!IS_WWISE_OK(wwiseResult))
 	{
@@ -1081,13 +1110,22 @@ IObject* CImpl::ConstructGlobalObject()
 	AK::SoundEngine::RegisterGameObj(g_globalObjectId);
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
-	CObjectTransformation transformation;
+	CTransformation transformation;
 	ZeroStruct(transformation);
-	return static_cast<IObject*>(new CObject(AK_INVALID_GAME_OBJECT, transformation));
+	g_pObject = new CObject(g_globalObjectId, transformation, szName);
+
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	{
+		CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+		g_gameObjectIds[g_globalObjectId] = g_pObject;
+	}
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
+	return static_cast<IObject*>(g_pObject);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IObject* CImpl::ConstructObject(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
+IObject* CImpl::ConstructObject(CTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	AKRESULT const wwiseResult = AK::SoundEngine::RegisterGameObj(m_gameObjectId, szName);
@@ -1100,7 +1138,16 @@ IObject* CImpl::ConstructObject(CObjectTransformation const& transformation, cha
 	AK::SoundEngine::RegisterGameObj(m_gameObjectId);
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
-	return static_cast<IObject*>(new CObject(m_gameObjectId++, transformation));
+	auto const pObject = new CObject(m_gameObjectId++, transformation, szName);
+
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	{
+		CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+		g_gameObjectIds[pObject->m_id] = pObject;
+	}
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
+	return static_cast<IObject*>(pObject);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1115,11 +1162,23 @@ void CImpl::DestructObject(IObject const* const pIObject)
 		Cry::Audio::Log(ELogType::Warning, "Wwise DestructObject failed with AKRESULT: %d", wwiseResult);
 	}
 
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	{
+		CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+		g_gameObjectIds.erase(pObject->m_id);
+	}
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
 	delete pObject;
+
+	if (objectID == g_globalObjectId)
+	{
+		g_pObject = nullptr;
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IListener* CImpl::ConstructListener(CObjectTransformation const& transformation, char const* const szName /*= nullptr*/)
+IListener* CImpl::ConstructListener(CTransformation const& transformation, char const* const szName /*= nullptr*/)
 {
 	IListener* pIListener = nullptr;
 
@@ -1167,7 +1226,7 @@ IListener* CImpl::ConstructListener(CObjectTransformation const& transformation,
 ///////////////////////////////////////////////////////////////////////////
 void CImpl::DestructListener(IListener* const pIListener)
 {
-	CRY_ASSERT_MESSAGE(pIListener == g_pListener, "pIListener is not g_pListener");
+	CRY_ASSERT_MESSAGE(pIListener == g_pListener, "pIListener is not g_pListener during %s", __FUNCTION__);
 	AKRESULT const wwiseResult = AK::SoundEngine::UnregisterGameObj(g_pListener->GetId());
 
 	if (!IS_WWISE_OK(wwiseResult))
@@ -1180,7 +1239,7 @@ void CImpl::DestructListener(IListener* const pIListener)
 }
 
 //////////////////////////////////////////////////////////////////////////
-IEvent* CImpl::ConstructEvent(CATLEvent& event)
+IEvent* CImpl::ConstructEvent(CryAudio::CEvent& event)
 {
 	return static_cast<IEvent*>(new CEvent(event));
 }
@@ -1188,19 +1247,29 @@ IEvent* CImpl::ConstructEvent(CATLEvent& event)
 ///////////////////////////////////////////////////////////////////////////
 void CImpl::DestructEvent(IEvent const* const pIEvent)
 {
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	auto const pEvent = static_cast<CEvent const*>(pIEvent);
+
+	if (pEvent != nullptr)
+	{
+		CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+		g_playingIds.erase(pEvent->m_id);
+	}
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
 	delete pIEvent;
 }
 
 //////////////////////////////////////////////////////////////////////////
-IStandaloneFile* CImpl::ConstructStandaloneFile(CATLStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITrigger const* pITrigger /*= nullptr*/)
+IStandaloneFileConnection* CImpl::ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection /*= nullptr*/)
 {
-	return static_cast<IStandaloneFile*>(new CStandaloneFile);
+	return static_cast<IStandaloneFileConnection*>(new CStandaloneFile);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DestructStandaloneFile(IStandaloneFile const* const pIStandaloneFile)
+void CImpl::DestructStandaloneFileConnection(IStandaloneFileConnection const* const pIStandaloneFileConnection)
 {
-	delete pIStandaloneFile;
+	delete pIStandaloneFileConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1245,7 +1314,7 @@ void CImpl::GamepadDisconnected(DeviceId const deviceUniqueID)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radius)
+ITriggerConnection const* CImpl::ConstructTriggerConnection(XmlNodeRef const pRootNode, float& radius)
 {
 	CTrigger* pTrigger = nullptr;
 
@@ -1264,10 +1333,11 @@ ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radiu
 				maxAttenuation = attenuationPair->second;
 			}
 
-			pTrigger = new CTrigger(uniqueId, maxAttenuation);
-
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+			pTrigger = new CTrigger(uniqueId, maxAttenuation, szName);
 			radius = maxAttenuation;
+#else
+			pTrigger = new CTrigger(uniqueId, maxAttenuation);
 #endif      // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 		}
 		else
@@ -1280,37 +1350,38 @@ ITrigger const* CImpl::ConstructTrigger(XmlNodeRef const pRootNode, float& radiu
 		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag: %s", pRootNode->getTag());
 	}
 
-	return static_cast<ITrigger*>(pTrigger);
+	return static_cast<ITriggerConnection*>(pTrigger);
 }
 
 //////////////////////////////////////////////////////////////////////////
-ITrigger const* CImpl::ConstructTrigger(ITriggerInfo const* const pITriggerInfo)
+ITriggerConnection const* CImpl::ConstructTriggerConnection(ITriggerInfo const* const pITriggerInfo)
 {
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	ITrigger const* pITrigger = nullptr;
+	ITriggerConnection const* pITriggerConnection = nullptr;
 	auto const pTriggerInfo = static_cast<STriggerInfo const*>(pITriggerInfo);
 
 	if (pTriggerInfo != nullptr)
 	{
-		AkUniqueID const uniqueId = AK::SoundEngine::GetIDFromString(pTriggerInfo->name.c_str());
+		char const* const szName = pTriggerInfo->name.c_str();
+		AkUniqueID const uniqueId = AK::SoundEngine::GetIDFromString(szName);
 
-		pITrigger = static_cast<ITrigger const*>(new CTrigger(uniqueId, 0.0f));
+		pITriggerConnection = static_cast<ITriggerConnection const*>(new CTrigger(uniqueId, 0.0f, szName));
 	}
 
-	return pITrigger;
+	return pITriggerConnection;
 #else
 	return nullptr;
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructTrigger(ITrigger const* const pITrigger)
+void CImpl::DestructTriggerConnection(ITriggerConnection const* const pITriggerConnection)
 {
-	delete pITrigger;
+	delete pITriggerConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
+IParameterConnection const* CImpl::ConstructParameterConnection(XmlNodeRef const pRootNode)
 {
 	CParameter* pParameter = nullptr;
 
@@ -1325,17 +1396,17 @@ IParameter const* CImpl::ConstructParameter(XmlNodeRef const pRootNode)
 		pParameter = new CParameter(rtpcId, multiplier, shift);
 	}
 
-	return static_cast<IParameter*>(pParameter);
+	return static_cast<IParameterConnection*>(pParameter);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructParameter(IParameter const* const pIParameter)
+void CImpl::DestructParameterConnection(IParameterConnection const* const pIParameterConnection)
 {
-	delete pIParameter;
+	delete pIParameterConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
+ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef const pRootNode)
 {
 	char const* const szTag = pRootNode->getTag();
 	CSwitchState const* pSwitchState = nullptr;
@@ -1369,17 +1440,17 @@ ISwitchState const* CImpl::ConstructSwitchState(XmlNodeRef const pRootNode)
 		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag: %s", szTag);
 	}
 
-	return static_cast<ISwitchState const*>(pSwitchState);
+	return static_cast<ISwitchStateConnection const*>(pSwitchState);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructSwitchState(ISwitchState const* const pISwitchState)
+void CImpl::DestructSwitchStateConnection(ISwitchStateConnection const* const pISwitchStateConnection)
 {
-	delete pISwitchState;
+	delete pISwitchStateConnection;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IEnvironment const* CImpl::ConstructEnvironment(XmlNodeRef const pRootNode)
+IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef const pRootNode)
 {
 	char const* const szTag = pRootNode->getTag();
 	CEnvironment const* pEnvironment = nullptr;
@@ -1420,25 +1491,25 @@ IEnvironment const* CImpl::ConstructEnvironment(XmlNodeRef const pRootNode)
 		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag: %s", szTag);
 	}
 
-	return static_cast<IEnvironment const*>(pEnvironment);
+	return static_cast<IEnvironmentConnection const*>(pEnvironment);
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CImpl::DestructEnvironment(IEnvironment const* const pIEnvironment)
+void CImpl::DestructEnvironmentConnection(IEnvironmentConnection const* const pIEnvironmentConnection)
 {
-	delete pIEnvironment;
+	delete pIEnvironmentConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ISetting const* CImpl::ConstructSetting(XmlNodeRef const pRootNode)
+ISettingConnection const* CImpl::ConstructSettingConnection(XmlNodeRef const pRootNode)
 {
-	return static_cast<ISetting*>(new CSetting);
+	return static_cast<ISettingConnection*>(new CSetting);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::DestructSetting(ISetting const* const pISetting)
+void CImpl::DestructSettingConnection(ISettingConnection const* const pISettingConnection)
 {
-	delete pISetting;
+	delete pISettingConnection;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1472,7 +1543,7 @@ bool CImpl::ParseSwitchOrState(XmlNodeRef const pNode, AkUInt32& stateOrSwitchGr
 	{
 		Cry::Audio::Log(
 			ELogType::Warning,
-			"A Wwise SwitchGroup or StateGroup %s inside ATLSwitchState needs to have exactly one WwiseValue.",
+			"A Wwise SwitchGroup or StateGroup %s inside SwitchState needs to have exactly one WwiseValue.",
 			szStateOrSwitchGroupName);
 	}
 
@@ -1510,7 +1581,7 @@ void CImpl::ParseRtpcImpl(XmlNodeRef const pNode, AkRtpcID& rtpcId, float& multi
 void CImpl::SignalAuxAudioThread()
 {
 	g_auxAudioThread.m_lock.Lock();
-	g_auxAudioThread.m_threadState = CAuxWwiseAudioThread::EAuxWwiseAudioThreadState::Start;
+	g_auxAudioThread.m_threadState = CAuxThread::EAuxThreadState::Start;
 	g_auxAudioThread.m_lock.Unlock();
 	g_auxAudioThread.m_sem.Notify();
 }
@@ -1519,10 +1590,10 @@ void CImpl::SignalAuxAudioThread()
 void CImpl::WaitForAuxAudioThread()
 {
 	g_auxAudioThread.m_lock.Lock();
-	g_auxAudioThread.m_threadState = CAuxWwiseAudioThread::EAuxWwiseAudioThreadState::Stop;
+	g_auxAudioThread.m_threadState = CAuxThread::EAuxThreadState::Stop;
 
 	// Wait until the AuxWwiseAudioThread is actually waiting again and not processing any work.
-	while (g_auxAudioThread.m_threadState != CAuxWwiseAudioThread::EAuxWwiseAudioThreadState::Wait)
+	while (g_auxAudioThread.m_threadState != CAuxThread::EAuxThreadState::Wait)
 	{
 		g_auxAudioThread.m_sem.Wait(g_auxAudioThread.m_lock);
 	}

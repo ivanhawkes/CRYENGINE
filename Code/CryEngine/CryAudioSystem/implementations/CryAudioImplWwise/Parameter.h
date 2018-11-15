@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <IParameterConnection.h>
 #include <PoolObject.h>
 #include <AK/SoundEngine/Common/AkTypes.h>
 
@@ -12,7 +12,7 @@ namespace Impl
 {
 namespace Wwise
 {
-class CParameter final : public IParameter, public CPoolObject<CParameter, stl::PSyncNone>
+class CParameter final : public IParameterConnection, public CPoolObject<CParameter, stl::PSyncNone>
 {
 public:
 
@@ -22,7 +22,12 @@ public:
 	CParameter& operator=(CParameter const&) = delete;
 	CParameter& operator=(CParameter&&) = delete;
 
-	explicit CParameter(AkRtpcID const id_, float const mult_, float const shift_);
+	explicit CParameter(AkRtpcID const id_, float const mult_, float const shift_)
+		: mult(mult_)
+		, shift(shift_)
+		, id(id_)
+	{}
+
 	virtual ~CParameter() override = default;
 
 	float const    mult;

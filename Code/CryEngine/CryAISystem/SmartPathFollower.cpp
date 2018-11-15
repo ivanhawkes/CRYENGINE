@@ -25,6 +25,7 @@
 
 #include "Navigation/NavigationSystem/NavigationSystem.h"
 #include <CryAISystem/NavigationSystem/INavMeshQueryFilter.h>
+#include <CryAISystem/NavigationSystem/INavMeshQueryManager.h>
 
 //#pragma optimize("", off)
 //#pragma inline_depth(0)
@@ -40,7 +41,6 @@ float InterpolatedPath::FindNextSegmentIndex(size_t startIndex) const
 
 		// Move index to start of search
 		std::advance(iter, startIndex);
-		float previousDistance = iter->distance;
 		if (++iter != m_points.end())
 		{
 			addition = 1.0f;
@@ -351,8 +351,6 @@ void InterpolatedPath::ShortenToIndex(float endIndex)
 		// Create the cut index based on the next integer index after the endIndex
 		size_t cutIndex = static_cast<size_t>(endIndex) + 1;
 
-		float delta = fmodf(endIndex, 1.0f);
-
 		// Create a new point based on the original
 		SPathControlPoint2 newEndPoint(m_points[static_cast<size_t>(endIndex)]);
 		newEndPoint.pos = GetPositionAtSegmentIndex(endIndex);
@@ -590,9 +588,6 @@ bool CSmartPathFollower::CanReachTarget(float testIndex) const
 
 	const Vec3 startPos(m_curPos);
 
-	// Assume safe until proved otherwise
-	bool safeLineToTarget = false;
-
 	//////////////////////////////////////////////////////////////////////////
 	/// Navigation Mesh Handling
 
@@ -600,7 +595,6 @@ bool CSmartPathFollower::CanReachTarget(float testIndex) const
 	if (testIndex < 0.0f)
 		return false;
 
-	const SPathControlPoint2& segStartPoint = m_path[static_cast<size_t>(testIndex)];
 	Vec3 testPos(m_path.GetPositionAtSegmentIndex(testIndex));
 
 	{
@@ -619,21 +613,27 @@ bool CSmartPathFollower::CanReachTarget(float testIndex) const
 			MNM::vector3_t startLocationInMeshCoordinates = navMesh.ToMeshSpace(raisedStartPos);
 			MNM::vector3_t endLocationInMeshCoordinates = navMesh.ToMeshSpace(raisedTestPos);
 
-			MNM::TriangleID triangleStartID = navMesh.GetTriangleAt(startLocationInMeshCoordinates, verticalRange, verticalRange, m_params.pQueryFilter);
+			MNM::TriangleID triangleStartID = navMesh.QueryTriangleAt(startLocationInMeshCoordinates, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, m_params.pQueryFilter);
 			if (!triangleStartID)
 			{
-				MNM::vector3_t closestStartLocation, triangleCenter;
-				triangleStartID = navMesh.GetClosestTriangle(startLocationInMeshCoordinates, verticalRange, horizontalRange, m_params.pQueryFilter, nullptr, &closestStartLocation);
+				MNM::vector3_t closestStartLocation;
+				const MNM::aabb_t localAabb(MNM::vector3_t(-horizontalRange, -horizontalRange, -verticalRange), MNM::vector3_t(horizontalRange, horizontalRange, verticalRange));
+				const MNM::SClosestTriangle closestTriangle = navMesh.QueryClosestTriangle(startLocationInMeshCoordinates, localAabb, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, MNM::real_t::max(), m_params.pQueryFilter);
+				triangleStartID = closestTriangle.id;
+				closestStartLocation = closestTriangle.position;
 				navMesh.PushPointInsideTriangle(triangleStartID, closestStartLocation, MNM::real_t(.05f));
 				startLocationInMeshCoordinates = closestStartLocation;
 			}
 
-			MNM::TriangleID triangleEndID = navMesh.GetTriangleAt(endLocationInMeshCoordinates, verticalRange, verticalRange, m_params.pQueryFilter);
-			if (!triangleEndID)
+			MNM::TriangleID triangleEndID = navMesh.QueryTriangleAt(endLocationInMeshCoordinates, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, m_params.pQueryFilter);
+			if (triangleEndID.IsValid())
 			{
 				// Couldn't find a triangle for the end position. Pick the closest one.
 				MNM::vector3_t closestEndLocation;
-				triangleEndID = navMesh.GetClosestTriangle(endLocationInMeshCoordinates, verticalRange, horizontalRange, m_params.pQueryFilter, nullptr, &closestEndLocation);
+				const MNM::aabb_t localAabb(MNM::vector3_t(-horizontalRange, -horizontalRange, -verticalRange), MNM::vector3_t(horizontalRange, horizontalRange, verticalRange));
+				const MNM::SClosestTriangle closestTriangle = navMesh.QueryClosestTriangle(endLocationInMeshCoordinates, localAabb, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, MNM::real_t::max(), m_params.pQueryFilter);
+				triangleEndID = closestTriangle.id;
+				closestEndLocation = closestTriangle.position;
 				navMesh.PushPointInsideTriangle(triangleEndID, closestEndLocation, MNM::real_t(.05f));
 				endLocationInMeshCoordinates = closestEndLocation;
 			}
@@ -783,8 +783,6 @@ bool CSmartPathFollower::Update(PathFollowResult& result, const Vec3& curPos, co
 
 	bool targetReachable = true;
 	//m_reachTestCount = 0;
-
-	CAISystem* pAISystem = GetAISystem();
 
 	// If path has changed
 	const bool bPathHasChanged = (m_pathVersion != m_pNavPath->GetVersion());
@@ -1102,7 +1100,7 @@ bool CSmartPathFollower::Update(PathFollowResult& result, const Vec3& curPos, co
 		// TODO: The following is deprecated. Passing motion requests using velocity only is imprecise,
 		// unstable with frame time (due to interactions between animation and physics) and requires
 		// hacks and magic numbers to make it work semi-reliably.
-		if (bool allowMovement = true)
+		if (true)
 		{
 			Vec3 velocity = followTargetPos - curPos;
 			if (m_params.use2D)
@@ -1487,7 +1485,7 @@ bool CSmartPathFollower::CheckWalkability(const Vec2* path, const size_t length)
 			Vec3 startLoc = m_curPos + raiseUp;
 
 			MNM::vector3_t mnmStartLoc = navMesh.ToMeshSpace(startLoc);
-			MNM::TriangleID triStart = navMesh.GetTriangleAt(mnmStartLoc, verticalRange, verticalRange, m_params.pQueryFilter);
+			MNM::TriangleID triStart = navMesh.QueryTriangleAt(mnmStartLoc, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, m_params.pQueryFilter);
 			IF_UNLIKELY (!triStart)
 				return false;
 
@@ -1499,7 +1497,7 @@ bool CSmartPathFollower::CheckWalkability(const Vec2* path, const size_t length)
 
 				const MNM::vector3_t mnmEndLoc = navMesh.ToMeshSpace(endLoc);
 
-				const MNM::TriangleID triEnd = navMesh.GetTriangleAt(mnmEndLoc, verticalRange, verticalRange, m_params.pQueryFilter);
+				const MNM::TriangleID triEnd =  navMesh.QueryTriangleAt(mnmEndLoc, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, m_params.pQueryFilter);
 
 				if (!triEnd)
 					return false;
@@ -1512,8 +1510,13 @@ bool CSmartPathFollower::CheckWalkability(const Vec2* path, const size_t length)
 					return false;
 
 				MNM::vector3_t v0, v1, v2;
+
+#if defined(USE_CRY_ASSERT)
 				const bool success = mesh.navMesh.GetVertices(triEnd, v0, v1, v2);
 				CRY_ASSERT(success);
+#else
+				mesh.navMesh.GetVertices(triEnd, v0, v1, v2);
+#endif
 				const MNM::vector3_t closest = MNM::ClosestPtPointTriangle(mnmEndLoc, v0, v1, v2);
 				currentZ = closest.GetVec3().z;
 
@@ -1598,8 +1601,8 @@ bool CSmartPathFollower::IsRemainingPathTraversableOnNavMesh() const
 
 			const MNM::vector3_t mnmStartLoc = navMeshUsedByPath.ToMeshSpace(segmentPos1);
 			const MNM::vector3_t mnmEndLoc = navMeshUsedByPath.ToMeshSpace(segmentPos2);
-			const MNM::TriangleID triStart = navMeshUsedByPath.GetTriangleAt(mnmStartLoc, verticalRange, verticalRange, m_params.pQueryFilter);
-			const MNM::TriangleID triEnd = navMeshUsedByPath.GetTriangleAt(mnmEndLoc, verticalRange, verticalRange, m_params.pQueryFilter);
+			const MNM::TriangleID triStart = navMeshUsedByPath.QueryTriangleAt(mnmStartLoc, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, m_params.pQueryFilter);
+			MNM::TriangleID triEnd = navMeshUsedByPath.QueryTriangleAt(mnmEndLoc, verticalRange, verticalRange, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, m_params.pQueryFilter);
 
 			if (!triStart || !triEnd)
 			{

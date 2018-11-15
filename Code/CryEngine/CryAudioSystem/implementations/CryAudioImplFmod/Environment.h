@@ -2,7 +2,8 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <IEnvironmentConnection.h>
+#include <CryAudio/IAudioInterfacesCommonData.h>
 
 namespace CryAudio
 {
@@ -17,7 +18,7 @@ enum class EEnvironmentType : EnumFlagsType
 	Parameter,
 };
 
-class CEnvironment : public IEnvironment
+class CEnvironment : public IEnvironmentConnection
 {
 public:
 
@@ -27,7 +28,10 @@ public:
 	CEnvironment& operator=(CEnvironment const&) = delete;
 	CEnvironment& operator=(CEnvironment&&) = delete;
 
-	explicit CEnvironment(EEnvironmentType const type);
+	explicit CEnvironment(EEnvironmentType const type)
+		: m_type(type)
+	{}
+
 	virtual ~CEnvironment() override = default;
 
 	EEnvironmentType GetType() const { return m_type; }

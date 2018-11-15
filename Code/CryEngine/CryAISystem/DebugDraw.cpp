@@ -186,8 +186,6 @@ void CAISystem::DebugDrawRecorderRange() const
 			pDir = (Vec3*)(pDirStream->GetCurrent(fCurrDirTime));
 			if (pPos)
 			{
-				const Vec3& vDir = (pDir ? *pDir : Vec3Constants<float>::fVec3_OneZ);
-
 				// Create label text that depicts everything that happened at this moment from all streams
 				string sCursorText;
 				sCursorText.Format("%s CURRENT\n%.1fs", pAIObject->GetName(), fCurrPosTime);
@@ -640,45 +638,6 @@ void CAISystem::DrawDebugShapes(ShapeContainer& shapes, float dt)
 	}
 }
 
-void CAISystem::DebugDrawFakeTracers() const
-{
-	CRY_PROFILE_FUNCTION(PROFILE_AI);
-
-	CDebugDrawContext dc;
-	dc->SetAlphaBlended(true);
-
-	for (size_t i = 0; i < m_DEBUG_fakeTracers.size(); ++i)
-	{
-		Vec3 p0 = m_DEBUG_fakeTracers[i].p0;
-		Vec3 p1 = m_DEBUG_fakeTracers[i].p1;
-		Vec3 dir = p1 - p0;
-		float u = 1 - m_DEBUG_fakeTracers[i].t / m_DEBUG_fakeTracers[i].tmax;
-		p0 += dir * u * 0.5f;
-		p1 = p0 + dir * 0.5f;
-
-		float a = (m_DEBUG_fakeTracers[i].a * m_DEBUG_fakeTracers[i].t / m_DEBUG_fakeTracers[i].tmax) * 0.75f + 0.25f;
-		Vec3 mid((p0 + p1) / 2);
-		dc->DrawLine(p0, ColorB(128, 128, 128, 0), mid, ColorB(255, 255, 255, (uint8)(255 * a)), 6.0f);
-		dc->DrawLine(p1, ColorB(128, 128, 128, 0), mid, ColorB(255, 255, 255, (uint8)(255 * a)), 6.0f);
-	}
-}
-
-void CAISystem::DebugDrawFakeHitEffects() const
-{
-	CRY_PROFILE_FUNCTION(PROFILE_AI);
-
-	CDebugDrawContext dc;
-	dc->SetAlphaBlended(true);
-
-	for (size_t i = 0; i < m_DEBUG_fakeHitEffect.size(); ++i)
-	{
-		float a = m_DEBUG_fakeHitEffect[i].t / m_DEBUG_fakeHitEffect[i].tmax;
-		Vec3 pos = m_DEBUG_fakeHitEffect[i].p + m_DEBUG_fakeHitEffect[i].n * (1 - sqr(a));
-		float r = m_DEBUG_fakeHitEffect[i].r * (0.5f + (1 - a) * 0.5f);
-		dc->DrawSphere(pos, r, ColorB(m_DEBUG_fakeHitEffect[i].c.r, m_DEBUG_fakeHitEffect[i].c.g, m_DEBUG_fakeHitEffect[i].c.b, (uint8)(m_DEBUG_fakeHitEffect[i].c.a * a)));
-	}
-}
-
 void CAISystem::DebugDrawFakeDamageInd() const
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
@@ -956,8 +915,8 @@ void CAISystem::DebugDrawDebugAgent()
 void CAISystem::DebugDrawNavigation() const
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
-
-	m_pNavigation->DebugDraw();
+	if(m_pNavigation)
+		m_pNavigation->DebugDraw();
 }
 
 void CAISystem::DebugDrawLightManager()
@@ -1018,8 +977,6 @@ void CAISystem::DebugDrawPuppetPaths()
 	{
 		lastTime = thisTime;
 		pPipeUser->m_Path.Clear("DebugRequestPathInDirection");
-		Vec3 vStartPos = pPipeUser->GetPhysicsPos();
-		const float maxDist = 15.0f;
 	}
 
 	DebugDrawPathSingle(pPipeUser);
@@ -1256,7 +1213,6 @@ void CAISystem::DebugDrawCrowdControl()
 			continue;
 
 		Vec3 center = pPuppet->GetPhysicsPos() + Vec3(0, 0, 0.75f);
-		const float rad = pPuppet->GetMovementAbility().pathRadius;
 
 		/* Draw circle sector */
 		pPuppet->m_steeringOccupancy.DebugDraw(center, ColorB(0, 196, 255, 240));
@@ -1361,7 +1317,6 @@ void CAISystem::DebugDrawAdaptiveUrgency() const
 		if (pPuppet->m_adaptiveUrgencyScaleDownPathLen <= 0.0001f)
 			continue;
 
-		int minIdx = MovementUrgencyToIndex(pPuppet->m_adaptiveUrgencyMin);
 		int maxIdx = MovementUrgencyToIndex(pPuppet->m_adaptiveUrgencyMax);
 		int curIdx = MovementUrgencyToIndex(pPuppet->GetState().fMovementUrgency);
 
@@ -1429,8 +1384,7 @@ void CAISystem::DrawRadarPath(CPipeUser* pPipeUser, const Matrix34& world, const
 		li = pPipeUser->m_OrigPath.GetPath().begin();
 		linext = li;
 		++linext;
-		// (MATT) BUG! Surely. m_Path or m_OrigPath, which is it? Appears elsewhere too. {2008/05/29}
-		Vec3 endPt = pPipeUser->m_Path.GetNextPathPos();
+
 		CDebugDrawContext dc;
 		while (linext != pPipeUser->m_OrigPath.GetPath().end())
 		{
@@ -3279,8 +3233,6 @@ void CAISystem::DebugDrawStatsTarget(const char* pName)
 	const ColorB blueMarine(0, 255, 179);
 	// ---
 
-	const Vec3& pos = pTargetObject->GetPos();
-
 	if (pTargetPuppet)
 	{
 		// Draw fire command handler stuff.
@@ -3444,10 +3396,6 @@ void CAISystem::DebugDrawStatsTarget(const char* pName)
 	CDebugDrawContext dc2;
 	dc2->SetAlphaBlended(true);
 	dc2->SetDepthWrite(false);
-
-	const CCamera& cam = GetISystem()->GetViewCamera();
-	Vec3 axisx = cam.GetMatrix().TransformVector(Vec3(1, 0, 0));
-	Vec3 axisy = cam.GetMatrix().TransformVector(Vec3(0, 0, 1));
 
 	if (pTargetPipeUser)
 	{
@@ -3754,8 +3702,6 @@ void CAISystem::DebugDrawEnabledActors()
 	CDebugDrawContext dc;
 	dc->TextToScreen(xPos, yPos, "---- Enabled AI Actors  ----");
 	yOffset += yStep * 2;
-
-	int nEnabled = m_enabledAIActorsSet.size();
 
 	AIActorSet::const_iterator it = m_enabledAIActorsSet.begin();
 	AIActorSet::const_iterator itEnd = m_enabledAIActorsSet.end();
@@ -4497,7 +4443,7 @@ void CAISystem::DebugDrawAreas() const
 		{
 			float dist = 0;
 			Vec3 nearestPt;
-			ListPositions::const_iterator it = territoryShape->NearestPointOnPath(pPipeUser->GetPos(), false, dist, nearestPt);
+			territoryShape->NearestPointOnPath(pPipeUser->GetPos(), false, dist, nearestPt);
 			Vec3 p0 = pPipeUser->GetPos() - Vec3(0, 0, 0.5f);
 			dc->Draw3dLabel(p0 * 0.7f + nearestPt * 0.3f, 1, "Terr");
 			dc->DrawLine(p0, ColorB(30, 208, 224), nearestPt, ColorB(30, 208, 224));
@@ -4508,7 +4454,7 @@ void CAISystem::DebugDrawAreas() const
 		{
 			float dist = 0;
 			Vec3 nearestPt;
-			ListPositions::const_iterator it = refShape->NearestPointOnPath(pPipeUser->GetPos(), false, dist, nearestPt);
+			refShape->NearestPointOnPath(pPipeUser->GetPos(), false, dist, nearestPt);
 			Vec3 p0 = pPipeUser->GetPos() - Vec3(0, 0, 1.0f);
 			dc->Draw3dLabel(p0 * 0.7f + nearestPt * 0.3f, 1, "Ref");
 			dc->DrawLine(p0, ColorB(135, 224, 30), nearestPt, ColorB(135, 224, 30));
@@ -4645,7 +4591,6 @@ void CAISystem::DebugDrawInterestSystem(int iLevel) const
 	ColorB cGreen = ColorB(0, 255, 0);
 	ColorB cYellow = ColorB(255, 255, 0);
 	ColorB cRed = ColorB(255, 0, 0);
-	ColorB cTransparentRed = ColorB(200, 0, 0, 100);
 
 	if (iLevel > 0)
 	{
@@ -4953,12 +4898,6 @@ void CAISystem::DebugDraw()
 
 	DebugDrawUpdate();        // Called only in this line => Maybe we should remove it from the interface?
 
-	if (gAIEnv.CVars.DrawFakeTracers > 0)
-		DebugDrawFakeTracers();
-
-	if (gAIEnv.CVars.DrawFakeHitEffects > 0)
-		DebugDrawFakeHitEffects();
-
 	if (gAIEnv.CVars.DrawFakeDamageInd > 0)
 		DebugDrawFakeDamageInd();
 
@@ -5086,58 +5025,6 @@ void CAISystem::DebugDraw()
 #endif //CRYAISYSTEM_DEBUG
 }
 
-//-----------------------------------------------------------------------------------------------------------
-void CAISystem::DebugDrawFakeTracer(const Vec3& pos, const Vec3& dir)
-{
-#ifdef CRYAISYSTEM_DEBUG
-	CAIObject* pPlayer = GetPlayer();
-	if (!pPlayer) return;
-
-	Vec3 dirNorm = dir.GetNormalizedSafe();
-	const Vec3& playerPos = pPlayer->GetPos();
-	Vec3 dirShooterToPlayer = playerPos - pos;
-
-	float projDist = dirNorm.Dot(dirShooterToPlayer);
-
-	float distShooterToPlayer = dirShooterToPlayer.NormalizeSafe();
-
-	if (projDist < 0.0f)
-		return;
-
-	Vec3 nearestPt = pos + dirNorm * distShooterToPlayer;
-
-	float tracerDist = Distance::Point_Point(nearestPt, playerPos);
-
-	const float maxTracerDist = 20.0f;
-	if (tracerDist > maxTracerDist)
-		return;
-
-	float a = 1 - tracerDist / maxTracerDist;
-
-	ray_hit hit;
-	float maxd = distShooterToPlayer * 2.0f;
-	if (gEnv->pPhysicalWorld->RayWorldIntersection(
-	      pos, dirNorm * maxd, COVER_OBJECT_TYPES,
-	      AI_VISION_RAY_CAST_FLAG_BLOCKED_BY_SOLID_COVER,
-	      &hit, 1))
-	{
-		maxd = hit.dist;
-		// fake hit fx
-		Vec3 p = hit.pt + hit.n * 0.1f;
-		ColorF col(cry_random(0.4f, 0.7f), cry_random(0.4f, 0.7f), cry_random(0.4f, 0.7f), 0.9f);
-		m_DEBUG_fakeHitEffect.push_back(SDebugFakeHitEffect(p, hit.n, cry_random(0.45f, 0.9f), cry_random(0.5f, 0.8f), col));
-	}
-
-	const float maxTracerLen = 50.0f;
-	float d0 = distShooterToPlayer - cry_random(0.75f, 1.0f) * maxTracerLen / 2;
-	float d1 = d0 + cry_random(0.5f, 1.0f) * maxTracerLen;
-
-	Limit(d0, 0.0f, maxd);
-	Limit(d1, 0.0f, maxd);
-
-	m_DEBUG_fakeTracers.push_back(SDebugFakeTracer(pos + dirNorm * d0, pos + dirNorm * d1, a, cry_random(0.15f, 0.3f)));
-#endif //CRYAISYSTEM_DEBUG
-}
 
 //-----------------------------------------------------------------------------------------------------------
 void CAISystem::AddDebugLine(const Vec3& start, const Vec3& end, uint8 r, uint8 g, uint8 b, float time)

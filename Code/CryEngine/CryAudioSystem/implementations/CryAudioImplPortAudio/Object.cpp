@@ -46,27 +46,27 @@ void CObject::Update(float const deltaTime)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetTransformation(CObjectTransformation const& transformation)
+void CObject::SetTransformation(CTransformation const& transformation)
 {
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetEnvironment(IEnvironment const* const pIEnvironment, float const amount)
+void CObject::SetEnvironment(IEnvironmentConnection const* const pIEnvironmentConnection, float const amount)
 {
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetParameter(IParameter const* const pIParameter, float const value)
+void CObject::SetParameter(IParameterConnection const* const pIParameterConnection, float const value)
 {
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetSwitchState(ISwitchState const* const pISwitchState)
+void CObject::SetSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
 {
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetObstructionOcclusion(float const obstruction, float const occlusion)
+void CObject::SetOcclusion(float const occlusion)
 {
 }
 
@@ -76,10 +76,10 @@ void CObject::SetOcclusionType(EOcclusionType const occlusionType)
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent)
+ERequestStatus CObject::ExecuteTrigger(ITriggerConnection const* const pITriggerConnection, IEvent* const pIEvent)
 {
 	ERequestStatus requestResult = ERequestStatus::Failure;
-	CTrigger const* const pTrigger = static_cast<CTrigger const* const>(pITrigger);
+	CTrigger const* const pTrigger = static_cast<CTrigger const* const>(pITriggerConnection);
 	CEvent* const pEvent = static_cast<CEvent*>(pIEvent);
 
 	if ((pTrigger != nullptr) && (pEvent != nullptr))
@@ -109,7 +109,7 @@ ERequestStatus CObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* 
 	}
 	else
 	{
-		Cry::Audio::Log(ELogType::Error, "Invalid AudioObjectData, ATLTriggerData or EventData passed to the PortAudio implementation of ExecuteTrigger.");
+		Cry::Audio::Log(ELogType::Error, "Invalid AudioObjectData, TriggerData or EventData passed to the PortAudio implementation of ExecuteTrigger.");
 	}
 
 	return requestResult;
@@ -118,16 +118,20 @@ ERequestStatus CObject::ExecuteTrigger(ITrigger const* const pITrigger, IEvent* 
 //////////////////////////////////////////////////////////////////////////
 void CObject::StopAllTriggers()
 {
+	for (auto const pEvent : m_activeEvents)
+	{
+		pEvent->Stop();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::PlayFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CObject::PlayFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
 	return ERequestStatus::Failure;
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::StopFile(IStandaloneFile* const pIStandaloneFile)
+ERequestStatus CObject::StopFile(IStandaloneFileConnection* const pIStandaloneFileConnection)
 {
 	return ERequestStatus::Failure;
 }

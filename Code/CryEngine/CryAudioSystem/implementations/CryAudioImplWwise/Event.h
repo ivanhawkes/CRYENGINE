@@ -2,10 +2,11 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
-#include <SharedAudioData.h>
+#include <IEvent.h>
+#include <SharedData.h>
 #include <PoolObject.h>
 #include <AK/SoundEngine/Common/AkTypes.h>
+#include <atomic>
 
 namespace CryAudio
 {
@@ -25,7 +26,15 @@ public:
 	CEvent& operator=(CEvent const&) = delete;
 	CEvent& operator=(CEvent&&) = delete;
 
-	explicit CEvent(CATLEvent& atlEvent_);
+	explicit CEvent(CryAudio::CEvent& event_)
+		: m_state(EEventState::None)
+		, m_id(AK_INVALID_UNIQUE_ID)
+		, m_event(event_)
+		, m_pObject(nullptr)
+		, m_maxAttenuation(0.0f)
+		, m_toBeRemoved(false)
+	{}
+
 	virtual ~CEvent() override;
 
 	// CryAudio::Impl::IEvent
@@ -35,11 +44,23 @@ public:
 	void SetInitialVirtualState(float const distance);
 	void UpdateVirtualState(float const distance);
 
-	EEventState m_state;
-	AkUniqueID  m_id;
-	CATLEvent&  m_atlEvent;
-	CObject*    m_pObject;
-	float       m_maxAttenuation;
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	void        SetName(char const* const szName) { m_name = szName; }
+	char const* GetName() const                   { return m_name.c_str(); }
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+
+	EEventState       m_state;
+	AkUniqueID        m_id;
+	CryAudio::CEvent& m_event;
+	CObject*          m_pObject;
+	float             m_maxAttenuation;
+	std::atomic_bool  m_toBeRemoved;
+
+private:
+
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	CryFixedStringT<MaxControlNameLength> m_name;
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 };
 } // namespace Wwise
 } // namespace Impl

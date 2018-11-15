@@ -64,10 +64,6 @@ using ChannelFinishedRequests = std::deque<int>;
 ChannelFinishedRequests g_channelFinishedRequests[IntegralValue(EChannelFinishedRequestQueueId::Count)];
 CryCriticalSection g_channelFinishedCriticalSection;
 
-// Objects
-using Objects = std::vector<CObject*>;
-Objects g_objects;
-
 SoundEngine::FnEventCallback g_fnEventFinishedCallback;
 SoundEngine::FnStandaloneFileCallback g_fnStandaloneFileFinishedCallback;
 
@@ -84,12 +80,12 @@ inline const SampleId GetIDFromString(char const* const szName)
 }
 
 //////////////////////////////////////////////////////////////////////////
-inline void GetDistanceAngleToObject(const CObjectTransformation& listener, const CObjectTransformation& object, float& out_distance, float& out_angle)
+inline void GetDistanceAngleToObject(CTransformation const& listener, CTransformation const& object, float& distance, float& angle)
 {
 	const Vec3 listenerToObject = object.GetPosition() - listener.GetPosition();
 
 	// Distance
-	out_distance = listenerToObject.len();
+	distance = listenerToObject.len();
 
 	// Angle
 	// Project point to plane formed by the listeners position/direction
@@ -98,7 +94,7 @@ inline void GetDistanceAngleToObject(const CObjectTransformation& listener, cons
 
 	// Get angle between listener position and projected point
 	const Vec3 listenerDir = listener.GetForward().GetNormalizedFast();
-	out_angle = RAD2DEG(asin_tpl(objectDir.Cross(listenerDir).Dot(n)));
+	angle = RAD2DEG(asin_tpl(objectDir.Cross(listenerDir).Dot(n)));
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -114,7 +110,7 @@ void SoundEngine::RegisterStandaloneFileFinishedCallback(FnStandaloneFileCallbac
 }
 
 //////////////////////////////////////////////////////////////////////////
-void EventFinishedPlaying(CATLEvent& audioEvent)
+void EventFinishedPlaying(CryAudio::CEvent& audioEvent)
 {
 	if (g_fnEventFinishedCallback)
 	{
@@ -123,7 +119,7 @@ void EventFinishedPlaying(CATLEvent& audioEvent)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void StandaloneFileFinishedPlaying(CATLStandaloneFile& standaloneFile, char const* const szFileName)
+void StandaloneFileFinishedPlaying(CryAudio::CStandaloneFile& standaloneFile, char const* const szFileName)
 {
 	if (g_fnStandaloneFileFinishedCallback)
 	{
@@ -199,7 +195,7 @@ void ProcessChannelFinishedRequests(ChannelFinishedRequests& queue)
 								{
 									standaloneFilesIt = pAudioObject->m_standaloneFiles.erase(standaloneFilesCurrent);
 									standaloneFilesEnd = pAudioObject->m_standaloneFiles.end();
-									StandaloneFileFinishedPlaying(pStandaloneFileInstance->m_atlFile, pStandaloneFileInstance->m_name.c_str());
+									StandaloneFileFinishedPlaying(pStandaloneFileInstance->m_file, pStandaloneFileInstance->m_name.c_str());
 
 									SampleIdUsageCounterMap::iterator it = g_usageCounters.find(pStandaloneFileInstance->m_sampleId);
 									CRY_ASSERT(it != g_usageCounters.end() && it->second > 0);
@@ -319,8 +315,6 @@ bool SoundEngine::Init()
 
 	LoadMetadata("", false);
 	LoadMetadata("", true);
-
-	g_objects.reserve(128);
 
 	return true;
 }
@@ -762,28 +756,6 @@ ERequestStatus SoundEngine::PlayFile(CObject* const pObject, CStandaloneFile* co
 	}
 
 	return status;
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool SoundEngine::RegisterObject(CObject* const pObject)
-{
-	if (pObject != nullptr)
-	{
-		g_objects.push_back(pObject);
-		return true;
-	}
-	return false;
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool SoundEngine::UnregisterObject(CObject const* const pObject)
-{
-	if (pObject != nullptr)
-	{
-		stl::find_and_erase(g_objects, pObject);
-		return true;
-	}
-	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////

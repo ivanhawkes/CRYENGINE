@@ -152,6 +152,8 @@ void CPostEffectStage::Update()
 
 bool CPostEffectStage::Execute()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	// TODO: each viewport would need to have its own post effect manager when we will support multi-viewport.
 	CPostEffectsMgr* pPostMgr = PostEffectMgr();
 
@@ -2058,7 +2060,7 @@ void CHud3DPass::ExecuteFinalPass(const CPostEffectContext& context, CTexture* p
 							vHudEffectParams[0].z *= vInterferenceParams.x;
 						}
 
-						// Set per plane alpha multipler
+						// Set per plane alpha multiplier
 						vOverrideColorParams.w = pData.pRO->m_fAlpha;
 					}
 

@@ -2,6 +2,7 @@
 
 #include "StdAfx.h"
 #include "OffMeshNavigationManager.h"
+#include "Navigation/MNM/NavMeshQueryManager.h"
 
 #include "NavigationSystem.h"
 
@@ -76,8 +77,10 @@ bool OffMeshNavigationManager::AddCustomLink(const NavigationMeshID& meshID, MNM
 
 	const MNM::real_t range = MNM::real_t(1.0f);
 
+	SAcceptAllQueryTrianglesFilter acceptAllFilter;
+
 	// Get entry triangle
-	startTriangleID = mesh.navMesh.GetTriangleAt(fixedStartPoint, range, range, nullptr);
+	startTriangleID = mesh.navMesh.QueryTriangleAt(fixedStartPoint, range, range, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, &acceptAllFilter);
 
 	if (!startTriangleID)
 	{
@@ -86,7 +89,7 @@ bool OffMeshNavigationManager::AddCustomLink(const NavigationMeshID& meshID, MNM
 	}
 
 	// Get entry triangle
-	endTriangleID = mesh.navMesh.GetTriangleAt(fixedEndPoint, range, range, nullptr);
+	endTriangleID = mesh.navMesh.QueryTriangleAt(fixedEndPoint, range, range, MNM::ENavMeshQueryOverlappingMode::BoundingBox_Partial, &acceptAllFilter);
 
 	if (!endTriangleID)
 	{
@@ -120,7 +123,7 @@ bool OffMeshNavigationManager::AddCustomLink(const NavigationMeshID& meshID, MNM
 
 	// Register the new link with the off-mesh navigation system
 	offMeshNavigation.AddLink(mesh, startTriangleID, endTriangleID, *&linkID);
-	CRY_ASSERT_TRACE(linkID != MNM::Constants::eOffMeshLinks_InvalidOffMeshLinkID, ("Adding new offmesh link failed"));
+	CRY_ASSERT_TRACE(linkID.IsValid(), ("Adding new offmesh link failed"));
 
 	MNM::OffMeshLinkPtr pOffMeshLink;
 	if (bCloneLinkData)
@@ -185,8 +188,8 @@ void OffMeshNavigationManager::ProcessQueuedRequests()
 			{
 			case MNM::eOffMeshOperationType_Add:
 				{
-					MNM::TriangleID startTriangleID = MNM::TriangleID(0);
-					MNM::TriangleID endTriangleID = MNM::TriangleID(0);
+					MNM::TriangleID startTriangleID = MNM::TriangleID();
+					MNM::TriangleID endTriangleID = MNM::TriangleID();
 					const bool linkGotSuccessfullyAdded = AddCustomLink(it->meshId, it->pLinkData, it->linkId, &startTriangleID, &endTriangleID, it->bCloneLinkData);
 					if (it->callback)
 					{

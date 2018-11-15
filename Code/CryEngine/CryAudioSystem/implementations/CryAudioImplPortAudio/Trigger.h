@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <ITriggerConnection.h>
 #include <PoolObject.h>
 #include <portaudio.h>
 
@@ -19,7 +19,7 @@ enum class EEventType : EnumFlagsType
 	Stop,
 };
 
-class CTrigger final : public ITrigger, public CPoolObject<CTrigger, stl::PSyncNone>
+class CTrigger final : public ITriggerConnection, public CPoolObject<CTrigger, stl::PSyncNone>
 {
 public:
 
@@ -38,16 +38,26 @@ public:
 		PaStreamParameters const& streamParameters_,
 		CryFixedStringT<MaxFilePathLength> const& folder,
 		CryFixedStringT<MaxFilePathLength> const& name,
-		bool const isLocalized);
+		bool const isLocalized)
+		: pathId(pathId_)
+		, numLoops(numLoops_)
+		, sampleRate(sampleRate_)
+		, eventType(eventType_)
+		, filePath(filePath_)
+		, streamParameters(streamParameters_)
+		, m_folder(folder)
+		, m_name(name)
+		, m_isLocalized(isLocalized)
+	{}
 
 	virtual ~CTrigger() override = default;
 
-	// CryAudio::Impl::ITrigger
+	// CryAudio::Impl::ITriggerConnection
 	virtual ERequestStatus Load() const override                             { return ERequestStatus::Success; }
 	virtual ERequestStatus Unload() const override                           { return ERequestStatus::Success; }
 	virtual ERequestStatus LoadAsync(IEvent* const pIEvent) const override   { return ERequestStatus::Success; }
 	virtual ERequestStatus UnloadAsync(IEvent* const pIEvent) const override { return ERequestStatus::Success; }
-	// ~CryAudio::Impl::ITrigger
+	// ~CryAudio::Impl::ITriggerConnection
 
 	uint32 const                                pathId;
 	int const                                   numLoops;

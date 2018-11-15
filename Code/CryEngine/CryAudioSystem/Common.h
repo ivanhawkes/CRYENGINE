@@ -17,10 +17,15 @@ static constexpr ControlId ResumeAllTriggerId = StringToId(s_szResumeAllTriggerN
 namespace Impl
 {
 struct IImpl;
+struct IEnvironmentConnection;
+struct IParameterConnection;
+struct ISettingConnection;
+struct ISwitchStateConnection;
+struct ITriggerConnection;
 } // namespace Impl
 
 class CSystem;
-class CATLAudioObject;
+class CObject;
 class CLoseFocusTrigger;
 class CGetFocusTrigger;
 class CMuteAllTrigger;
@@ -29,40 +34,46 @@ class CPauseAllTrigger;
 class CResumeAllTrigger;
 class CTrigger;
 class CParameter;
-class CATLSwitch;
-class CATLPreloadRequest;
-class CATLAudioEnvironment;
+class CSwitch;
+class CPreloadRequest;
+class CEnvironment;
 class CSetting;
 
 enum class ESystemStates : EnumFlagsType
 {
 	None             = 0,
 	ImplShuttingDown = BIT(0),
+	IsMuted          = BIT(1),
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-	PoolsAllocated   = BIT(1),
-	IsMuted          = BIT(2),
+	IsPaused         = BIT(2),
+	PoolsAllocated   = BIT(3),
 #endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 };
 CRY_CREATE_ENUM_FLAG_OPERATORS(ESystemStates);
 
-using AudioTriggerLookup = std::map<ControlId, CTrigger const*>;
-using AudioParameterLookup = std::map<ControlId, CParameter const*>;
-using AudioSwitchLookup = std::map<ControlId, CATLSwitch const*>;
-using AudioPreloadRequestLookup = std::map<PreloadRequestId, CATLPreloadRequest*>;
-using AudioEnvironmentLookup = std::map<EnvironmentId, CATLAudioEnvironment const*>;
+using TriggerLookup = std::map<ControlId, CTrigger const*>;
+using ParameterLookup = std::map<ControlId, CParameter const*>;
+using SwitchLookup = std::map<ControlId, CSwitch const*>;
+using PreloadRequestLookup = std::map<PreloadRequestId, CPreloadRequest*>;
+using EnvironmentLookup = std::map<EnvironmentId, CEnvironment const*>;
 using SettingLookup = std::map<ControlId, CSetting const*>;
 
-extern TriggerImplId g_uniqueConnectionId;
+using TriggerConnections = std::vector<Impl::ITriggerConnection const*>;
+using ParameterConnections = std::vector<Impl::IParameterConnection const*>;
+using SwitchStateConnections = std::vector<Impl::ISwitchStateConnection const*>;
+using EnvironmentConnections = std::vector<Impl::IEnvironmentConnection const*>;
+using SettingConnections = std::vector<Impl::ISettingConnection const*>;
+
 extern Impl::IImpl* g_pIImpl;
 extern CSystem g_system;
 extern ESystemStates g_systemStates;
-extern AudioTriggerLookup g_triggers;
-extern AudioParameterLookup g_parameters;
-extern AudioSwitchLookup g_switches;
-extern AudioPreloadRequestLookup g_preloadRequests;
-extern AudioEnvironmentLookup g_environments;
+extern TriggerLookup g_triggers;
+extern ParameterLookup g_parameters;
+extern SwitchLookup g_switches;
+extern PreloadRequestLookup g_preloadRequests;
+extern EnvironmentLookup g_environments;
 extern SettingLookup g_settings;
-extern CATLAudioObject* g_pObject;
+extern CObject* g_pObject;
 extern CLoseFocusTrigger g_loseFocusTrigger;
 extern CGetFocusTrigger g_getFocusTrigger;
 extern CMuteAllTrigger g_muteAllTrigger;
@@ -73,21 +84,18 @@ extern CResumeAllTrigger g_resumeAllTrigger;
 extern SImplInfo g_implInfo;
 extern CryFixedStringT<MaxFilePathLength> g_configPath;
 
+extern TriggerInstanceId g_triggerInstanceIdCounter;
+
 struct SPoolSizes final
 {
-	uint32 triggers = 0;
-	uint32 parameters = 0;
-	uint32 switches = 0;
-	uint32 states = 0;
-	uint32 environments = 0;
-	uint32 preloads = 0;
-	uint32 settings = 0;
-	uint32 triggerConnections = 0;
-	uint32 parameterConnections = 0;
-	uint32 stateConnections = 0;
-	uint32 environmentConnections = 0;
-	uint32 preloadConnections = 0;
-	uint32 settingConnections = 0;
+	uint16 triggers = 0;
+	uint16 parameters = 0;
+	uint16 switches = 0;
+	uint16 states = 0;
+	uint16 environments = 0;
+	uint16 preloads = 0;
+	uint16 settings = 0;
+	uint16 files = 0;
 };
 
 extern SPoolSizes g_poolSizes;
@@ -98,7 +106,7 @@ static constexpr ControlId PreviewTriggerId = StringToId(s_szPreviewTriggerName)
 
 class CPreviewTrigger;
 extern CPreviewTrigger g_previewTrigger;
-extern CATLAudioObject g_previewObject;
+extern CObject g_previewObject;
 extern SPoolSizes g_debugPoolSizes;
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 }      // namespace CryAudio

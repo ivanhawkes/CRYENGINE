@@ -261,6 +261,8 @@ void CParticleEffect::RemoveComponent(uint componentIdx, bool all)
 		pComp = pComp->m_children.back();
 	size_t endIdx = pComp->GetComponentId() + 1;
 	m_components.erase(m_components.begin() + componentIdx, m_components.begin() + endIdx);
+	for (uint id = componentIdx; id < m_components.size(); ++id)
+		m_components[id]->m_componentId = id;
 	SetChanged();
 }
 

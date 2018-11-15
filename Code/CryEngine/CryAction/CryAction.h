@@ -63,13 +63,9 @@ class CTimeOfDayScheduler;
 class CNetworkCVars;
 class CCryActionCVars;
 class CGameStatsConfig;
-class CSignalTimer;
-class CRangeSignaling;
-class CAIProxy;
 class CommunicationVoiceLibrary;
 class CCustomActionManager;
 class CCustomEventManager;
-class CAIProxyManager;
 class CForceFeedBackSystem;
 class CCryActionPhysicQueues;
 class CNetworkStallTickerThread;
@@ -170,6 +166,7 @@ public:
 	virtual ICustomEventManager*          GetICustomEventManager() const;
 	virtual IRealtimeRemoteUpdate*        GetIRealTimeRemoteUpdate();
 	virtual ITimeDemoRecorder*            GetITimeDemoRecorder() const;
+	virtual ITimeDemoRecorder*            SetITimeDemoRecorder(ITimeDemoRecorder* pRecorder);
 
 	virtual bool                          StartGameContext(const SGameStartParams* pGameStartParams);
 	virtual bool                          ChangeGameContext(const SGameContextParams* pGameContextParams);
@@ -280,6 +277,8 @@ public:
 	void DefineProtocolRMI(IProtocolBuilder* pBuilder);
 	virtual void DoInvokeRMI(_smart_ptr<IRMIMessageBody> pBody, unsigned where, int channel, const bool isGameObjectRmi);
 
+	virtual IScriptTable* GetActionScriptBindTable();
+
 protected:
 	virtual ICryUnknownPtr        QueryExtensionInterfaceById(const CryInterfaceID& interfaceID) const;
 	// ~IGameFramework
@@ -295,8 +294,6 @@ public:
 	CScriptBind_VehicleSeat*    GetVehicleSeatScriptBind() { return m_pScriptBindVehicleSeat; }
 	CScriptBind_Inventory*      GetInventoryScriptBind()   { return m_pScriptInventory; }
 	CPersistantDebug*           GetPersistantDebug()       { return m_pPersistantDebug; }
-	CSignalTimer*               GetSignalTimer();
-	CRangeSignaling*            GetRangeSignaling();
 	virtual IPersistantDebug*   GetIPersistantDebug();
 	virtual IGameStatsConfig*   GetIGameStatsConfig();
 	CColorGradientManager*      GetColorGradientManager() const { return m_pColorGradientManager; }
@@ -353,10 +350,6 @@ public:
 
 	const char*                   GetStartLevelSaveGameName();
 
-	virtual IAIActorProxy*        GetAIActorProxy(EntityId entityid) const;
-	CAIProxyManager*              GetAIProxyManager()       { return m_pAIProxyManager; }
-	const CAIProxyManager*        GetAIProxyManager() const { return m_pAIProxyManager; }
-
 	void                          CreatePhysicsQueues();
 	void                          ClearPhysicsQueues();
 	CCryActionPhysicQueues& GetPhysicQueues();
@@ -391,7 +384,6 @@ private:
 	// console commands provided by CryAction
 	static void DumpMapsCmd(IConsoleCmdArgs* args);
 	static void MapCmd(IConsoleCmdArgs* args);
-	static void ReloadReadabilityXML(IConsoleCmdArgs* args);
 	static void UnloadCmd(IConsoleCmdArgs* args);
 	static void PlayCmd(IConsoleCmdArgs* args);
 	static void ConnectCmd(IConsoleCmdArgs* args);
@@ -533,15 +525,14 @@ private:
 	ICooperativeAnimationManager* m_pCooperativeAnimationManager;
 	IGameSessionHandler*          m_pGameSessionHandler;
 
-	CAIProxyManager*              m_pAIProxyManager;
-
 	IGameVolumes*                 m_pGameVolumesManager;
 
 	// developer mode
 	CDevMode* m_pDevMode;
 
 	// TimeDemo recorder.
-	CTimeDemoRecorder* m_pTimeDemoRecorder;
+	ITimeDemoRecorder* m_pTimeDemoRecorder;
+	std::unique_ptr<CTimeDemoRecorder> m_pDefaultTimeDemoRecorder;
 
 	// game queries
 	CGameQueryListener* m_pGameQueryListener;
@@ -591,8 +582,6 @@ private:
 	ICVar* m_pEnableLoadingScreen;
 	ICVar* m_pCheats;
 	ICVar* m_pShowLanBrowserCVAR;
-	ICVar* m_pDebugSignalTimers;
-	ICVar* m_pDebugRangeSignaling;
 	ICVar* m_pAsyncLevelLoad;
 
 	bool   m_bShowLanBrowser;

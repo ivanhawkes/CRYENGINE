@@ -8,6 +8,8 @@
 //////////////////////////////////////////////////////////////////////////
 void SRenderNodeTempData::Free()
 {
+	DBG_LOCK_TO_THREAD(userData.pOwnerNode);
+
 	if (hasValidRenderObjects)
 	{
 		FreeRenderObjects();
@@ -28,10 +30,9 @@ void SRenderNodeTempData::Free()
 //////////////////////////////////////////////////////////////////////////
 CRenderObject* SRenderNodeTempData::GetRenderObject(int lod)
 {
-	CRY_ASSERT(!invalidRenderObjects);
+	DBG_LOCK_TO_THREAD(userData.pOwnerNode);
 
-	// Object creation must be locked because CheckCreateRenderObject can be called on same node from different threads
-	arrPermanentObjectLock[lod].WLock();
+	CRY_ASSERT(!invalidRenderObjects);
 
 	// Do we have to create a new permanent render object?
 	if (userData.arrPermanentRenderObjects[lod] == nullptr)
@@ -40,15 +41,15 @@ CRenderObject* SRenderNodeTempData::GetRenderObject(int lod)
 		hasValidRenderObjects = true;
 	}
 
-	CRenderObject* pRenderObject = userData.arrPermanentRenderObjects[lod];
-	arrPermanentObjectLock[lod].WUnlock();
-
-	return pRenderObject;
+	return userData.arrPermanentRenderObjects[lod];
 }
 
 void SRenderNodeTempData::FreeRenderObjects()
 {
-	CRY_ASSERT(hasValidRenderObjects);
+	if (!hasValidRenderObjects)
+		return;
+
+	DBG_LOCK_TO_THREAD(userData.pOwnerNode);
 
 	// Release permanent CRenderObject(s)
 	for (int lod = 0; lod < MAX_STATOBJ_LODS_NUM; ++lod)
@@ -66,26 +67,25 @@ void SRenderNodeTempData::FreeRenderObjects()
 
 void SRenderNodeTempData::InvalidateRenderObjectsInstanceData()
 {
+	DBG_LOCK_TO_THREAD(userData.pOwnerNode);
+
 	if (!hasValidRenderObjects)
 		return;
 
-	// Release permanent CRenderObject(s)
+	// Invalidate permanent CRenderObject(s) instance-data
 	for (int lod = 0; lod < MAX_STATOBJ_LODS_NUM; ++lod)
 	{
-		// Object creation must be locked because CheckCreateRenderObject can be called on same node from different threads
-		arrPermanentObjectLock[lod].RLock();
-
 		if (userData.arrPermanentRenderObjects[lod])
 		{
 			userData.arrPermanentRenderObjects[lod]->SetInstanceDataDirty();
 		}
-
-		arrPermanentObjectLock[lod].RUnlock();
 	}
 }
 
 void SRenderNodeTempData::SetClipVolume(IClipVolume* pClipVolume, const Vec3& pos)
 {
+	DBG_LOCK_TO_THREAD(userData.pOwnerNode);
+
 	userData.m_pClipVolume = pClipVolume;
 	userData.lastClipVolumePosition = pos;
 	userData.bClipVolumeAssigned = true;
@@ -93,6 +93,8 @@ void SRenderNodeTempData::SetClipVolume(IClipVolume* pClipVolume, const Vec3& po
 
 void SRenderNodeTempData::ResetClipVolume()
 {
+	DBG_LOCK_TO_THREAD(userData.pOwnerNode);
+
 	userData.m_pClipVolume = nullptr;
 	userData.bClipVolumeAssigned = false;
 }
@@ -166,7 +168,11 @@ void CVisibleRenderNodesManager::UpdateVisibleNodes(int currentFrame, int maxNod
 	m_currentNodesToDelete++;
 	m_currentNodesToDelete = (m_currentNodesToDelete) % MAX_DELETE_BUFFERS; // Always cycle delete buffers.
 	for (auto* node : m_toDeleteNodes[m_currentNodesToDelete])
+	{
+		DBG_LOCK_TO_THREAD(node->userData.pOwnerNode);
 		m_pool.Delete(node);
+	}
+
 	m_toDeleteNodes[m_currentNodesToDelete].clear();
 
 	{
@@ -181,7 +187,10 @@ void CVisibleRenderNodesManager::UpdateVisibleNodes(int currentFrame, int maxNod
 				SRenderNodeTempData* pTempData = m_visibleNodes[i];
 
 				if (IRenderNode* pOwnerNode = pTempData->userData.pOwnerNode)
+				{
+					DBG_LOCK_TO_THREAD(pOwnerNode);
 					OnRenderNodeVisibilityChange(pOwnerNode, true);
+				}
 			}
 			m_firstAddedNode = -1;
 		}
@@ -205,6 +214,8 @@ void CVisibleRenderNodesManager::UpdateVisibleNodes(int currentFrame, int maxNod
 			{
 				if (IRenderNode* pOwnerNode = pTempData->userData.pOwnerNode)
 				{
+					DBG_LOCK_TO_THREAD(pOwnerNode);
+
 					// clear reference to use from owning render node.
 					OnRenderNodeVisibilityChange(pOwnerNode, false);
 

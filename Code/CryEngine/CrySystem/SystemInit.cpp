@@ -297,7 +297,7 @@ static void CmdCrashTest(IConsoleCmdArgs* pArgs)
 		case 3:
 			while (true)
 			{
-				char* element = new char[10240];
+				char* element = new char[40960];
 				// cppcheck-suppress memleak
 			}
 			break;
@@ -350,7 +350,7 @@ static void CmdCrashTest(IConsoleCmdArgs* pArgs)
 
 				struct Derived : public Base
 				{
-					virtual void PureVirtual() const {};
+					virtual void PureVirtual() const {}
 				};
 
 				Derived d;
@@ -1364,9 +1364,9 @@ bool CSystem::InitRenderer(SSystemInitParams& startupParams)
 	if (m_env.pRenderer)
 	{
 #ifndef RELEASE
-		const WIN_HWND hwnd = (startupParams.bEditor) ? (WIN_HWND)1 : m_hWnd;
+		const CRY_HWND hwnd = (startupParams.bEditor) ? (CRY_HWND)1 : m_hWnd;
 #else
-		const WIN_HWND hwnd = m_hWnd;
+		const CRY_HWND hwnd = m_hWnd;
 #endif
 
 		int width = m_rWidth->GetIVal();
@@ -2720,7 +2720,7 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 	QueryVersionInfo();
 	DetectGameFolderAccessRights();
 
-	m_hWnd = (WIN_HWND)startupParams.hWnd;
+	m_hWnd = (CRY_HWND)startupParams.hWnd;
 
 	m_binariesDir = startupParams.szBinariesDir;
 	
@@ -2765,7 +2765,6 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 	}
 #endif
 
-	m_pCmdLine = new CCmdLine(startupParams.szSystemCmdLine);
 	m_currentLanguageAudio = "";
 #if defined(DEDICATED_SERVER)
 	m_bNoCrashDialog = true;
@@ -2909,7 +2908,7 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 	InlineInitializationProcessing("CSystem::Init Load project configuration");
 
 	// Load project directory early, since it relies on overriding current working folder
-	m_pProjectManager = new CProjectManager();
+	m_pProjectManager = new Cry::CProjectManager();
 
 	//////////////////////////////////////////////////////////////////////////
 	// Create PlatformOS
@@ -3862,17 +3861,6 @@ bool CSystem::Initialize(SSystemInitParams& startupParams)
 			}
 		}
 		m_env.pThreadManager->EnableFloatExceptions((EFPE_Severity)g_cvars.sys_float_exceptions);
-
-#if CRY_PLATFORM_WINDOWS && defined(SECUROM_64)
-		if (!m_env.IsEditor() && !IsDedicated())
-		{
-			int res = TestSecurom64();
-			if (res != b64_ok)
-			{
-				_controlfp(0, _MCW_EM); // Enable floating point exceptions (Will eventually cause crash).
-			}
-		}
-#endif
 	}
 
 #if defined(ENABLE_LOADING_PROFILER)
@@ -5270,7 +5258,7 @@ void CSystem::CreateSystemVars()
 
 	REGISTER_CVAR2("sys_streaming_in_blocks", &g_cvars.sys_streaming_in_blocks, 1, VF_NULL,
 	               "Streaming of large files happens in blocks");
-
+#if defined(USE_FPE)
 	REGISTER_CVAR2("sys_float_exceptions", &g_cvars.sys_float_exceptions, 0, 0,
 	               "Floating Point Exceptions:\n"
 	               "  0 = Disabled\n"
@@ -5281,6 +5269,9 @@ void CSystem::CreateSystemVars()
 	               "  INVALID: An operand is invalid for the operation about to be performed. E.g. 0/0, NaN/Nan, 0xNan, sqrt(-1)\n"
 	               "  OVERFLOW: The result would be larger than the largest finite number representable in the destination format. E.g (float)DBL_MAX, FLT_MAX + 1.0e32, expf(88.8)\n"
 	               "  UNDERFLOW: The result would be smaller than the smallest normal number representable in the destination format. E.g (float)DBL_MIN, nextafterf(FLT_MIN, -), expf(-87.4)\n");
+#else
+	g_cvars.sys_float_exceptions = 0;
+#endif
 #undef CVAR_FPE_DEFAULT_VALUE
 
 	REGISTER_CVAR2("sys_update_profile_time", &g_cvars.sys_update_profile_time, 1.0f, 0, "Time to keep updates timings history for.");

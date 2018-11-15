@@ -6,12 +6,23 @@ start_sources()
 sources_platform(ALL)
 add_sources("NoUberFile"
 	SOURCE_GROUP "Root"
-		"ATLEntityData.h"
+		"FileInfo.h"
+		"IEnvironmentConnection.h"
+		"IEvent.h"
+		"IFile.h"
+		"IImpl.h"
+		"IListener.h"
+		"IObject.h"
+		"IParameterConnection.h"
+		"ISettingConnection.h"
+		"IStandaloneFileConnection.h"
+		"ISwitchStateConnection.h"
+		"ITriggerConnection.h"
+		"ITriggerInfo.h"
 		"Logger.h"
-		"IAudioImpl.h"
-		"SharedAudioData.h"
 		"PoolObject.h"
 		"PoolObject_impl.h"
+		"SharedData.h"
 )
 
 end_sources()

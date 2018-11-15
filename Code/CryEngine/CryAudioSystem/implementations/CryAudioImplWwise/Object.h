@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ATLEntityData.h>
+#include <IObject.h>
 #include <PoolObject.h>
 #include <AK/SoundEngine/Common/AkTypes.h>
 
@@ -34,30 +34,34 @@ public:
 	CObject& operator=(CObject const&) = delete;
 	CObject& operator=(CObject&&) = delete;
 
-	explicit CObject(AkGameObjectID const id, CObjectTransformation const& transformation);
+	explicit CObject(AkGameObjectID const id, CTransformation const& transformation, char const* const szName);
 	virtual ~CObject() override;
 
 	// CryAudio::Impl::IObject
-	virtual void                         Update(float const deltaTime) override;
-	virtual void                         SetTransformation(CObjectTransformation const& transformation) override;
-	virtual CObjectTransformation const& GetTransformation() const override { return m_transformation; }
-	virtual void                         SetEnvironment(IEnvironment const* const pIEnvironment, float const amount) override;
-	virtual void                         SetParameter(IParameter const* const pIParameter, float const value) override;
-	virtual void                         SetSwitchState(ISwitchState const* const pISwitchState) override;
-	virtual void                         SetObstructionOcclusion(float const obstruction, float const occlusion) override;
-	virtual void                         SetOcclusionType(EOcclusionType const occlusionType) override;
-	virtual ERequestStatus               ExecuteTrigger(ITrigger const* const pITrigger, IEvent* const pIEvent) override;
-	virtual void                         StopAllTriggers() override;
-	virtual ERequestStatus               PlayFile(IStandaloneFile* const pIStandaloneFile) override;
-	virtual ERequestStatus               StopFile(IStandaloneFile* const pIStandaloneFile) override;
-	virtual ERequestStatus               SetName(char const* const szName) override;
-	virtual void                         ToggleFunctionality(EObjectFunctionality const type, bool const enable) override;
+	virtual void                   Update(float const deltaTime) override;
+	virtual void                   SetTransformation(CTransformation const& transformation) override;
+	virtual CTransformation const& GetTransformation() const override { return m_transformation; }
+	virtual void                   SetEnvironment(IEnvironmentConnection const* const pIEnvironmentConnection, float const amount) override;
+	virtual void                   SetParameter(IParameterConnection const* const pIParameterConnection, float const value) override;
+	virtual void                   SetSwitchState(ISwitchStateConnection const* const pISwitchStateConnection) override;
+	virtual void                   SetOcclusion(float const occlusion) override;
+	virtual void                   SetOcclusionType(EOcclusionType const occlusionType) override;
+	virtual ERequestStatus         ExecuteTrigger(ITriggerConnection const* const pITriggerConnection, IEvent* const pIEvent) override;
+	virtual void                   StopAllTriggers() override;
+	virtual ERequestStatus         PlayFile(IStandaloneFileConnection* const pIStandaloneFileConnection) override;
+	virtual ERequestStatus         StopFile(IStandaloneFileConnection* const pIStandaloneFileConnection) override;
+	virtual ERequestStatus         SetName(char const* const szName) override;
+	virtual void                   ToggleFunctionality(EObjectFunctionality const type, bool const enable) override;
 
 	// Below data is only used when INCLUDE_WWISE_IMPL_PRODUCTION_CODE is defined!
 	virtual void DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY, char const* const szTextFilter) override;
 	// ~CryAudio::Impl::IObject
 
 	void RemoveEvent(CEvent* const pEvent);
+
+#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+	char const* GetName() const { return m_name.c_str(); }
+#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
 	AkGameObjectID const m_id;
 
@@ -69,22 +73,23 @@ private:
 
 	using AuxSendValues = std::vector<AkAuxSendValue>;
 
-	std::vector<CEvent*>  m_events;
-	bool                  m_needsToUpdateEnvironments;
-	bool                  m_needsToUpdateVirtualStates;
-	AuxSendValues         m_auxSendValues;
+	std::vector<CEvent*> m_events;
+	bool                 m_needsToUpdateEnvironments;
+	bool                 m_needsToUpdateVirtualStates;
+	AuxSendValues        m_auxSendValues;
 
-	EObjectFlags          m_flags;
-	float                 m_distanceToListener;
-	float                 m_previousRelativeVelocity;
-	float                 m_previousAbsoluteVelocity;
-	CObjectTransformation m_transformation;
-	Vec3                  m_position;
-	Vec3                  m_previousPosition;
-	Vec3                  m_velocity;
+	EObjectFlags         m_flags;
+	float                m_distanceToListener;
+	float                m_previousRelativeVelocity;
+	float                m_previousAbsoluteVelocity;
+	CTransformation      m_transformation;
+	Vec3                 m_position;
+	Vec3                 m_previousPosition;
+	Vec3                 m_velocity;
 
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	std::map<char const* const, float> m_parameterInfo;
+	CryFixedStringT<MaxObjectNameLength> m_name;
+	std::map<char const* const, float>   m_parameterInfo;
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 };
 } // namespace Wwise

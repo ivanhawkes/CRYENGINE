@@ -19,6 +19,7 @@ struct AIConsoleVars
 	DeclareConstIntCVar(DebugDrawNavigationQueriesList, 0);
 	DeclareConstIntCVar(DebugTriangleOnCursor, 0);
 	DeclareConstIntCVar(DebugDrawNavigationWorldMonitor, 0);
+	DeclareConstIntCVar(DebugDrawSignalsHistory, 0);
 	DeclareConstIntCVar(NavigationSystemMT, 1);
 	DeclareConstIntCVar(StoreNavigationQueriesHistory, 0);
 	DeclareConstIntCVar(NavGenThreadJobs, 1);
@@ -87,8 +88,6 @@ struct AIConsoleVars
 	DeclareConstIntCVar(DebugDrawExpensiveAccessoryQuota, 0);
 	DeclareConstIntCVar(DebugTargetSilhouette, 0);
 	DeclareConstIntCVar(DebugDrawDamageControl, 0);
-	DeclareConstIntCVar(DrawFakeTracers, 0);
-	DeclareConstIntCVar(DrawFakeHitEffects, 0);
 	DeclareConstIntCVar(DrawFakeDamageInd, 0);
 	DeclareConstIntCVar(DrawPlayerRanges, 0);
 	DeclareConstIntCVar(DrawPerceptionIndicators, 0);

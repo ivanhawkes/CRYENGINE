@@ -258,7 +258,7 @@ void CEntityAICoverUserComponent::CancelMovementRequest()
 {
 	if (m_moveToCoverRequestId != MovementRequestID::Invalid())
 	{
-		gEnv->pAISystem->GetMovementSystem()->CancelRequest(m_moveToCoverRequestId);
+		gEnv->pAISystem->GetMovementSystem()->UnsuscribeFromRequestCallback(m_moveToCoverRequestId);
 		m_moveToCoverRequestId = MovementRequestID::Invalid();
 	}
 }
@@ -437,8 +437,6 @@ void CEntityAICoverUserComponent::CreatePlanEndBlocks(DynArray<Movement::BlockPt
 
 CoverID CEntityAICoverUserComponent::GetRandomCoverId(float radius) const
 {
-	const Vec3 entityPos = GetEntity()->GetWorldPos();
-	
 	std::vector<CoverID> covers;
 	covers.reserve(16);
 	gAIEnv.pCoverSystem->GetCover(GetEntity()->GetWorldPos(), radius, covers);

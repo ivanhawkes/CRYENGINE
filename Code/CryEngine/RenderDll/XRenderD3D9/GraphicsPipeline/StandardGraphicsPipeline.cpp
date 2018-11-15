@@ -149,13 +149,26 @@ void CStandardGraphicsPipeline::Init()
 	InitStages();
 
 	// Out-of-pipeline passes for display
+	m_HDRToFramePass  .reset(new CStretchRectPass);
+	m_PostToFramePass .reset(new CStretchRectPass);
+	m_FrameToFramePass.reset(new CStretchRectPass);
+
+	m_LZSubResPass[0].reset(new CDepthDownsamplePass);
+	m_LZSubResPass[1].reset(new CDepthDownsamplePass);
+	m_LZSubResPass[2].reset(new CDepthDownsamplePass);
+	m_HQSubResPass[0].reset(new CStableDownsamplePass);
+	m_HQSubResPass[1].reset(new CStableDownsamplePass);
+	m_LQSubResPass[0].reset(new CStretchRectPass);
+	m_LQSubResPass[1].reset(new CStretchRectPass);
+
+	m_ResolvePass  .reset(new CStretchRectPass);
 	m_DownscalePass.reset(new CDownsamplePass);
 	m_UpscalePass  .reset(new CSharpeningUpsamplePass);
 
 	// preallocate light volume buffer
 	GetLightVolumeBuffer().Create();
 	// preallocate video memory buffer for particles when using the job system
-	GetParticleBufferSet().Create(CRenderer::CV_r_ParticleVerticePoolSize, CRenderer::CV_r_ParticleMaxVerticePoolSize);
+	GetParticleBufferSet().Create(CRendererCVars::CV_r_ParticleVerticePoolSize, CRendererCVars::CV_r_ParticleMaxVerticePoolSize);
 
 	m_bInitialized = true;
 }
@@ -177,6 +190,20 @@ void CStandardGraphicsPipeline::ShutDown()
 	m_mainViewConstantBuffer.Clear();
 	m_defaultDrawExtraRL.ClearResources();
 	m_pDefaultDrawExtraRS.reset();
+
+	m_HDRToFramePass.reset();
+	m_PostToFramePass.reset();
+	m_FrameToFramePass.reset();
+
+	m_LZSubResPass[0].reset();
+	m_LZSubResPass[1].reset();
+	m_LZSubResPass[2].reset();
+	m_HQSubResPass[0].reset();
+	m_HQSubResPass[1].reset();
+	m_LQSubResPass[0].reset();
+	m_LQSubResPass[1].reset();
+
+	m_ResolvePass.reset();
 	m_DownscalePass.reset();
 	m_UpscalePass.reset();
 
@@ -187,13 +214,15 @@ void CStandardGraphicsPipeline::ShutDown()
 //////////////////////////////////////////////////////////////////////////
 void CStandardGraphicsPipeline::Update(CRenderView* pRenderView, EShaderRenderingFlags renderingFlags)
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CGraphicsPipeline::SetCurrentRenderView(pRenderView);
 
 	m_numInvalidDrawcalls = 0;
 	GenerateMainViewConstantBuffer();
 
-	// Compile shadow renderitems
-	if (!pRenderView->IsRecursive() && pRenderView->GetCurrentEye() != CCamera::eEye_Right)
+	// Compile shadow renderitems (TODO: move into ShadowMap's Update())
+	if (m_pShadowMapStage->IsStageActive(renderingFlags))
 		pRenderView->PrepareShadowViews();
 
 	m_renderingFlags = renderingFlags;
@@ -359,16 +388,16 @@ void CStandardGraphicsPipeline::GeneratePerViewConstantBuffer(const SRenderViewI
 		Vec3 pDecalZFightingRemedy;
 		{
 			const float* mProj = viewInfo.projMatrix.GetData();
-			const float s = clamp_tpl(CRenderer::CV_r_ZFightingDepthScale, 0.1f, 1.0f);
+			const float s = clamp_tpl(CRendererCVars::CV_r_ZFightingDepthScale, 0.1f, 1.0f);
 
 			pDecalZFightingRemedy.x = s;                                      // scaling factor to pull decal in front
 			pDecalZFightingRemedy.y = (float)((1.0f - s) * mProj[4 * 3 + 2]); // correction factor for homogeneous z after scaling is applied to xyzw { = ( 1 - v[0] ) * zMappingRageBias }
-			pDecalZFightingRemedy.z = clamp_tpl(CRenderer::CV_r_ZFightingExtrude, 0.0f, 1.0f);
+			pDecalZFightingRemedy.z = clamp_tpl(CRendererCVars::CV_r_ZFightingExtrude, 0.0f, 1.0f);
 
 			// alternative way the might save a bit precision
 			//PF.pDecalZFightingRemedy.x = s; // scaling factor to pull decal in front
 			//PF.pDecalZFightingRemedy.y = (float)((1.0f - s) * mProj[4*2+2]);
-			//PF.pDecalZFightingRemedy.z = clamp_tpl(CRenderer::CV_r_ZFightingExtrude, 0.0f, 1.0f);
+			//PF.pDecalZFightingRemedy.z = clamp_tpl(CRendererCVars::CV_r_ZFightingExtrude, 0.0f, 1.0f);
 		}
 		cb.CV_DecalZFightingRemedy = Vec4(pDecalZFightingRemedy, 0);
 
@@ -422,7 +451,7 @@ void CStandardGraphicsPipeline::GeneratePerViewConstantBuffer(const SRenderViewI
 			cb.CV_TessInfo.x = sqrtf(float(viewport.width * viewport.height)) / (hfov * CRendererCVars::CV_r_tessellationtrianglesize);
 			cb.CV_TessInfo.y = CRendererCVars::CV_r_displacementfactor;
 			cb.CV_TessInfo.z = pCV_e_TessellationMaxDistance->GetFVal();
-			cb.CV_TessInfo.w = (float)CRenderer::CV_r_ParticlesTessellationTriSize;
+			cb.CV_TessInfo.w = (float)CRendererCVars::CV_r_ParticlesTessellationTriSize;
 		}
 
 		cb.CV_FrustumPlaneEquation.SetRow4(0, (Vec4&)viewInfo.pFrustumPlanes[FR_PLANE_RIGHT]);
@@ -460,25 +489,18 @@ bool CStandardGraphicsPipeline::FillCommonScenePassStates(const SGraphicsPipelin
 
 	// Set resource states
 	bool bTwoSided = false;
-	{
-		if (pRes->m_ResFlags & MTL_FLAG_2SIDED)
-		{
-			bTwoSided = true;
-		}
 
-		if (pRes->IsAlphaTested())
-		{
-			psoDesc.m_ShaderFlags_RT |= g_HWSR_MaskBit[HWSR_ALPHATEST];
-		}
+	if (pRes->m_ResFlags & MTL_FLAG_2SIDED)
+		bTwoSided = true;
 
-		if (pRes->m_Textures[EFTT_DIFFUSE] && pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_pTexModifier)
-		{
-			psoDesc.m_ShaderFlags_MD |= pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_nUpdateFlags;
-		}
+	if (pRes->IsAlphaTested())
+		psoDesc.m_ShaderFlags_RT |= g_HWSR_MaskBit[HWSR_ALPHATEST];
 
-		if (pRes->m_pDeformInfo)
-			psoDesc.m_ShaderFlags_MDV |= pRes->m_pDeformInfo->m_eType;
-	}
+	if (pRes->m_Textures[EFTT_DIFFUSE] && pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_pTexModifier)
+		psoDesc.m_ShaderFlags_MD |= pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_nUpdateFlags;
+
+	if (pRes->m_pDeformInfo)
+		psoDesc.m_ShaderFlags_MDV |= pRes->m_pDeformInfo->m_eType;
 
 	psoDesc.m_ShaderFlags_MDV |= psoDesc.m_pShader->m_nMDV;
 
@@ -575,6 +597,7 @@ void CStandardGraphicsPipeline::ExecuteAnisotropicVerticalBlur(CTexture* pTex, i
 
 void CStandardGraphicsPipeline::ExecuteHDRPostProcessing()
 {
+	FUNCTION_PROFILER_RENDERER();
 	PROFILE_LABEL_SCOPE("POST_EFFECTS_HDR");
 
 	const auto& viewInfo = GetCurrentViewInfo(CCamera::eEye_Left);
@@ -585,74 +608,88 @@ void CStandardGraphicsPipeline::ExecuteHDRPostProcessing()
 	PostProcessUtils().m_pViewProj = ReverseDepthHelper::Convert(PostProcessUtils().m_pViewProj);
 	PostProcessUtils().m_pViewProj.Transpose();
 
-	m_pRainStage->Execute();
+	if (m_pRainStage->IsStageActive(m_renderingFlags))
+		m_pRainStage->Execute();
 
 	// Note: MB uses s_ptexHDRTargetPrev to avoid doing another copy, so this should be right before the MB pass
 	{
-		GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetPrev);
+		m_FrameToFramePass->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetPrev);
 	}
 
-	m_pDepthOfFieldStage->Execute();
-	m_pMotionBlurStage->Execute();
-	m_pSnowStage->Execute();
+	if (m_pDepthOfFieldStage->IsStageActive(m_renderingFlags))
+		m_pDepthOfFieldStage->Execute();
+
+	if (m_pMotionBlurStage->IsStageActive(m_renderingFlags))
+		m_pMotionBlurStage->Execute();
+
+	if (m_pSnowStage->IsStageActive(m_renderingFlags))
+		m_pSnowStage->Execute();
 
 	// Half resolution downsampling
+	if (m_pAutoExposureStage->IsStageActive(m_renderingFlags) ||
+		m_pBloomStage       ->IsStageActive(m_renderingFlags) ||
+		m_pSunShaftsStage   ->IsStageActive(m_renderingFlags))
 	{
 		PROFILE_LABEL_SCOPE("HALFRES_DOWNSAMPLE_HDRTARGET");
 
-		if (CRenderer::CV_r_HDRBloomQuality > 1)
-			GetOrCreateUtilityPass<CStableDownsamplePass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0][0], true);
+		if (CRendererCVars::CV_r_HDRBloomQuality > 1)
+			m_HQSubResPass[0]->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0][0], true);
 		else
-			GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0][0]);
+			m_LQSubResPass[0]->Execute(CRendererResources::s_ptexHDRTarget, CRendererResources::s_ptexHDRTargetScaled[0][0]);
 	}
 
 	// Quarter resolution downsampling
-	if (CRenderer::CV_r_HDRBloom > 0 || true /* measure luminance */)
+	if (m_pAutoExposureStage->IsStageActive(m_renderingFlags) ||
+		m_pBloomStage       ->IsStageActive(m_renderingFlags))
 	{
 		PROFILE_LABEL_SCOPE("QUARTER_RES_DOWNSAMPLE_HDRTARGET");
 
-		if (CRenderer::CV_r_HDRBloomQuality > 0)
-			GetOrCreateUtilityPass<CStableDownsamplePass>()->Execute(CRendererResources::s_ptexHDRTargetScaled[0][0], CRendererResources::s_ptexHDRTargetScaled[1][0], CRenderer::CV_r_HDRBloomQuality >= 1);
+		if (CRendererCVars::CV_r_HDRBloomQuality > 0)
+			m_HQSubResPass[1]->Execute(CRendererResources::s_ptexHDRTargetScaled[0][0], CRendererResources::s_ptexHDRTargetScaled[1][0], CRendererCVars::CV_r_HDRBloomQuality >= 1);
 		else
-			GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTargetScaled[0][0], CRendererResources::s_ptexHDRTargetScaled[1][0]);
+			m_LQSubResPass[1]->Execute(CRendererResources::s_ptexHDRTargetScaled[0][0], CRendererResources::s_ptexHDRTargetScaled[1][0]);
 	}
 
-	if (GetCurrentRenderView()->GetCurrentEye() != CCamera::eEye_Right)
-	{
-		// reads CRendererResources::s_ptexHDRTargetScaled[1][0]
+	// reads CRendererResources::s_ptexHDRTargetScaled[1][0]
+	if (m_pAutoExposureStage->IsStageActive(m_renderingFlags))
 		m_pAutoExposureStage->Execute();
-	}
 
 	// reads CRendererResources::s_ptexHDRTargetScaled[1][0] and then kills it
-	m_pBloomStage->Execute();
+	if (m_pBloomStage->IsStageActive(m_renderingFlags))
+		m_pBloomStage->Execute();
 
-	// Lens optics
-	if (CRenderer::CV_r_flares && !CRenderer::CV_r_durango_async_dips)
-	{
-		PROFILE_LABEL_SCOPE("LENS_OPTICS");
-
-		// writes CRendererResources::s_ptexSceneTargetR11G11B10F[0]
+	// writes CRendererResources::s_ptexSceneTargetR11G11B10F[0]
+	if (m_pLensOpticsStage->IsStageActive(m_renderingFlags))
 		m_pLensOpticsStage->Execute();
-	}
 
 	// reads CRendererResources::s_ptexHDRTargetScaled[0][0]
-	m_pSunShaftsStage->Execute();
-	m_pColorGradingStage->Execute();
-	m_pToneMappingStage->Execute();
+	if (m_pSunShaftsStage->IsStageActive(m_renderingFlags))
+		m_pSunShaftsStage->Execute();
+
+	if (m_pColorGradingStage->IsStageActive(m_renderingFlags))
+		m_pColorGradingStage->Execute();
+
+	// 0 is used for disable debugging and 1 is used to just show the average and estimated luminance, and exposure values.
+	if (m_pToneMappingStage->IsDebugInfoEnabled())
+		m_pToneMappingStage->ExecuteDebug();
+	else
+		m_pToneMappingStage->Execute();
 }
 
 void CStandardGraphicsPipeline::ExecuteDebugger()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	m_pSceneCustomStage->ExecuteDebugger();
 
-	if (m_pSceneCustomStage->DoDebugOverlay())
-	{
+	if (m_pSceneCustomStage->IsDebugOverlayEnabled())
 		m_pSceneCustomStage->ExecuteDebugOverlay();
-	}
 }
 
 void CStandardGraphicsPipeline::ExecuteBillboards()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 	CRenderView* pRenderView = GetCurrentRenderView();
 
@@ -667,11 +704,11 @@ void CStandardGraphicsPipeline::ExecuteBillboards()
 // TODO: This will be used only for recursive render pass after all render views get rendered with full graphics pipeline including tiled forward shading.
 void CStandardGraphicsPipeline::ExecuteMinimumForwardShading()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 	CRenderView* pRenderView = GetCurrentRenderView();
 	const CRenderOutput* pOutput = pRenderView->GetRenderOutput();
-
-	PROFILE_LABEL_PUSH("GRAPHICS_PIPELINE_MINIMUM_FORWARD_SHADING");
 
 	// Render into these targets
 	CTexture* pColorTex = pRenderView->GetColorTarget();
@@ -681,6 +718,8 @@ void CStandardGraphicsPipeline::ExecuteMinimumForwardShading()
 	const bool bSecondaryViewport = (pRenderView->GetShaderRenderingFlags() & SHDF_SECONDARY_VIEWPORT) != 0;
 
 	m_renderPassScheduler.SetEnabled(true);
+
+	PROFILE_LABEL_PUSH("GRAPHICS_PIPELINE_MINIMUM_FORWARD_SHADING");
 
 	if (pRenderView->GetCurrentEye() != CCamera::eEye_Right)
 	{
@@ -703,6 +742,7 @@ void CStandardGraphicsPipeline::ExecuteMinimumForwardShading()
 	m_pSceneGBufferStage->ExecuteMinimumZpass();
 
 	// forward opaque and transparent passes for recursive rendering
+	m_pSceneForwardStage->ExecuteSky(pColorTex, pDepthTex);
 	m_pSceneForwardStage->ExecuteMinimum(pColorTex, pDepthTex);
 
 	// Insert fence which is used on consoles to prevent overwriting video memory
@@ -741,10 +781,13 @@ void CStandardGraphicsPipeline::ExecuteMinimumForwardShading()
 
 void CStandardGraphicsPipeline::ExecuteMobilePipeline()
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 	CRenderView* pRenderView = GetCurrentRenderView();
+	CTexture* pZTexture = pRenderView->GetDepthTarget();
 	
-	if (CRenderer::CV_r_GraphicsPipelineMobile == 2)
+	if (CRendererCVars::CV_r_GraphicsPipelineMobile == 2)
 		m_pSceneGBufferStage->Execute();
 	else
 		m_pSceneGBufferStage->ExecuteMicroGBuffer();
@@ -764,6 +807,7 @@ void CStandardGraphicsPipeline::ExecuteMobilePipeline()
 	}
 
 	// Opaque and transparent forward passes
+	m_pSceneForwardStage->ExecuteSky(CRendererResources::s_ptexHDRTarget, pZTexture);
 	m_pSceneForwardStage->ExecuteMobile();
 
 	// Insert fence which is used on consoles to prevent overwriting video memory
@@ -771,26 +815,21 @@ void CStandardGraphicsPipeline::ExecuteMobilePipeline()
 
 	m_pMobileCompositionStage->ExecutePostProcessing();
 
-
 	pRenderer->m_pPostProcessMgr->End(pRenderView);
 }
 
 void CStandardGraphicsPipeline::Execute()
 {
-	if (CRenderer::CV_r_GraphicsPipelineMobile)
-	{
-		ExecuteMobilePipeline();
-		return;
-	}
-	
+	FUNCTION_PROFILER_RENDERER();
+
 	CD3D9Renderer* pRenderer = gcpRendD3D;
 	CRenderView* pRenderView = GetCurrentRenderView();
 	auto& renderItemDrawer = pRenderView->GetDrawer();
 	CTexture* pZTexture = pRenderView->GetDepthTarget();
 
-	PROFILE_LABEL_PUSH("GRAPHICS_PIPELINE");
-	
 	m_renderPassScheduler.SetEnabled(true);
+
+	PROFILE_LABEL_PUSH("GRAPHICS_PIPELINE");
 
 	// Generate cloud volume textures for shadow mapping. Only needs view, and needs to run before ShadowMaskgen.
 	m_pVolumetricCloudsStage->ExecuteShadowGen();
@@ -804,7 +843,8 @@ void CStandardGraphicsPipeline::Execute()
 		m_pComputeParticlesStage->PreDraw();
 		m_pComputeSkinningStage->PreDraw();
 
-		m_pRainStage->ExecuteRainOcclusion();
+		if (m_pRainStage->IsRainOcclusionEnabled())
+			m_pRainStage->ExecuteRainOcclusion();
 	}
 
 	// GBuffer
@@ -825,10 +865,8 @@ void CStandardGraphicsPipeline::Execute()
 	pCmdList->BeginResourceTransitions(CRY_ARRAY_COUNT(pTextures), pTextures, eResTransition_TextureRead);
 
 	// Shadow maps
-	if (pRenderView->GetCurrentEye() != CCamera::eEye_Right)
-	{
+	if (m_pShadowMapStage->IsStageActive(m_renderingFlags))
 		m_pShadowMapStage->Execute();
-	}
 
 	// Wait for Shadow Map draw jobs to finish (also required for HeightMap AO and SVOGI)
 	renderItemDrawer.WaitForDrawSubmission();
@@ -844,23 +882,30 @@ void CStandardGraphicsPipeline::Execute()
 		pSourceDepth = pZTexture;  // On Durango reading device depth is faster since it is in ESRAM
 #endif
 
-		GetOrCreateUtilityPass<CDepthDownsamplePass>()->Execute(pSourceDepth, CRendererResources::s_ptexLinearDepthScaled[0], (pSourceDepth == pZTexture), true);
-		GetOrCreateUtilityPass<CDepthDownsamplePass>()->Execute(CRendererResources::s_ptexLinearDepthScaled[0], CRendererResources::s_ptexLinearDepthScaled[1], false, false);
-		GetOrCreateUtilityPass<CDepthDownsamplePass>()->Execute(CRendererResources::s_ptexLinearDepthScaled[1], CRendererResources::s_ptexLinearDepthScaled[2], false, false);
+		m_LZSubResPass[0]->Execute(pSourceDepth, CRendererResources::s_ptexLinearDepthScaled[0], (pSourceDepth == pZTexture), true);
+		m_LZSubResPass[1]->Execute(CRendererResources::s_ptexLinearDepthScaled[0], CRendererResources::s_ptexLinearDepthScaled[1], false, false);
+		m_LZSubResPass[2]->Execute(CRendererResources::s_ptexLinearDepthScaled[1], CRendererResources::s_ptexLinearDepthScaled[2], false, false);
 	}
 
 	// Depth readback (for occlusion culling)
 	m_pDepthReadbackStage->Execute();
-	m_pDeferredDecalsStage->Execute();
 
-	m_pSceneGBufferStage->ExecuteGBufferVisualization();
+	if (m_pDeferredDecalsStage->IsStageActive(m_renderingFlags))
+		m_pDeferredDecalsStage->Execute();
+
+	if (m_pSceneGBufferStage->IsGBufferVisualizationEnabled())
+		m_pSceneGBufferStage->ExecuteGBufferVisualization();
 
 	// GBuffer modifiers
-	m_pRainStage->ExecuteDeferredRainGBuffer();
-	m_pSnowStage->ExecuteDeferredSnowGBuffer();
+	if (m_pRainStage->IsDeferredRainEnabled())
+		m_pRainStage->ExecuteDeferredRainGBuffer();
+
+	if (m_pSnowStage->IsDeferredSnowEnabled())
+		m_pSnowStage->ExecuteDeferredSnowGBuffer();
 
 	// Generate cloud volume textures for shadow mapping.
-	m_pVolumetricCloudsStage->ExecuteShadowGen();
+	if (m_pVolumetricCloudsStage->IsStageActive(m_renderingFlags))
+		m_pVolumetricCloudsStage->ExecuteShadowGen();
 
 	// SVOGI
 	{
@@ -876,22 +921,21 @@ void CStandardGraphicsPipeline::Execute()
 	}
 
 	// Screen Space Reflections
-	m_pScreenSpaceReflectionsStage->Execute();
+	if (m_pScreenSpaceReflectionsStage->IsStageActive(m_renderingFlags))
+		m_pScreenSpaceReflectionsStage->Execute();
+
 	// Height Map AO
-	m_pHeightMapAOStage->Execute();
+	if (m_pHeightMapAOStage->IsStageActive(m_renderingFlags))
+		m_pHeightMapAOStage->Execute();
 
 	// Screen Space Obscurance
-	if (!CRenderer::CV_r_DeferredShadingDebugGBuffer)
-	{
+	if (m_pScreenSpaceObscuranceStage->IsStageActive(m_renderingFlags))
 		m_pScreenSpaceObscuranceStage->Execute();
-	}
 
-	if (CRenderer::CV_r_DeferredShadingTiled > 1)
-	{
+	if (m_pTiledShadingStage->IsStageActive(m_renderingFlags))
 		m_pTiledLightVolumesStage->Execute();
-	}
 
-	// Water volume caustics
+	// Water volume caustics (before m_pTiledShadingStage->Execute())
 	m_pWaterStage->ExecuteWaterVolumeCaustics();
 
 	SetPipelineFlags(GetPipelineFlags() | EPipelineFlags::NO_SHADER_FOG);
@@ -904,56 +948,69 @@ void CStandardGraphicsPipeline::Execute()
 		m_pClipVolumesStage->Prepare();
 		m_pClipVolumesStage->Execute();
 
-		if (CRenderer::CV_r_DeferredShadingTiled > 1)
-		{		
+		if (m_pTiledShadingStage->IsStageActive(m_renderingFlags))
+		{
 			m_pShadowMaskStage->Prepare();
 			m_pShadowMaskStage->Execute();
-			
+
 			m_pTiledShadingStage->Execute();
 
-			if (CRenderer::CV_r_DeferredShadingSSS)
-			{
+			if (m_pScreenSpaceSSSStage->IsStageActive(m_renderingFlags))
 				m_pScreenSpaceSSSStage->Execute(CRendererResources::s_ptexSceneTargetR11G11B10F[0]);
-			}
 		}
 	}
 
-	// Opaque forward passes
-	m_pSceneForwardStage->ExecuteOpaque();
+	{
+		PROFILE_LABEL_SCOPE("FORWARD");
+
+		// Opaque forward passes
+		m_pSceneForwardStage->ExecuteSky(CRendererResources::s_ptexHDRTarget, pZTexture);
+		m_pSceneForwardStage->ExecuteOpaque();
+	}
+
 	// Deferred ocean caustics
-	m_pWaterStage->ExecuteDeferredOceanCaustics();
+	if (m_pWaterStage->IsDeferredOceanCausticsEnabled())
+		m_pWaterStage->ExecuteDeferredOceanCaustics();
+
 	// Fog
-	m_pVolumetricFogStage->Execute();
-	m_pFogStage->Execute();
+	if (m_pVolumetricFogStage->IsStageActive(m_renderingFlags))
+		m_pVolumetricFogStage->Execute();
+
+	if (m_pFogStage->IsStageActive(m_renderingFlags))
+		m_pFogStage->Execute();
 
 	SetPipelineFlags(GetPipelineFlags() & ~EPipelineFlags::NO_SHADER_FOG);
 
 	// Clouds
-	m_pVolumetricCloudsStage->Execute();
+	if (m_pVolumetricCloudsStage->IsStageActive(m_renderingFlags))
+		m_pVolumetricCloudsStage->Execute();
+
 	// Water fog volumes
 	m_pWaterStage->ExecuteWaterFogVolumeBeforeTransparent();
-	// Transparent (below water)
-	m_pSceneForwardStage->ExecuteTransparentBelowWater();
-	// Ocean and water volumes
-	m_pWaterStage->Execute();
-	// Transparent (above water)
-	m_pSceneForwardStage->ExecuteTransparentAboveWater();
 
-	if (CRenderer::CV_r_TranspDepthFixup)
 	{
-		m_pSceneForwardStage->ExecuteTransparentDepthFixup();
-	}
+		PROFILE_LABEL_SCOPE("FORWARD");
 
-	// Half-res particles
-	if (CRenderer::CV_r_ParticlesHalfRes)
-	{
-		m_pSceneForwardStage->ExecuteTransparentLoRes(1 + crymath::clamp<int>(CRenderer::CV_r_ParticlesHalfResAmount, 0, 1));
+		// Transparent (below water)
+		m_pSceneForwardStage->ExecuteTransparentBelowWater();
+		// Ocean and water volumes
+		m_pWaterStage->Execute();
+		// Transparent (above water)
+		m_pSceneForwardStage->ExecuteTransparentAboveWater();
+
+		if (m_pSceneForwardStage->IsTransparentDepthFixupEnabled())
+			m_pSceneForwardStage->ExecuteTransparentDepthFixup();
+
+		// Half-res particles
+		if (m_pSceneForwardStage->IsTransparentLoResEnabled())
+			m_pSceneForwardStage->ExecuteTransparentLoRes(1 + crymath::clamp<int>(CRendererCVars::CV_r_ParticlesHalfResAmount, 0, 1));
 	}
 
 	// Insert fence which is used on consoles to prevent overwriting video memory
 	pRenderer->InsertParticleVideoDataFence(pRenderer->GetRenderFrameID());
 
-	m_pSnowStage->ExecuteDeferredSnowDisplacement();
+	if (m_pSnowStage->IsDeferredSnowDisplacementEnabled())
+		m_pSnowStage->ExecuteDeferredSnowDisplacement();
 
 	if (pRenderView->GetCurrentEye() == CCamera::eEye_Right ||
 		!pRenderer->GetS3DRend().IsStereoEnabled() ||
@@ -973,44 +1030,40 @@ void CStandardGraphicsPipeline::Execute()
 			m_pSceneForwardStage->ExecuteAfterPostProcessHDR();
 
 			// CRendererResources::s_ptexDisplayTarget -> CRenderOutput->m_pColorTarget (PostAA)
+			// Post effects disabled, copy diffuse to color target
 			if (!m_pPostEffectStage->Execute())
-			{
-				// Post effects disabled, copy diffuse to color target
-				CStretchRectPass::GetPass().Execute(CRendererResources::s_ptexDisplayTargetDst, pRenderView->GetRenderOutput()->GetColorTarget());
-			}
+				m_PostToFramePass->Execute(CRendererResources::s_ptexDisplayTargetDst, pRenderView->GetRenderOutput()->GetColorTarget());
 
 			// CRenderOutput->m_pColorTarget
 			m_pSceneForwardStage->ExecuteAfterPostProcessLDR();
 		}
 
-		if (gEnv->IsEditor() && !gEnv->IsEditorGameMode())
+		if (m_pSceneCustomStage->IsSelectionHighlightEnabled())
 		{
 			m_pSceneCustomStage->ExecuteHelpers();
 			m_pSceneCustomStage->ExecuteSelectionHighlight();
 		}
 
-		if (m_pSceneCustomStage->DoDebugOverlay())
-		{
+		if (m_pSceneCustomStage->IsDebugOverlayEnabled())
 			m_pSceneCustomStage->ExecuteDebugOverlay();
-		}
 
 		// Display tone mapping debugging information on the screen
-		if (CRenderer::CV_r_HDRDebug == 1 && !pRenderView->IsRecursive())
-		{
+		if (m_pToneMappingStage->IsDebugInfoEnabled())
 			m_pToneMappingStage->DisplayDebugInfo();
-		}
 	}
 	else
 	{
 		// Raw HDR copy
-		GetOrCreateUtilityPass<CStretchRectPass>()->Execute(CRendererResources::s_ptexHDRTarget, pRenderView->GetRenderOutput()->GetColorTarget());
+		m_HDRToFramePass->Execute(CRendererResources::s_ptexHDRTarget, pRenderView->GetRenderOutput()->GetColorTarget());
 	}
 
-	m_pOmniCameraStage->Execute();
+	if (m_pOmniCameraStage->IsStageActive(m_renderingFlags))
+		m_pOmniCameraStage->Execute();
+
+	if (m_pVolumetricFogStage->IsStageActive(m_renderingFlags))
+		m_pVolumetricFogStage->ResetFrame();
 
 	PROFILE_LABEL_POP("GRAPHICS_PIPELINE");
-
-	m_pVolumetricFogStage->ResetFrame();
 
 	m_renderPassScheduler.SetEnabled(false);
 	m_renderPassScheduler.Execute();

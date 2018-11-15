@@ -45,6 +45,7 @@ void CMNMUpdatesManager::UpdatePostponedChanges()
 {
 	if (m_bPostponeUpdatesForStabilization)
 	{
+		// Uses global timer instead of AI timer because this has to work in Editor mode as well (AI timer only runs in Game and Physics/AI Mode)
 		if (gEnv->pTimer->GetFrameStartTime().GetDifferenceInSeconds(m_lastUpdateTime) < gAIEnv.CVars.NavmeshStabilizationTimeToUpdate)
 		{
 			return;
@@ -58,7 +59,6 @@ void CMNMUpdatesManager::UpdatePostponedChanges()
 	{
 		if (queueAndState.status == EUpdateRequestStatus::RequestInQueue)
 		{
-			const size_t activeSize = m_activeUpdateRequestsQueue.size();
 			for (size_t i = 0; i < m_pospondedUpdateRequests.size(); ++i)
 			{
 				const size_t requestId = m_pospondedUpdateRequests[i];
@@ -74,7 +74,17 @@ void CMNMUpdatesManager::UpdatePostponedChanges()
 		}
 		else
 		{
-			//m_ignoredUpdateRequestsSet.insert(m_activeUpdateRequestsQueue.end(), m_posponedUpdateRequestsSet.begin(), m_posponedUpdateRequestsSet.end());
+			// Move update postponed requests to ignore array
+			// TODO: There's currently no way to apply ignored requests apart from Exporting the level. Add an Option to Apply ignored requests.
+			for (size_t i = 0; i < m_pospondedUpdateRequests.size(); ++i)
+			{
+				const size_t requestId = m_pospondedUpdateRequests[i];
+				TileUpdateRequest& request = m_updateRequests[requestId];
+				CRY_ASSERT(request.state == TileUpdateRequest::EState::Postponed);
+
+				request.state = TileUpdateRequest::EState::Ignored;
+				m_ignoredUpdateRequests.push_back(requestId);
+			}
 		}
 		m_pospondedUpdateRequests.clear();
 	}
@@ -171,6 +181,7 @@ void CMNMUpdatesManager::EntityChanged(int physicalEntityId, const AABB& aabb)
 		return;
 	}
 
+	// Uses global timer instead of AI timer because this has to work in Editor mode as well (AI timer only runs in Game and Physics/AI Mode)
 	m_lastUpdateTime = gEnv->pTimer->GetFrameStartTime();
 
 	auto it = m_postponedEntityUpdatesMap.find(physicalEntityId);
@@ -195,6 +206,7 @@ void CMNMUpdatesManager::WorldChanged(const AABB& aabb)
 #if NAV_MESH_REGENERATION_ENABLED
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
+	// Uses global timer instead of AI timer because this has to work in Editor mode as well (AI timer only runs in Game and Physics/AI Mode)
 	m_lastUpdateTime = gEnv->pTimer->GetFrameStartTime();
 
 	SRequestParams queueAndState = GetRequestParams(false);
@@ -240,6 +252,7 @@ CMNMUpdatesManager::EUpdateRequestStatus CMNMUpdatesManager::RequestMeshUpdate(N
 
 	if (!bImmediateUpdate)
 	{
+		// Uses global timer instead of AI timer because this has to work in Editor mode as well (AI timer only runs in Game and Physics/AI Mode)
 		m_lastUpdateTime = gEnv->pTimer->GetFrameStartTime();
 	}
 
@@ -262,6 +275,7 @@ CMNMUpdatesManager::EUpdateRequestStatus CMNMUpdatesManager::RequestMeshDifferen
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 	
+	// Uses global timer instead of AI timer because this has to work in Editor mode as well (AI timer only runs in Game and Physics/AI Mode)
 	m_lastUpdateTime = gEnv->pTimer->GetFrameStartTime();
 	
 	SRequestParams queueAndState = GetRequestParams(m_bExplicitRegenerationToggle);
@@ -562,7 +576,6 @@ void CMNMUpdatesManager::SheduleTileUpdateRequests(const SRequestParams& request
 			{
 				uint64 key = TileUpdateRequestKey(meshID, x, y, z);
 				size_t requestIdx;
-				TileUpdateRequest* pTask = nullptr;
 
 				auto iresult = m_updateRequestsMap.insert(TileUpdatesMap::value_type(key, 0));
 				if (iresult.second)
@@ -598,7 +611,6 @@ bool CMNMUpdatesManager::HasBufferedRegenerationRequests() const
 //------------------------------------------------------------------------
 void CMNMUpdatesManager::ApplyBufferedRegenerationRequests()
 {
-	const size_t activeSize = m_activeUpdateRequestsQueue.size();
 	for (size_t i = 0; i < m_ignoredUpdateRequests.size(); ++i)
 	{
 		const size_t requestId = m_ignoredUpdateRequests[i];
@@ -708,7 +720,6 @@ void CMNMUpdatesManager::DebugDraw()
 		
 		const NavigationMesh& mesh = m_pNavigationSystem->m_meshes[tileRequest.meshID];
 		const MNM::CNavMesh::SGridParams& paramsGrid = mesh.navMesh.GetGridParams();
-		const AgentType& agentType = m_pNavigationSystem->m_agentTypes[mesh.agentTypeID - 1];
 
 		AABB aabb(AABB::RESET);
 		aabb.Add(Vec3(float(tileRequest.x * paramsGrid.tileSize.x), float(tileRequest.y * paramsGrid.tileSize.y), float(tileRequest.z * paramsGrid.tileSize.z)));

@@ -1235,11 +1235,13 @@ void CCommunicationManager::StopCommunication(const CommPlayID& playID)
 
 		UpdateGlobalListeners(CommunicationCancelled, playing.actorID, m_player.GetCommunicationID(playID));
 
+#if !defined(EXCLUDE_NORMAL_LOG)
 		if (gAIEnv.CVars.DebugDrawCommunication == 5)
 		{
 			CommID commID = m_player.GetCommunicationID(playID);
 			CryLogAlways("CommunicationManager::StopCommunication: %s[%u] as playID[%u]", GetCommunicationName(commID), commID.id, playID.id);
 		}
+#endif
 
 		//Erasing first will corrupt the playID handle.
 		//m_playing.erase(it); // erase before stopping - to simplify handling in the OnCommunicationFinished
@@ -1300,11 +1302,13 @@ void CCommunicationManager::OnCommunicationFinished(const CommPlayID& playID, ui
 
 		UpdateGlobalListeners(CommunicationFinished, playing.actorID, m_player.GetCommunicationID(playID));
 
+#if !defined(EXCLUDE_NORMAL_LOG)
 		if (gAIEnv.CVars.DebugDrawCommunication == 5)
 		{
 			CommID commID = m_player.GetCommunicationID(playID);
 			CryLogAlways("CommunicationManager::OnCommunicationFinished: %s[%u] as playID[%u]", GetCommunicationName(commID), commID.id, playID.id);
 		}
+#endif
 
 		if (stateFlags != CommunicationPlayer::PlayState::FinishedAll)
 		{
@@ -1395,7 +1399,7 @@ bool CCommunicationManager::Play(const CommPlayID& playID, SCommunicationRequest
 		playing.animName = comm.variations[variation].animationName;
 		playing.skipSound = request.skipCommSound;
 		playing.minSilence = request.minSilence;
-		playing.startTime = gEnv->pTimer->GetCurrTime();
+		playing.startTime = GetAISystem()->GetFrameStartTime();
 
 		if (request.eventListener)
 			request.eventListener->OnCommunicationEvent(CommunicationStarted, request.actorID, playID);
@@ -1956,7 +1960,7 @@ void CCommunicationManager::CullPlayingCommunications()
 	// time we consider it stuck and remove it.
 
 	const float maxTimeAllowedPlaying = 7.0f;
-	float now = gEnv->pTimer->GetCurrTime();
+	CTimeValue now = GetAISystem()->GetFrameStartTime();
 
 	PlayingCommunications::iterator it = m_playing.begin();
 	PlayingCommunications::iterator end = m_playing.end();
@@ -1965,7 +1969,7 @@ void CCommunicationManager::CullPlayingCommunications()
 	{
 		PlayingCommunication& comm = it->second;
 
-		float elapsed = now - comm.startTime;
+		const float elapsed = now.GetDifferenceInSeconds(comm.startTime);
 
 		if (elapsed > maxTimeAllowedPlaying)
 		{

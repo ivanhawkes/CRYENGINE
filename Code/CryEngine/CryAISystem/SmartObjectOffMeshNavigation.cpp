@@ -277,7 +277,7 @@ void CSmartObjectOffMeshNavigation::RegisterSmartObject(CSmartObject* pSmartObje
 						MNM::OffMeshLinkPtr linkData(new OffMeshLink_SmartObject(smartObjectEntityId, pSmartObject, pSmartObjectClass, validHelpers[fromIndex], validHelpers[toIndex]));
 
 						// Register the new link with the off-mesh navigation system
-						MNM::OffMeshLinkID linkID = MNM::Constants::eOffMeshLinks_InvalidOffMeshLinkID;
+						MNM::OffMeshLinkID linkID = MNM::OffMeshLinkID();
 
 						MNM::LinkAdditionRequest request(smartObjectEntityId, targetMeshID, linkData, linkID);
 						request.SetCallback(functor(linkIDList, &CSmartObjectOffMeshNavigation::OffMeshLinkIDList::OnLinkAdditionRequestForSmartObjectServiced));
@@ -392,9 +392,6 @@ void CSmartObjectOffMeshNavigation::UpdateEditorDebugHelpers()
 	renderFlags.SetDepthWriteFlag(e_DepthWriteOff);
 
 	pRenderAux->SetRenderFlags(renderFlags);
-
-	TRegisteredObjects::const_iterator objectIt = m_registeredObjects.begin();
-	TRegisteredObjects::const_iterator endIt = m_registeredObjects.end();
 
 	const float alpha = clamp_tpl((1.0f + sinf(time)) * 0.5f, 0.25f, 0.7f);
 	const ColorB color(255, 0, 0, (uint8)(alpha * 255));

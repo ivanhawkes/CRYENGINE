@@ -132,6 +132,7 @@ add_sources("CryAISystem_navigation_uber_1.cpp"
 		"Navigation/MNM/Islands.cpp"
 		"Navigation/MNM/IslandConnections.cpp"
 		"Navigation/MNM/NavMeshQuery.cpp"
+		"Navigation/MNM/NavMeshQueryProcessing.cpp"
 		"Navigation/MNM/NavMeshQueryManager.cpp"
 		"Navigation/MNM/NavMesh.cpp"
 		"Navigation/MNM/OffGridLinks.cpp"
@@ -151,9 +152,9 @@ add_sources("CryAISystem_navigation_uber_1.cpp"
 		"Navigation/MNM/TileConnectivity.h"
 		"Navigation/MNM/NavMeshQuery.h"
 		"Navigation/MNM/NavMeshQueryDebug.h"
+		"Navigation/MNM/NavMeshQueryProcessing.h"
 		"Navigation/MNM/NavMeshQueryManager.h"
 		"Navigation/MNM/NavMesh.h"
-		"Navigation/MNM/NavMesh.inl"
 		"Navigation/MNM/MNM.h"
 		"Navigation/MNM/MNMDebugDefines.h"
 		"Navigation/MNM/OffGridLinks.h"
@@ -493,7 +494,6 @@ end_sources()
 macro(setup_CryAISystem)
 	if (ORBIS OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		target_compile_options(${THIS_PROJECT} PRIVATE
-			-Wno-unused-variable
 			-Wno-reorder
 			-Wno-unknown-pragmas
 			-Wno-parentheses
@@ -512,7 +512,6 @@ macro(setup_CryAISystem)
 		target_compile_options(${THIS_PROJECT} PRIVATE
 			-Wno-unused-function
 			-Wno-unused-value
-			-Wno-unused-variable
 			-Wno-sign-compare
 			-Wno-unused-but-set-variable
 			-Wno-misleading-indentation
