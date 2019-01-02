@@ -5,6 +5,7 @@
 
 #include "ShadowMap.h"
 #include "SceneGBuffer.h"
+#include "SceneDepth.h"
 #include "SceneForward.h"
 #include "SceneCustom.h"
 #include "AutoExposure.h"
@@ -39,7 +40,6 @@
 #include "TiledLightVolumes.h"
 #include "DebugRenderTargets.h"
 
-#include "DepthReadback.h"
 #include "Common/TypedConstantBuffer.h"
 #include "Common/Textures/TextureHelpers.h"
 #include "Common/Include_HLSL_CPP_Shared.h"
@@ -131,7 +131,7 @@ void CStandardGraphicsPipeline::Init()
 	RegisterStage<CPostEffectStage            >(m_pPostEffectStage            , eStage_PostEffet);
 	RegisterStage<CRainStage                  >(m_pRainStage                  , eStage_Rain);
 	RegisterStage<CSnowStage                  >(m_pSnowStage                  , eStage_Snow);
-	RegisterStage<CDepthReadbackStage         >(m_pDepthReadbackStage         , eStage_DepthReadback);
+	RegisterStage<CSceneDepthStage            >(m_pSceneDepthStage            , eStage_SceneDepth);
 	RegisterStage<CMobileCompositionStage     >(m_pMobileCompositionStage     , eStage_MobileComposition);
 	RegisterStage<COmniCameraStage            >(m_pOmniCameraStage            , eStage_OmniCamera);
 	RegisterStage<CDebugRenderTargetsStage    >(m_pDebugRenderTargetsStage    , eStage_DebugRenderTargets);
@@ -153,13 +153,12 @@ void CStandardGraphicsPipeline::Init()
 	m_PostToFramePass .reset(new CStretchRectPass);
 	m_FrameToFramePass.reset(new CStretchRectPass);
 
-	m_LZSubResPass[0].reset(new CDepthDownsamplePass);
-	m_LZSubResPass[1].reset(new CDepthDownsamplePass);
-	m_LZSubResPass[2].reset(new CDepthDownsamplePass);
 	m_HQSubResPass[0].reset(new CStableDownsamplePass);
 	m_HQSubResPass[1].reset(new CStableDownsamplePass);
 	m_LQSubResPass[0].reset(new CStretchRectPass);
 	m_LQSubResPass[1].reset(new CStretchRectPass);
+
+	m_AnisoVBlurPass.reset(new CAnisotropicVerticalBlurPass);
 
 	m_ResolvePass  .reset(new CStretchRectPass);
 	m_DownscalePass.reset(new CDownsamplePass);
@@ -195,9 +194,6 @@ void CStandardGraphicsPipeline::ShutDown()
 	m_PostToFramePass.reset();
 	m_FrameToFramePass.reset();
 
-	m_LZSubResPass[0].reset();
-	m_LZSubResPass[1].reset();
-	m_LZSubResPass[2].reset();
 	m_HQSubResPass[0].reset();
 	m_HQSubResPass[1].reset();
 	m_LQSubResPass[0].reset();
@@ -221,19 +217,18 @@ void CStandardGraphicsPipeline::Update(CRenderView* pRenderView, EShaderRenderin
 	m_numInvalidDrawcalls = 0;
 	GenerateMainViewConstantBuffer();
 
+	if (!m_changedCVars.GetCVars().empty())
+	{
+		CGraphicsPipeline::OnCVarsChanged(m_changedCVars);
+		m_changedCVars.Reset();
+	}
+
 	// Compile shadow renderitems (TODO: move into ShadowMap's Update())
 	if (m_pShadowMapStage->IsStageActive(renderingFlags))
 		pRenderView->PrepareShadowViews();
 
 	m_renderingFlags = renderingFlags;
 	CGraphicsPipeline::Update(pRenderView, renderingFlags);
-
-	if (!m_changedCVars.GetCVars().empty())
-	{
-		CGraphicsPipeline::OnCVarsChanged(m_changedCVars);
-
-		m_changedCVars.Reset();
-	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -499,8 +494,9 @@ bool CStandardGraphicsPipeline::FillCommonScenePassStates(const SGraphicsPipelin
 	if (pRes->m_Textures[EFTT_DIFFUSE] && pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_pTexModifier)
 		psoDesc.m_ShaderFlags_MD |= pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_nUpdateFlags;
 
+	// Merge EDeformType into EVertexModifier to save space/parameters
 	if (pRes->m_pDeformInfo)
-		psoDesc.m_ShaderFlags_MDV |= pRes->m_pDeformInfo->m_eType;
+		psoDesc.m_ShaderFlags_MDV |= EVertexModifier(pRes->m_pDeformInfo->m_eType);
 
 	psoDesc.m_ShaderFlags_MDV |= psoDesc.m_pShader->m_nMDV;
 
@@ -592,7 +588,7 @@ void CStandardGraphicsPipeline::ExecutePostAA()
 
 void CStandardGraphicsPipeline::ExecuteAnisotropicVerticalBlur(CTexture* pTex, int nAmount, float fScale, float fDistribution, bool bAlphaOnly)
 {
-	GetOrCreateUtilityPass<CAnisotropicVerticalBlurPass>()->Execute(pTex, nAmount, fScale, fDistribution, bAlphaOnly);
+	m_AnisoVBlurPass->Execute(pTex, nAmount, fScale, fDistribution, bAlphaOnly);
 }
 
 void CStandardGraphicsPipeline::ExecuteHDRPostProcessing()
@@ -775,8 +771,6 @@ void CStandardGraphicsPipeline::ExecuteMinimumForwardShading()
 
 	m_renderPassScheduler.SetEnabled(false);
 	m_renderPassScheduler.Execute();
-
-	ResetUtilityPassCache();
 }
 
 void CStandardGraphicsPipeline::ExecuteMobilePipeline()
@@ -870,25 +864,6 @@ void CStandardGraphicsPipeline::Execute()
 
 	// Wait for Shadow Map draw jobs to finish (also required for HeightMap AO and SVOGI)
 	renderItemDrawer.WaitForDrawSubmission();
-
-	if (CVrProjectionManager::IsMultiResEnabledStatic())
-		CVrProjectionManager::Instance()->ExecuteFlattenDepth(CRendererResources::s_ptexLinearDepth, CVrProjectionManager::Instance()->GetZTargetFlattened());
-
-	// Depth downsampling
-	{
-		CTexture* pSourceDepth = CRendererResources::s_ptexLinearDepth;
-
-#if CRY_PLATFORM_DURANGO
-		pSourceDepth = pZTexture;  // On Durango reading device depth is faster since it is in ESRAM
-#endif
-
-		m_LZSubResPass[0]->Execute(pSourceDepth, CRendererResources::s_ptexLinearDepthScaled[0], (pSourceDepth == pZTexture), true);
-		m_LZSubResPass[1]->Execute(CRendererResources::s_ptexLinearDepthScaled[0], CRendererResources::s_ptexLinearDepthScaled[1], false, false);
-		m_LZSubResPass[2]->Execute(CRendererResources::s_ptexLinearDepthScaled[1], CRendererResources::s_ptexLinearDepthScaled[2], false, false);
-	}
-
-	// Depth readback (for occlusion culling)
-	m_pDepthReadbackStage->Execute();
 
 	if (m_pDeferredDecalsStage->IsStageActive(m_renderingFlags))
 		m_pDeferredDecalsStage->Execute();
@@ -1067,6 +1042,4 @@ void CStandardGraphicsPipeline::Execute()
 
 	m_renderPassScheduler.SetEnabled(false);
 	m_renderPassScheduler.Execute();
-
-	ResetUtilityPassCache();
 }

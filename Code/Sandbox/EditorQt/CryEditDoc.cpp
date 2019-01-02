@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 #include "CryEditDoc.h"
 
+#include "Commands/CommandManager.h"
 #include "Controls/QuestionDialog.h"
 #include "CryEdit.h"
 #include "Dialogs/CheckOutDialog.h"
@@ -11,12 +12,14 @@
 #include "GameTokens/GameTokenManager.h"
 #include "ICommandManager.h"
 #include "IEditorImpl.h"
+#include "IObjectManager.h"
 #include "IUndoManager.h"
 #include "LensFlareEditor/LensFlareManager.h"
 #include "LevelEditor/LevelAssetType.h"
 #include "LevelEditor/LevelEditor.h"
 #include "LevelEditor/LevelFileUtils.h"
 #include "LevelIndependentFileMan.h"
+#include "LogFile.h"
 #include "Material/MaterialManager.h"
 #include "Mission.h"
 #include "MissionSelectDialog.h"
@@ -48,6 +51,7 @@
 #include <Preferences/GeneralPreferences.h>
 
 #include <CryCore/Platform/CryLibrary.h>
+#include <CryMovie/IMovieSystem.h>
 
 //#define PROFILE_LOADING_WITH_VTUNE
 

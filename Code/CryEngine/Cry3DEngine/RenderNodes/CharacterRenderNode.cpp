@@ -6,6 +6,7 @@
 #include "ObjMan.h"
 #include "3dEngine.h"
 #include <CryAnimation/ICryAnimation.h>
+#include <CryAnimation/IAttachment.h>
 
 //////////////////////////////////////////////////////////////////////////
 static bool IsMatrixValid(const Matrix34& mat)
@@ -77,8 +78,8 @@ void CCharacterRenderNode::Render(const SRendParams& inputRendParams, const SRen
 	rParms.pMaterial = m_pMaterial;
 
 	rParms.dwFObjFlags |= FOB_TRANS_MASK | FOB_DYNAMIC_OBJECT;
-	rParms.dwFObjFlags |= (GetRndFlags() & ERF_FOB_RENDER_AFTER_POSTPROCESSING) ? FOB_RENDER_AFTER_POSTPROCESSING : 0;
-	rParms.dwFObjFlags |= (GetRndFlags() & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : 0;
+	rParms.dwFObjFlags |= (GetRndFlags() & ERF_FOB_RENDER_AFTER_POSTPROCESSING) ? FOB_RENDER_AFTER_POSTPROCESSING : FOB_NONE;
+	rParms.dwFObjFlags |= (GetRndFlags() & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : FOB_NONE;
 
 	rParms.nHUDSilhouettesParams = m_nHUDSilhouettesParam;
 	

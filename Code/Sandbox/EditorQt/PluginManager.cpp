@@ -3,7 +3,12 @@
 #include "StdAfx.h"
 #include "IPlugin.h"
 #include "PluginManager.h"
+#include "LogFile.h"
+#include "IEditorImpl.h"
 #include "Util/FileUtil.h"
+#include "Util/FileEnum.h"
+#include <CryCore/StlUtils.h>
+#include <CryString/CryPath.h>
 
 typedef IPlugin* (* TPfnCreatePluginInstance)(PLUGIN_INIT_PARAM* pInitParam);
 typedef void (*TPfnDeletePluginInstance)(IPlugin* pPlugin);
@@ -201,11 +206,7 @@ bool CPluginManager::LoadPlugins(const char* pPathWithMask)
 
 		if (!hPlugin)
 		{
-			const size_t kCharsInMessageBuffer = 32768;
-			char szMessageBuffer[kCharsInMessageBuffer] = "";
-			FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), 0, szMessageBuffer, kCharsInMessageBuffer, NULL);
-
-			CryLog("Can't load plugin DLL '%s' message '%s' !", iter->m_path, szMessageBuffer);
+			CryLog("Can't load plugin DLL '%s' message '%s' !", iter->m_path, CryGetLastSystemErrorMessage());
 			continue;
 		}
 

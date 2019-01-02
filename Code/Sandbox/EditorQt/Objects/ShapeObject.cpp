@@ -3,18 +3,20 @@
 #include "StdAfx.h"
 #include "ShapeObject.h"
 
-#include "AI/NavDataGeneration/Navigation.h"
 #include "AI/AIManager.h"
+#include "AI/NavDataGeneration/Navigation.h"
 #include "Controls/PropertiesPanel.h"
+#include "GameEngine.h"
 #include "Objects/AIWave.h"
+#include "SelectionGroup.h"
 #include "Util/BoostPythonHelpers.h"
 #include "Util/Triangulate.h"
-#include "GameEngine.h"
 
 #include <Util/MFCUtil.h>
 
 #include <Controls/DynamicPopupMenu.h>
 #include <Gizmos/IGizmoManager.h>
+#include <IObjectManager.h>
 #include <LevelEditor/Tools/PickObjectTool.h>
 #include <Objects/ObjectLoader.h>
 #include <Objects/InspectorWidgetCreator.h>
@@ -23,13 +25,15 @@
 #include <Serialization/Decorators/EditorActionButton.h>
 #include <Serialization/Decorators/EditToolButton.h>
 #include <Serialization/Decorators/EntityLink.h>
+#include <Util/Math.h>
 #include <Viewport.h>
 
 #include <Cry3DEngine/I3DEngine.h>
-#include <CryAISystem/IAISystem.h>
 #include <CryAISystem/IAgent.h>
+#include <CryAISystem/IAISystem.h>
 #include <CryEntitySystem/IEntitySystem.h>
 #include <CryInput/IHardwareMouse.h>
+#include <CryRenderer/IRenderAuxGeom.h>
 
 #include <vector>
 
@@ -858,7 +862,7 @@ IMPLEMENT_DYNCREATE(CNavigationAreaObject, CShapeObject)
 #define RAY_DISTANCE 100000.0f
 
 //////////////////////////////////////////////////////////////////////////
-const float CShapeObject::m_defaultZOffset = 0.1f;
+const float CShapeObject::m_defaultZOffset = 0.0f;
 
 //////////////////////////////////////////////////////////////////////////
 CShapeObject::CShapeObject()
@@ -3750,12 +3754,31 @@ bool CGameShapeObject::CreateGameObject()
 
 void CGameShapeObject::UpdateGameArea()
 {
+	if (m_pEntity)
+	{
+		if (IEntityAreaComponent* pAreaComponent = m_pEntity->GetComponent<IEntityAreaComponent>())
+		{
+			if (!NeedAreaProxy())
+			{
+				// Make sure, that area component doesn't exist after old level loading or volume class changes
+				m_pEntity->RemoveComponent(pAreaComponent);
+			}
+		}
+	}
+
 	__super::UpdateGameArea();
 
 	if (!m_bIgnoreGameUpdate)
 	{
 		UpdateGameShape();
 	}
+}
+
+IEntityAreaComponent* CGameShapeObject::GetAreaProxy() const
+{
+	return NeedAreaProxy()
+		? __super::GetAreaProxy()
+		: nullptr;
 }
 
 void CGameShapeObject::UpdateGameShape()
@@ -3839,6 +3862,13 @@ bool CGameShapeObject::NeedExportToGame() const
 	bool exportToGame = true;
 	GetParameterValue(exportToGame, "ExportToGame");
 	return exportToGame;
+}
+
+bool CGameShapeObject::NeedAreaProxy() const
+{
+	bool needAreaProxy = true;
+	GetParameterValue(needAreaProxy, "NeedAreaProxy");
+	return needAreaProxy;
 }
 
 void CGameShapeObject::RefreshVariables()

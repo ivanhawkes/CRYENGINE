@@ -55,6 +55,7 @@
 #include "CloudBlockerRenderNode.h"
 #include "WaterRippleManager.h"
 #include "ShadowCache.h"
+#include "StatObjFoliage.h"
 
 #if defined(FEATURE_SVO_GI)
 	#include "SVO/SceneTreeManager.h"
@@ -571,6 +572,7 @@ bool C3DEngine::IsCameraAnd3DEngineInvalid(const SRenderingPassInfo& passInfo, c
 void C3DEngine::OnFrameStart()
 {
 	FUNCTION_PROFILER_3DENGINE;
+	MEMSTAT_FUNCTION_CONTEXT(EMemStatContextTypes::MSC_Other);
 
 	if (m_pPartManager)
 		m_pPartManager->OnFrameStart();
@@ -616,6 +618,7 @@ unsigned char GetOceanSurfTypeCallback(int ix, int iy)
 
 void C3DEngine::Update()
 {
+	MEMSTAT_FUNCTION_CONTEXT(EMemStatContextTypes::MSC_Other);
 	m_bProfilerEnabled = gEnv->pFrameProfileSystem->IsProfiling();
 
 	FUNCTION_PROFILER_3DENGINE;
@@ -712,6 +715,7 @@ void C3DEngine::Update()
 
 void C3DEngine::Tick()
 {
+	MEMSTAT_FUNCTION_CONTEXT(EMemStatContextTypes::MSC_Other);
 	threadID nThreadID = 0;
 
 	if (GetRenderer())
@@ -6313,8 +6317,7 @@ bool C3DEngine::IsTessellationAllowed(const CRenderObject* pObj, const SRenderin
 	GetRenderer()->EF_Query(EFQ_MeshTessellation, rendererTessellation);
 	if (pObj->m_fDistance < GetCVars()->e_TessellationMaxDistance
 	    && GetCVars()->e_Tessellation
-	    && rendererTessellation
-	    && !(pObj->m_ObjFlags & FOB_DISSOLVE)) // dissolve is not working with tessellation for now
+	    && rendererTessellation)
 	{
 		bool bAllowTessellation = true;
 

@@ -16,7 +16,6 @@
 #include <CryMemory/CryMemoryManager.h>
 #include <CryScriptSystem/IScriptSystem.h>
 #include <CryCore/ToolsHelpers/ResourceCompilerHelper.h>   
-#include "LoadingProfiler.h"
 #include "PhysRenderer.h"
 #include <CrySystem/File/IResourceManager.h>
 #include <CrySystem/Scaleform/IFlashPlayer.h>
@@ -229,7 +228,7 @@ public:                                 // -------------------------------------
 			OutputDebugString("ERROR: file wasn't registered with AddResource(): '");
 			OutputDebugString(sOutputFileName.c_str());
 			OutputDebugString("'\n");
-			assert(0);                             // asset wasn't registered yet AddResource() missing - unpredictable result might happen
+			CRY_ASSERT_MESSAGE(0, "The asset wasn't registered yet. AddResource() missing - unpredictable result might happen.");
 			return;
 		}
 
@@ -262,7 +261,7 @@ public:                                 // -------------------------------------
 			OutputDebugString("ERROR: file wasn't registered with AddResource(): '");
 			OutputDebugString(sOutputFileName.c_str());
 			OutputDebugString("'\n");
-			//assert(0);		// asset wasn't registered yet AddResource() missing - unpredictable result might happen
+			CRY_ASSERT_MESSAGE(0, "The asset wasn't registered yet. AddResource() missing - unpredictable result might happen.");
 			return;
 		}
 
@@ -725,9 +724,6 @@ struct SCryEngineStats
 	std::vector<SPeakProfilerInfo>    peaks;
 	std::vector<SModuleProfilerInfo>  moduleprofilers;
 	std::vector<SAnimationStatistics> animations;
-	#if defined(ENABLE_LOADING_PROFILER)
-	std::vector<SLoadingProfilerInfo> loading;
-	#endif
 	std::vector<SEntityInfo>          entities;
 
 	MemInfo                           memInfo;
@@ -764,7 +760,6 @@ private: // --------------------------------------------------------------------
 	void CollectMemInfo();
 	void CollectProfileStatistics();
 	void CollectAnimations();
-	void CollectLoadingData();
 
 	// Arguments:
 	//   pObj - 0 is ignored
@@ -801,7 +796,6 @@ void CEngineStats::Collect()
 	CollectEntities();
 	CollectProfileStatistics();
 	CollectAnimations();
-	//CollectLoadingData();
 }
 
 inline bool CompareMaterialsByName(IMaterial* pMat1, IMaterial* pMat2)
@@ -1023,14 +1017,6 @@ inline bool CompareAnimations(const SAnimationStatistics& p1, const SAnimationSt
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CEngineStats::CollectLoadingData()
-{
-	#if defined(ENABLE_LOADING_PROFILER)
-	CLoadingProfilerSystem::FillProfilersList(m_stats.loading);
-	#endif
-}
-
-//////////////////////////////////////////////////////////////////////////
 void CEngineStats::CollectAnimations()
 {
 	ISystem* pSystem = GetISystem();
@@ -1106,8 +1092,8 @@ void CEngineStats::CollectGeometry()
 			PREFAST_ASSUME(numStatObjs == nObjCount);
 			for (int nCurObj = 0; nCurObj < nObjCount; nCurObj++)
 				AddResource_StatObjWithLODs(pObjects[nCurObj], statObjTextureSizer, 0);
-
-			delete[]pObjects;
+			
+			delete[] pObjects;
 		}
 	}
 
@@ -1129,6 +1115,10 @@ void CEngineStats::CollectGeometry()
 
 			if (IStatObj* pEntObject = pRenderNode->GetEntityStatObj())
 			{
+				// if the object is not backed by a file, ignore it
+				if(pEntObject->GetFilePath()[0] == 0)
+					continue;
+
 				AddResource_StatObjWithLODs(pEntObject, statObjTextureSizer, 0); // Ensure object is registered
 				m_ResourceCollector.AddInstance(pEntObject->GetFilePath(), pRenderNode);
 
@@ -1759,8 +1749,6 @@ private:
 	void       ExportDependencies(CResourceCollector& stats);
 	void       ExportProfilerStatistics(SCryEngineStats& stats);
 	void       ExportAnimationStatistics(SCryEngineStats& stats);
-	void       ExportAllLoadingStatistics(SCryEngineStats& stats);
-	void       ExportLoadingStatistics(SCryEngineStats& stats);
 	void       ExportFPSBuckets();
 	void       ExportPhysEntStatistics(SCryEngineStats& stats);
 	void       ExportEntitiesStatistics(SCryEngineStats& stats);
@@ -2090,7 +2078,6 @@ void CStatsToExcelExporter::Export(XmlNodeRef Workbook, SCryEngineStats& stats)
 	ExportTimeDemoInfo();
 	ExportProfilerStatistics(stats);
 	ExportAnimationStatistics(stats);
-	//ExportAllLoadingStatistics(stats);
 	ExportPhysEntStatistics(stats);
 	ExportEntitiesStatistics(stats);
 	ExportAnimationInfo(stats);
@@ -2418,11 +2405,6 @@ void CStatsToExcelExporter::ExportStatObjects(SCryEngineStats& stats)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CStatsToExcelExporter::ExportAllLoadingStatistics(SCryEngineStats& stats)
-{
-	ExportLoadingStatistics(stats);
-}
-
 struct CrySizerNaive : ICrySizer
 {
 	CrySizerNaive() : m_count(0), m_size(0) {}
@@ -2443,82 +2425,6 @@ struct CrySizerNaive : ICrySizer
 	virtual void SetResourceCollector(IResourceCollector* pColl)       {};
 	size_t m_count, m_size;
 };
-
-//////////////////////////////////////////////////////////////////////////
-void CStatsToExcelExporter::ExportLoadingStatistics(SCryEngineStats& stats)
-{
-	#if defined(ENABLE_LOADING_PROFILER)
-	NewWorksheet("Load Stats");
-
-	FreezeFirstRow();
-
-	XmlNodeRef Column;
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 300);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-	Column = m_CurrTable->newChild("Column");
-	Column->setAttr("ss:Width", 50);
-
-	AddRow();
-	m_CurrRow->setAttr("ss:StyleID", "s25");
-	AddCell("Function");
-	AddCell("Self (sec)");
-	AddCell("Total (sec)");
-	AddCell("Calls");
-	AddCell("Memory (Mb)");
-	AddCell("Read file size");
-	AddCell("Bandwith self (Kb/s)");
-	AddCell("Bandwith total (Kb/s)");
-	AddCell("FOpens self");
-	AddCell("FReads self");
-	AddCell("FSeeks self");
-	AddCell("FOpens total");
-	AddCell("FReads total");
-	AddCell("FSeeks total");
-
-	int nRows = (int)stats.loading.size();
-	for (int i = 0; i < nRows; i++)
-	{
-		SLoadingProfilerInfo& an = stats.loading[i];
-		AddRow();
-		AddCell(an.name);
-		AddCell((float)an.selfTime);
-		AddCell((float)an.totalTime);
-		AddCell(an.callsTotal);
-		AddCell((float)an.memorySize);
-		AddCell((float)an.selfInfo.m_dOperationSize / 1024.0f);
-		float bandwithSelf = an.selfTime > 0. ? (float)(an.selfInfo.m_dOperationSize / an.selfTime / 1024.0) : 0.0f;
-		float bandwithTotal = an.totalTime > 0. ? (float)(an.totalInfo.m_dOperationSize / an.totalTime / 1024.0) : 0.0f;
-		AddCell(bandwithSelf);
-		AddCell(bandwithTotal);
-		AddCell(an.selfInfo.m_nFileOpenCount);
-		AddCell(an.selfInfo.m_nFileReadCount);
-		AddCell(an.selfInfo.m_nSeeksCount);
-		AddCell(an.totalInfo.m_nFileOpenCount);
-		AddCell(an.totalInfo.m_nFileReadCount);
-		AddCell(an.totalInfo.m_nSeeksCount);
-	}
-	#endif
-}
 
 //////////////////////////////////////////////////////////////////////////
 void CStatsToExcelExporter::ExportPhysEntStatistics(SCryEngineStats& stats)

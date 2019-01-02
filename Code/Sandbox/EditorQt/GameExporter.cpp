@@ -12,6 +12,7 @@
 #include "Material/MaterialManager.h"
 #include "Objects/EntityObject.h"
 #include "Objects/ObjectLayerManager.h"
+#include "Objects/ObjectManager.h"
 #include "Objects/ObjectPhysicsManager.h"
 #include "Particles/ParticleManager.h"
 #include "Terrain/TerrainManager.h"
@@ -22,6 +23,7 @@
 #include "CryEditDoc.h"
 #include "EntityPrototypeManager.h"
 #include "GameEngine.h"
+#include "LogFile.h"
 #include "Mission.h"
 #include "ParticleExporter.h"
 #include "ShaderCache.h"
@@ -31,7 +33,9 @@
 #include <Notifications/NotificationCenter.h>
 #include <PathUtils.h>
 #include <Preferences/GeneralPreferences.h>
+#include <UsedResources.h>
 #include <Util/CryMemFile.h>
+#include <Util/FileUtil.h>
 
 #include <CryGame/IGame.h>
 #include <CryGame/IGameFramework.h>
@@ -850,12 +854,12 @@ bool CGameExporter::ExportSurfaceTexture(CPakFile& levelPakFile, const char* szF
 	// layer 0
 	layerHeader0.eTexFormat = eTerrainPrimaryTextureFormat[m_settings.bUpdateIndirectLighting][m_settings.bHiQualityCompression];
 	layerHeader0.nSectorSizePixels = lSectorDimensions[0];
-	layerHeader0.nSectorSizeBytes = pSystem->GetIRenderer()->GetTextureFormatDataSize(lSectorDimensions[0], lSectorDimensions[0], 1, 1, layerHeader0.eTexFormat);
+	layerHeader0.nSectorSizeBytes = pSystem->GetIRenderer()->GetTextureFormatDataSize(lSectorDimensions[0], lSectorDimensions[0], 1, 1, layerHeader0.eTexFormat, eTM_None);
 
 	// layer 1
 	layerHeader1.eTexFormat = eTerrainSecondaryTextureFormat[m_settings.bUpdateIndirectLighting][m_settings.bHiQualityCompression];
 	layerHeader1.nSectorSizePixels = lSectorDimensions[1];
-	layerHeader1.nSectorSizeBytes = pSystem->GetIRenderer()->GetTextureFormatDataSize(lSectorDimensions[1], lSectorDimensions[1], 1, 1, layerHeader1.eTexFormat);
+	layerHeader1.nSectorSizeBytes = pSystem->GetIRenderer()->GetTextureFormatDataSize(lSectorDimensions[1], lSectorDimensions[1], 1, 1, layerHeader1.eTexFormat, eTM_None);
 
 	ctcFile.Write(&layerHeader0, sizeof(STerrainTextureLayerFileHeader));
 	ctcFile.Write(&layerHeader1, sizeof(STerrainTextureLayerFileHeader));

@@ -30,6 +30,7 @@
 #include "Util/CubemapUtils.h"
 #include "CryEdit.h"
 #include "GameEngine.h"
+#include "LogFile.h"
 
 // EditorCommon
 #include <Controls/QuestionDialog.h>
@@ -50,14 +51,18 @@
 #include <QT/Widgets/QWaitProgress.h>
 #include <QtUtil.h>
 #include <Serialization/QPropertyTree/QPropertyTree.h>
+#include <Util/FileUtil.h>
 #include <Viewport.h>
 
 // CryEngine
+#include <Cry3DEngine/I3DEngine.h>
+#include <CryAnimation/ICryAnimation.h>
 #include <CryCore/ToolsHelpers/GuidUtil.h>
 #include <CryEntitySystem/IEntitySystem.h>
 #include <CryNetwork/IRemoteCommand.h>
 #include <CrySchematyc/env/Elements/EnvComponent.h>
 #include <CrySchematyc/Env/IEnvRegistry.h>
+#include <CryPhysics/IPhysics.h>
 #include <DefaultComponents/Cameras/CameraComponent.h>
 
 #include <QMenu>

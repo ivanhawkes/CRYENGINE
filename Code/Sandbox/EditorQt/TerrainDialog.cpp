@@ -4,6 +4,7 @@
 #include "TerrainDialog.h"
 
 #include "Export/ExportManager.h"
+#include "Objects/SelectionGroup.h"
 #include "Terrain/Dialogs/ResizeTerrainTextureDialog.h"
 #include "Terrain/Dialogs/ResizeTerrainDialog.h"
 #include "Terrain/GenerationParam.h"
@@ -13,14 +14,18 @@
 #include "CryEditDoc.h"
 #include "GameEngine.h"
 #include "GameExporter.h"
+#include "LogFile.h"
 #include "TerrainLighting.h"
 #include "TerrainTextureExport.h"
 
 #include <Util/MFCUtil.h>
+#include <Util/FileUtil.h>
+#include <Util/ImageUtil.h>
 
 #include <Controls/QuestionDialog.h>
 #include <Dialogs/QNumericBoxDialog.h>
 #include <FileDialogs/SystemFileDialog.h>
+#include <IObjectManager.h>
 #include <LevelEditor/LevelEditorSharedState.h>
 #include <Objects/ObjectLoader.h>
 #include <Preferences/GeneralPreferences.h>

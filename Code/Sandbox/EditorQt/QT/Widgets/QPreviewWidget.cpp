@@ -2,9 +2,10 @@
 #include <StdAfx.h>
 #include "QPreviewWidget.h"
 
-#include "Material/Material.h"
 #include "Material/MaterialManager.h"
 #include "IIconManager.h"
+#include "IEditorImpl.h"
+#include "LogFile.h"
 #include "ViewportInteraction.h"
 #include "Objects/ParticleEffectObject.h"
 
@@ -14,7 +15,6 @@
 
 #include <Cry3DEngine/I3DEngine.h>
 #include <CryAnimation/ICryAnimation.h>
-#include <CryEntitySystem/IEntitySystem.h>
 #include <CryParticleSystem/IParticles.h>
 #include <CryRenderer/IRenderAuxGeom.h>
 
@@ -940,11 +940,10 @@ void QPreviewWidget::RenderObject(IMaterial* pMaterial, const SRenderingPassInfo
 	using namespace Private_PreviewWidget;
 
 	SRendParams renderParams;
-	renderParams.dwFObjFlags = 0;
 
 	auto scaledColor = m_ambientColor * m_ambientMultiplier;
 	renderParams.AmbientColor = ColorF(scaledColor.redF(), scaledColor.greenF(), scaledColor.blueF(), scaledColor.alphaF());
-	renderParams.dwFObjFlags |= FOB_TRANS_MASK /*| FOB_GLOBAL_ILLUMINATION*/ | FOB_NO_FOG /*| FOB_ZPREPASS*/;
+	renderParams.dwFObjFlags = FOB_TRANS_MASK /*| FOB_GLOBAL_ILLUMINATION*/ | FOB_NO_FOG /*| FOB_ZPREPASS*/;
 	renderParams.pMaterial = pMaterial;
 
 	Matrix34 matrix;

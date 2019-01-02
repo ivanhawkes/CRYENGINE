@@ -4,6 +4,8 @@
 
 #include "BaseLibraryManager.h"
 #include "Objects/BaseObject.h"
+#include "IEditorImpl.h"
+#include <AssetSystem/AssetType.h>
 
 class CPrefabItem;
 class CPrefabObject;
@@ -37,6 +39,19 @@ private:
 	CPrefabObjectPtr m_pPrefabObject;
 	TObjectsLinks    m_addedObjects;
 };
+
+//! \sa CAssetType::Create 
+struct SPrefabCreateParams : CAssetType::SCreateParams
+{
+	SPrefabCreateParams(const ISelectionGroup* _pGroup)
+		: pGroup(_pGroup)
+	{
+
+	}
+
+	const ISelectionGroup* pGroup;
+};
+
 
 /** Manages Prefab libraries and systems.
  */
@@ -74,7 +89,7 @@ public:
 	virtual void Serialize(XmlNodeRef& node, bool bLoading) override;
 
 	//! Make new prefab item from selection. Displays a pop-up dialog to save new prefab.
-	CPrefabItem* MakeFromSelection(CSelectionGroup* pSelectionGroup = nullptr);
+	CPrefabItem* MakeFromSelection(const CSelectionGroup* pSelectionGroup);
 
 	//! Add selected objects to prefab (which selected too)
 	void         AddSelectionToPrefab();
@@ -121,6 +136,13 @@ public:
 
 	//Updates all the assets to the latest version
 	void UpdateAllPrefabsToLatestVersion();
+
+	//Get all prefab items contained in the objects vector
+	std::vector<CPrefabItem*> GetAllPrefabItems(const std::vector<CBaseObject*>& objects);
+	//Find all instances of pPrefabItem in the current level
+	std::vector<CBaseObject*> FindAllInstancesOfItem(const CPrefabItem* pPrefabItem);
+	//Find all instances of pPrefabItem in the current level, clear the selection and add them
+	void SelectAllInstancesOfItem(const CPrefabItem* pPrefabItem);
 
 protected:
 

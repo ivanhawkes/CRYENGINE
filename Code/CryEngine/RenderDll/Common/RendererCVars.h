@@ -76,9 +76,6 @@ public:
 	static float CV_r_overrideRefreshRate;
 	static int   CV_r_overrideScanlineOrder;
 #endif
-#if CRY_PLATFORM_WINDOWS
-	static int CV_r_FullscreenPreemption;
-#endif
 
 #if CRY_PLATFORM_ANDROID
 	#define GRAPHICS_PIPELINE_MOBILE_DEFAULT_VAL 1
@@ -168,7 +165,7 @@ public:
 
 	static int CV_r_nodrawnear;
 	static int CV_r_DrawNearShadows;
-	static int CV_r_usezpass;
+	static int CV_r_UseZPass;
 	static int CV_r_VegetationSpritesTexRes;
 	static int CV_r_ShowVideoMemoryStats;
 	static int CV_r_TexturesStreamingDebugMinSize;
@@ -192,7 +189,6 @@ public:
 	static int CV_r_texturesstreampooldefragmentationmaxamount;
 
 	static int CV_r_ReprojectOnlyStaticObjects;
-	static int CV_r_ReadZBufferDirectlyFromVMEM;
 	static int CV_r_durango_async_dips;
 	static int CV_r_durango_async_dips_sync;
 	static int CV_r_D3D12SubmissionThread;
@@ -637,7 +633,7 @@ public:
 
 #if defined(CRY_PLATFORM_WINDOWS)
 	static int CV_d3d11_preventDriverThreading;
-	ICVar*     CV_r_FullscreenNativeRes;
+	ICVar*     m_CVFullscreenNativeRes;
 #endif
 
 	static int CV_r_VolumetricClouds;
@@ -662,6 +658,7 @@ public:
 	ICVar* m_CVWidth;
 	ICVar* m_CVHeight;
 	ICVar* m_CVWindowType;
+	ICVar* CV_r_ResizableWindow;
 	ICVar* m_CVColorBits;
 	ICVar* m_CVDisplayInfo;
 	//////////////////////////////////////////////////////////////////////////

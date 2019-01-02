@@ -1,9 +1,10 @@
-// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2015-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ParticleSystem.h"
 #include "ParticleEffect.h"
 #include "ParticleEmitter.h"
+#include "ParticleDebug.h"
 #include <CrySerialization/IArchiveHost.h>
 #include <CrySystem/ZLib/IZLibCompressor.h>
 #include "CryExtension/CryCreateClassInstance.h"
@@ -297,9 +298,21 @@ void CParticleSystem::ClearRenderResources()
 
 	m_emitters.clear();
 	m_newEmitters.clear();
-	m_effects.clear();
+
+	// Remove only unreferenced effects
+	for (auto it = m_effects.begin(); it != m_effects.end(); )
+	{
+		if (!it->second || it->second->Unique())
+			it = m_effects.erase(it);
+		else
+			++it;
+	}
 	m_numFrames = 0;
-	m_numClears++;
+}
+
+bool CParticleSystem::IsRuntime() const
+{
+	return !gEnv->IsEditing() && m_numFrames > 1;
 }
 
 void CParticleSystem::CheckFileAccess(cstr filename) const
@@ -326,6 +339,7 @@ IMaterial* CParticleSystem::GetFlareMaterial()
 void CParticleSystem::Reset()
 {
 	m_bResetEmitters = true;
+	m_numFrames = 0;
 }
 
 void CParticleSystem::Serialize(TSerialize ser)

@@ -57,8 +57,11 @@ CAsset* CAssetFactory::CreateFromMetadata(const char* szAssetPath, const SAssetM
 	CEditableAsset editableAsset(*pAsset);
 	for (const string& filename : metadata.files)
 	{
-		const string filepath = PathUtil::Make(path, filename.c_str());
-		editableAsset.AddFile(filepath);
+		editableAsset.AddFile(PathUtil::Make(path, filename.c_str()));
+	}
+	for (const string& filename : metadata.workFiles)
+	{
+		editableAsset.AddWorkFile(filename.c_str());
 	}
 	editableAsset.SetMetadataFile(szAssetPath);
 	editableAsset.SetDetails(metadata.details);
@@ -148,7 +151,13 @@ CAsset* CAssetFactory::LoadAssetFromInMemoryXmlFile(const char* szAssetPath, uin
 		return nullptr;
 	}
 
-	return CreateFromMetadata(szAssetPath, metadata);
+	CAsset* const pAsset = CreateFromMetadata(szAssetPath, metadata);
+	if (pAsset)
+	{
+		CEditableAsset editableAsset(*pAsset);
+		editableAsset.SetLastModifiedTime(timestamp);
+	}
+	return pAsset;
 }
 
 std::vector<CAsset*> CAssetFactory::LoadAssetsFromPakFile(const char* szArchivePath, std::function<bool(const char* szAssetRelativePath, uint64 timestamp)> predicate)

@@ -33,7 +33,12 @@ namespace DefaultQueryFilters
 		{
 			return (triangle.areaAnnotation.GetFlags() & includeFlags) && !(triangle.areaAnnotation.GetFlags() & excludeFlags);
 		}
+		inline bool PassFilter(const MNM::AreaAnnotation annotation) const
+		{
+			return (annotation.GetFlags() & includeFlags) && !(annotation.GetFlags() & excludeFlags);
+		}
 		inline float GetCostMultiplier(const MNM::Tile::STriangle& triangle) const { return 1.0f; }
+		inline float GetCostMultiplier(const MNM::AreaAnnotation annotation) const { return 1.0f; }
 
 		MNM::AreaAnnotation::value_type includeFlags;
 		MNM::AreaAnnotation::value_type excludeFlags;
@@ -42,8 +47,11 @@ namespace DefaultQueryFilters
 	// Use this one for functions that expect a templated filter type
 	extern SQueryTrianglesFilterGlobal g_globalFilter;
 
-	// Use this one for functions that expect a INavMeshQueryFilter type
+	// Use this global filter for functions that expect a INavMeshQueryFilter type
 	extern SNavMeshQueryFilterDefault g_globalFilterVirtual;
+
+	// Use this 'accept all' for functions that expect a INavMeshQueryFilter type
+	extern SAcceptAllQueryTrianglesFilter g_acceptAllFilterVirtual;
 }
 
 SERIALIZATION_ENUM_BEGIN_NESTED2(INavMeshQuery, SNavMeshQueryConfig, EOverlappingMode, "EOverlappingMode")

@@ -353,96 +353,44 @@ void SetRequestCountPeak()
 void AllocateMemoryPools()
 {
 	// Controls
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Trigger Pool");
 	CTrigger::CreateAllocator(g_poolSizes.triggers);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Parameter Pool");
 	CParameter::CreateAllocator(g_poolSizes.parameters);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Switch Pool");
 	CSwitch::CreateAllocator(g_poolSizes.switches);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System SwitchState Pool");
 	CSwitchState::CreateAllocator(g_poolSizes.states);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Environment Pool");
 	CEnvironment::CreateAllocator(g_poolSizes.environments);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Preload Pool");
 	CPreloadRequest::CreateAllocator(g_poolSizes.preloads);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Settings Pool");
 	CSetting::CreateAllocator(g_poolSizes.settings);
 
 	// Files
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Preload Connection Pool");
 	CFileEntry::CreateAllocator(g_poolSizes.files);
 
 	// System requests
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::ExecuteTrigger>");
 	SSystemRequestData<ESystemRequestType::ExecuteTrigger>::CreateAllocator(g_systemExecuteTriggerPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::ExecuteTriggerEx>");
 	SSystemRequestData<ESystemRequestType::ExecuteTriggerEx>::CreateAllocator(g_systemExecuteTriggerExPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::StopTrigger>");
 	SSystemRequestData<ESystemRequestType::StopTrigger>::CreateAllocator(g_systemStopTriggerPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::RegisterObject>");
 	SSystemRequestData<ESystemRequestType::RegisterObject>::CreateAllocator(g_systemRegisterObjectPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::ReleaseObject>");
 	SSystemRequestData<ESystemRequestType::ReleaseObject>::CreateAllocator(g_systemReleaseObjectPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::SetParameter>");
 	SSystemRequestData<ESystemRequestType::SetParameter>::CreateAllocator(g_systemSetParameterPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SSystemRequestData<ESystemRequestType::SetSwitchState>");
 	SSystemRequestData<ESystemRequestType::SetSwitchState>::CreateAllocator(g_systemSetSwitchStatePoolSize);
 
 	// Object requests
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::ExecuteTrigger>");
 	SObjectRequestData<EObjectRequestType::ExecuteTrigger>::CreateAllocator(g_objectExecuteTriggerPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::StopTrigger>");
 	SObjectRequestData<EObjectRequestType::StopTrigger>::CreateAllocator(g_objectStopTriggerPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::SetTransformation>");
 	SObjectRequestData<EObjectRequestType::SetTransformation>::CreateAllocator(g_objectSetTransformationPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::SetParameter>");
 	SObjectRequestData<EObjectRequestType::SetParameter>::CreateAllocator(g_objectSetParameterPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::SetSwitchState>");
 	SObjectRequestData<EObjectRequestType::SetSwitchState>::CreateAllocator(g_objectSetSwitchStatePoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::SetCurrentEnvironments>");
 	SObjectRequestData<EObjectRequestType::SetCurrentEnvironments>::CreateAllocator(g_objectSetCurrentEnvironmentsPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::SetEnvironment>");
 	SObjectRequestData<EObjectRequestType::SetEnvironment>::CreateAllocator(g_objectSetEnvironmentPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SObjectRequestData<EObjectRequestType::ProcessPhysicsRay>");
 	SObjectRequestData<EObjectRequestType::ProcessPhysicsRay>::CreateAllocator(g_objectProcessPhysicsRayPoolSize);
 
 	// Listener requests
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SListenerRequestData<EListenerRequestType::SetTransformation>");
 	SListenerRequestData<EListenerRequestType::SetTransformation>::CreateAllocator(g_listenerSetTransformationPoolSize);
 
 	// Callback requests
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SCallbackRequestData<ECallbackRequestType::ReportStartedEvent>");
 	SCallbackRequestData<ECallbackRequestType::ReportStartedEvent>::CreateAllocator(g_callbackReportStartedEventPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SCallbackRequestData<ECallbackRequestType::ReportFinishedEvent>");
 	SCallbackRequestData<ECallbackRequestType::ReportFinishedEvent>::CreateAllocator(g_callbackReportFinishedEventPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SCallbackRequestData<ECallbackRequestType::ReportVirtualizedEvent>");
 	SCallbackRequestData<ECallbackRequestType::ReportVirtualizedEvent>::CreateAllocator(g_callbackReportVirtualizedEventPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SCallbackRequestData<ECallbackRequestType::ReportPhysicalizedEvent>");
 	SCallbackRequestData<ECallbackRequestType::ReportPhysicalizedEvent>::CreateAllocator(g_callbackReportPhysicalizedEventPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Pool for SCallbackRequestData<ECallbackRequestType::ReportFinishedTriggerInstance>");
 	SCallbackRequestData<ECallbackRequestType::ReportFinishedTriggerInstance>::CreateAllocator(g_callbackReportFinishedTriggerInstancePoolSize);
 }
 
@@ -845,7 +793,6 @@ bool CSystem::Initialize()
 			Cry::Audio::Log(ELogType::Warning, R"(Audio Object pool size must be at least 1. Forcing the cvar "s_AudioObjectPoolSize" to 1!)");
 		}
 
-		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Object Pool");
 		CObject::CreateAllocator(g_cvars.m_objectPoolSize);
 
 		if (g_cvars.m_eventPoolSize < 1)
@@ -854,7 +801,6 @@ bool CSystem::Initialize()
 			Cry::Audio::Log(ELogType::Warning, R"(Audio Event pool size must be at least 1. Forcing the cvar "s_AudioEventPoolSize" to 1!)");
 		}
 
-		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Event Pool");
 		CEvent::CreateAllocator(g_cvars.m_eventPoolSize);
 
 		if (g_cvars.m_standaloneFilePoolSize < 1)
@@ -863,7 +809,6 @@ bool CSystem::Initialize()
 			Cry::Audio::Log(ELogType::Warning, R"(Audio Standalone File pool size must be at least 1. Forcing the cvar "s_AudioStandaloneFilePoolSize" to 1!)");
 		}
 
-		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "Audio System Standalone File Pool");
 		CStandaloneFile::CreateAllocator(g_cvars.m_standaloneFilePoolSize);
 
 		// Add the callback for the obstruction calculation.
@@ -1290,6 +1235,7 @@ void CSystem::UnloadSetting(ControlId const id, SRequestUserData const& userData
 	PushRequest(request);
 }
 
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 void CSystem::RetriggerControls(SRequestUserData const& userData /* = SAudioRequestUserData::GetEmptyObject() */)
 {
@@ -1297,6 +1243,7 @@ void CSystem::RetriggerControls(SRequestUserData const& userData /* = SAudioRequ
 	CRequest const request(&requestData, userData);
 	PushRequest(request);
 }
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 
 //////////////////////////////////////////////////////////////////////////
 void CSystem::ReloadControlsData(
@@ -1304,9 +1251,11 @@ void CSystem::ReloadControlsData(
 	char const* const szLevelName,
 	SRequestUserData const& userData /* = SAudioRequestUserData::GetEmptyObject() */)
 {
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 	SSystemRequestData<ESystemRequestType::ReloadControlsData> const requestData(szFolderPath, szLevelName);
 	CRequest const request(&requestData, userData);
 	PushRequest(request);
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1704,6 +1653,7 @@ ERequestStatus CSystem::ProcessSystemRequest(CRequest const& request)
 
 			if (pTrigger != nullptr)
 			{
+				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CObject");
 				auto const pNewObject = new CObject(pRequestData->transformation);
 				g_objectManager.RegisterObject(pNewObject);
 
@@ -2087,107 +2037,10 @@ ERequestStatus CSystem::ProcessSystemRequest(CRequest const& request)
 
 			break;
 		}
-	case ESystemRequestType::ExecutePreviewTrigger:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::ExecutePreviewTrigger> const*>(request.GetData());
-
-			CTrigger const* const pTrigger = stl::find_in_map(g_triggers, pRequestData->triggerId, nullptr);
-
-			if (pTrigger != nullptr)
-			{
-				pTrigger->Execute(g_previewObject, request.pOwner, request.pUserData, request.pUserDataOwner, request.flags);
-				result = ERequestStatus::Success;
-			}
-			else
-			{
-				result = ERequestStatus::FailureInvalidControlId;
-			}
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-
-			break;
-		}
-	case ESystemRequestType::ExecutePreviewTriggerEx:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::ExecutePreviewTriggerEx> const*>(request.GetData());
-
-			g_previewTrigger.Execute(pRequestData->triggerInfo);
-			result = ERequestStatus::Success;
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-
-			break;
-		}
-	case ESystemRequestType::StopPreviewTrigger:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			g_previewTrigger.Stop();
-			result = ERequestStatus::Success;
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-
-			break;
-		}
-	case ESystemRequestType::ResetRequestCount:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			ZeroStruct(g_requestsPerUpdate);
-			ZeroStruct(g_requestPeaks);
-			result = ERequestStatus::Success;
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-
-			break;
-		}
-	case ESystemRequestType::RetriggerControls:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			HandleRetriggerControls();
-			result = ERequestStatus::Success;
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-
-			break;
-		}
 	case ESystemRequestType::ReleasePendingRays:
 		{
 			g_objectManager.ReleasePendingRays();
 			result = ERequestStatus::Success;
-
-			break;
-		}
-	case ESystemRequestType::ReloadControlsData:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::ReloadControlsData> const*>(request.GetData());
-
-			for (auto const pObject : g_objectManager.GetObjects())
-			{
-				for (auto const pEvent : pObject->GetActiveEvents())
-				{
-					CRY_ASSERT_MESSAGE((pEvent != nullptr) && pEvent->IsPlaying(), "Invalid event during %s", __FUNCTION__);
-					pEvent->Stop();
-				}
-			}
-
-			g_xmlProcessor.ClearControlsData(EDataScope::All);
-			g_xmlProcessor.ParseSystemData();
-			g_xmlProcessor.ParseControlsData(pRequestData->folderPath, EDataScope::Global);
-
-			if (strcmp(pRequestData->levelName, "") != 0)
-			{
-				g_xmlProcessor.ParseControlsData(pRequestData->folderPath + pRequestData->levelName, EDataScope::LevelSpecific);
-			}
-
-			HandleRetriggerControls();
-
-			result = ERequestStatus::Success;
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
-			break;
-		}
-	case ESystemRequestType::DrawDebugInfo:
-		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			HandleDrawDebug();
-			result = ERequestStatus::Success;
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 
 			break;
 		}
@@ -2227,6 +2080,7 @@ ERequestStatus CSystem::ProcessSystemRequest(CRequest const& request)
 		{
 			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::RegisterObject> const*>(request.GetData());
 
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CObject");
 			auto const pNewObject = new CObject(pRequestData->transformation);
 			g_objectManager.RegisterObject(pNewObject);
 
@@ -2274,6 +2128,94 @@ ERequestStatus CSystem::ProcessSystemRequest(CRequest const& request)
 
 			break;
 		}
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	case ESystemRequestType::ExecutePreviewTrigger:
+		{
+
+			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::ExecutePreviewTrigger> const*>(request.GetData());
+
+			CTrigger const* const pTrigger = stl::find_in_map(g_triggers, pRequestData->triggerId, nullptr);
+
+			if (pTrigger != nullptr)
+			{
+				pTrigger->Execute(g_previewObject, request.pOwner, request.pUserData, request.pUserDataOwner, request.flags);
+				result = ERequestStatus::Success;
+			}
+			else
+			{
+				result = ERequestStatus::FailureInvalidControlId;
+			}
+
+			break;
+		}
+	case ESystemRequestType::ExecutePreviewTriggerEx:
+		{
+			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::ExecutePreviewTriggerEx> const*>(request.GetData());
+
+			g_previewTrigger.Execute(pRequestData->triggerInfo);
+			result = ERequestStatus::Success;
+
+			break;
+		}
+	case ESystemRequestType::StopPreviewTrigger:
+		{
+			g_previewTrigger.Stop();
+			result = ERequestStatus::Success;
+
+			break;
+		}
+	case ESystemRequestType::ResetRequestCount:
+		{
+			ZeroStruct(g_requestsPerUpdate);
+			ZeroStruct(g_requestPeaks);
+			result = ERequestStatus::Success;
+
+			break;
+		}
+	case ESystemRequestType::RetriggerControls:
+		{
+			HandleRetriggerControls();
+			result = ERequestStatus::Success;
+
+			break;
+		}
+	case ESystemRequestType::ReloadControlsData:
+		{
+
+			auto const pRequestData = static_cast<SSystemRequestData<ESystemRequestType::ReloadControlsData> const*>(request.GetData());
+
+			for (auto const pObject : g_objectManager.GetObjects())
+			{
+				for (auto const pEvent : pObject->GetActiveEvents())
+				{
+					CRY_ASSERT_MESSAGE((pEvent != nullptr) && pEvent->IsPlaying(), "Invalid event during %s", __FUNCTION__);
+					pEvent->Stop();
+				}
+			}
+
+			g_xmlProcessor.ClearControlsData(EDataScope::All);
+			g_xmlProcessor.ParseSystemData();
+			g_xmlProcessor.ParseControlsData(pRequestData->folderPath, EDataScope::Global);
+
+			if (strcmp(pRequestData->levelName, "") != 0)
+			{
+				g_xmlProcessor.ParseControlsData(pRequestData->folderPath + pRequestData->levelName, EDataScope::LevelSpecific);
+			}
+
+			HandleRetriggerControls();
+
+			result = ERequestStatus::Success;
+
+			break;
+		}
+	case ESystemRequestType::DrawDebugInfo:
+		{
+			HandleDrawDebug();
+			result = ERequestStatus::Success;
+
+			break;
+		}
+#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 	default:
 		{
 			Cry::Audio::Log(ELogType::Warning, "Unknown manager request type: %u", pBase->systemRequestType);
@@ -2633,7 +2575,7 @@ ERequestStatus CSystem::ProcessObjectRequest(CRequest const& request)
 
 				if (pEnvironment != nullptr)
 				{
-					pObject->HandleSetEnvironment(pEnvironment, pRequestData->amount);
+					pEnvironment->Set(*pObject, pRequestData->amount);
 					result = ERequestStatus::Success;
 				}
 				else
@@ -2656,22 +2598,6 @@ ERequestStatus CSystem::ProcessObjectRequest(CRequest const& request)
 			result = ERequestStatus::Success;
 			break;
 		}
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-	case EObjectRequestType::SetName:
-		{
-			auto const pRequestData = static_cast<SObjectRequestData<EObjectRequestType::SetName> const*>(request.GetData());
-
-			result = pObject->HandleSetName(pRequestData->name.c_str());
-
-			if (result == ERequestStatus::SuccessNeedsRefresh)
-			{
-				pObject->ForceImplementationRefresh(true);
-				result = ERequestStatus::Success;
-			}
-
-			break;
-		}
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
 	case EObjectRequestType::ToggleAbsoluteVelocityTracking:
 		{
 			auto const pRequestData = static_cast<SObjectRequestData<EObjectRequestType::ToggleAbsoluteVelocityTracking> const*>(request.GetData());
@@ -2725,6 +2651,22 @@ ERequestStatus CSystem::ProcessObjectRequest(CRequest const& request)
 			result = ERequestStatus::Success;
 			break;
 		}
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+	case EObjectRequestType::SetName:
+		{
+			auto const pRequestData = static_cast<SObjectRequestData<EObjectRequestType::SetName> const*>(request.GetData());
+
+			result = pObject->HandleSetName(pRequestData->name.c_str());
+
+			if (result == ERequestStatus::SuccessNeedsRefresh)
+			{
+				pObject->ForceImplementationRefresh(true);
+				result = ERequestStatus::Success;
+			}
+
+			break;
+		}
+#endif // INCLUDE_AUDIO_PRODUCTION_CODE
 	default:
 		{
 			Cry::Audio::Log(ELogType::Warning, "Unknown object request type: %u", pBase->objectRequestType);
@@ -2756,8 +2698,17 @@ ERequestStatus CSystem::ProcessListenerRequest(SRequestData const* const pPassed
 			}
 
 			result = ERequestStatus::Success;
+
+			break;
 		}
-		break;
+
+	case EListenerRequestType::None:
+		{
+			result = ERequestStatus::Success;
+
+			break;
+		}
+
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 	case EListenerRequestType::SetName:
 		{
@@ -2765,16 +2716,17 @@ ERequestStatus CSystem::ProcessListenerRequest(SRequestData const* const pPassed
 
 			pRequestData->pListener->HandleSetName(pRequestData->name.c_str());
 			result = ERequestStatus::Success;
+
+			break;
 		}
-		break;
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
-	case EListenerRequestType::None:
-		result = ERequestStatus::Success;
-		break;
 	default:
-		result = ERequestStatus::FailureInvalidRequest;
-		Cry::Audio::Log(ELogType::Warning, "Unknown listener request type: %u", pBase->listenerRequestType);
-		break;
+		{
+			result = ERequestStatus::FailureInvalidRequest;
+			Cry::Audio::Log(ELogType::Warning, "Unknown listener request type: %u", pBase->listenerRequestType);
+
+			break;
+		}
 	}
 
 	return result;
@@ -2947,6 +2899,7 @@ ERequestStatus CSystem::HandleSetImpl(Impl::IImpl* const pIImpl)
 	{
 		Cry::Audio::Log(ELogType::Warning, "nullptr passed to SetImpl, will run with the null implementation");
 
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::Impl::Null::CImpl");
 		auto const pImpl = new Impl::Null::CImpl();
 		CRY_ASSERT(pImpl != nullptr);
 		g_pIImpl = static_cast<Impl::IImpl*>(pImpl);
@@ -2983,6 +2936,7 @@ ERequestStatus CSystem::HandleSetImpl(Impl::IImpl* const pIImpl)
 
 		g_pIImpl->Release(); // Release the engine specific data.
 
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::Impl::Null::CImpl");
 		auto const pImpl = new Impl::Null::CImpl();
 		CRY_ASSERT(pImpl != nullptr);
 		g_pIImpl = static_cast<Impl::IImpl*>(pImpl);
@@ -2990,6 +2944,7 @@ ERequestStatus CSystem::HandleSetImpl(Impl::IImpl* const pIImpl)
 
 	if (g_pObject == nullptr)
 	{
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CObject");
 		g_pObject = new CObject(CTransformation::GetEmptyObject());
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
@@ -3003,7 +2958,7 @@ ERequestStatus CSystem::HandleSetImpl(Impl::IImpl* const pIImpl)
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 	g_previewObject.m_name = "Preview Object";
 	CRY_ASSERT_MESSAGE(g_previewObject.GetImplDataPtr() == nullptr, "<Audio> The preview object's impl-data must be nullptr during %s", __FUNCTION__);
-	g_previewObject.SetImplDataPtr(g_pIImpl->ConstructObject(g_previewObject.GetTransformation()));
+	g_previewObject.SetImplDataPtr(g_pIImpl->ConstructObject(g_previewObject.GetTransformation(), g_previewObject.m_name.c_str()));
 #endif // INCLUDE_AUDIO_PRODUCTION_CODE
 
 	g_objectManager.OnAfterImplChanged();
@@ -3101,7 +3056,7 @@ void CSystem::SetCurrentEnvironmentsOnObject(CObject* const pObject, EntityId co
 
 				if (pEnvironment != nullptr)
 				{
-					pObject->HandleSetEnvironment(pEnvironment, areaInfo.amount);
+					pEnvironment->Set(*pObject, areaInfo.amount);
 				}
 			}
 		}

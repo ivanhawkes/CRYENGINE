@@ -400,10 +400,10 @@ void CD3D9Renderer::SF_PrecacheShaders()
 	SDeviceObjectHelpers::THwShaderInfo shaderInfoXY16iCF32;
 	SDeviceObjectHelpers::THwShaderInfo shaderInfoGlyph;
 
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16i,     pShader, Res.m_shTech_SolidColor             , 0, 0, 0, nullptr, false);
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16iC32,  pShader, Res.m_shTech_CxformGouraudNoAddAlpha, 0, 0, 0, nullptr, false);
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16iCF32, pShader, Res.m_shTech_CxformGouraud          , 0, 0, 0, nullptr, false);
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoGlyph,     pShader, Res.m_shTech_GlyphTexture           , 0, 0, 0, nullptr, false);
+	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16i,     pShader, Res.m_shTech_SolidColor             , 0, 0, MDV_NONE, nullptr, false);
+	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16iC32,  pShader, Res.m_shTech_CxformGouraudNoAddAlpha, 0, 0, MDV_NONE, nullptr, false);
+	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16iCF32, pShader, Res.m_shTech_CxformGouraud          , 0, 0, MDV_NONE, nullptr, false);
+	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoGlyph,     pShader, Res.m_shTech_GlyphTexture           , 0, 0, MDV_NONE, nullptr, false);
 
 	auto* pInstanceXY16i     = reinterpret_cast<CHWShader_D3D::SHWSInstance*>(shaderInfoXY16i    [eHWSC_Vertex].pHwShaderInstance);
 	auto* pInstanceXY16iC32  = reinterpret_cast<CHWShader_D3D::SHWSInstance*>(shaderInfoXY16iC32 [eHWSC_Vertex].pHwShaderInstance);
@@ -496,9 +496,6 @@ void CD3D9Renderer::SF_DrawIndexedTriList(int baseVertexIndex, int minVertexInde
 {
 	CRY_PROFILE_FUNCTION(PROFILE_SYSTEM);
 
-	if (IsDeviceLost())
-		return;
-
 	CRY_ASSERT(params.vtxData->VertexFormat != IScaleformPlayback::Vertex_Glyph && params.vtxData->VertexFormat != IScaleformPlayback::Vertex_None);
 
 	SSF_ResourcesD3D& sfRes(SF_GetResources());
@@ -555,9 +552,6 @@ void CD3D9Renderer::SF_DrawLineStrip(int baseVertexIndex, int lineCount, const S
 {
 	CRY_PROFILE_FUNCTION(PROFILE_SYSTEM);
 
-	if (IsDeviceLost())
-		return;
-
 	CRY_ASSERT(params.vtxData->VertexFormat == IScaleformPlayback::Vertex_XY16i);
 
 	SSF_ResourcesD3D& sfRes(SF_GetResources());
@@ -609,9 +603,6 @@ void CD3D9Renderer::SF_DrawLineStrip(int baseVertexIndex, int lineCount, const S
 void CD3D9Renderer::SF_DrawGlyphClear(const IScaleformPlayback::DeviceData* vtxData, int baseVertexIndex, const SSF_GlobalDrawParams& __restrict params)
 {
 	FUNCTION_PROFILER_RENDER_FLAT
-
-	if (IsDeviceLost())
-		return;
 
 	CRY_ASSERT(vtxData->VertexFormat == IScaleformPlayback::Vertex_Glyph || vtxData->VertexFormat == IScaleformPlayback::Vertex_XY16i);
 
@@ -739,13 +730,7 @@ bool CD3D9Renderer::SF_UpdateTexture(int texId, int mipLevel, int numRects, cons
 	assert(texId > 0 && numRects > 0 && pRects != 0 && pSrcData != 0 && rowPitch > 0);
 
 	CTexture* pTexture(CTexture::GetByID(texId));
-	assert(pTexture);
-
-	if (pTexture->GetTextureType() != eTT_2D || pTexture->GetDstFormat() != eSrcFormat)
-	{
-		assert(0);
-		return false;
-	}
+	CRY_ASSERT(pTexture && pTexture->GetTextureType() == eTT_2D && pTexture->GetDstFormat() == eSrcFormat);
 
 	CDeviceTexture* pDevTex = pTexture->GetDevTexture();
 	if (!pDevTex)
@@ -775,34 +760,28 @@ bool CD3D9Renderer::SF_UpdateTexture(int texId, int mipLevel, int numRects, cons
 bool CD3D9Renderer::SF_ClearTexture(int texId, int mipLevel, int numRects, const SUpdateRect* pRects, const unsigned char* pData)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_SYSTEM);
-	__debugbreak();
 
-	assert(texId > 0 && numRects > 0 && pRects != 0 && pData != 0);
+	assert(texId > 0 && pData != 0);
 
 	CTexture* pTexture(CTexture::GetByID(texId));
-	assert(pTexture);
-
-	if (pTexture->GetTextureType() != eTT_2D)
-	{
-		assert(0);
-		return false;
-	}
+	CRY_ASSERT(pTexture && pTexture->GetTextureType() == eTT_2D);
 
 	CDeviceTexture* pDevTex = pTexture->GetDevTexture();
 	if (!pDevTex)
 		return false;
 
-	// TODO: batch rect clears
+	GPUPIN_DEVICE_TEXTURE(GetPerformanceDeviceContext(), pDevTex);
 	const ColorF clearValue(pData[0], pData[1], pData[2], pData[3]);
-	for (int i(0); i < numRects; ++i)
+	if (!numRects || !pRects)
 	{
-		if (!pRects)
+		CDeviceCommandListRef commandList = GetDeviceObjectFactory().GetCoreCommandList();
+		commandList.GetGraphicsInterface()->ClearSurface(pTexture->GetSurface(0, mipLevel), clearValue);
+	}
+	else
+	{
+		for (int i(0); i < numRects; ++i)
 		{
-			CDeviceCommandListRef commandList = GetDeviceObjectFactory().GetCoreCommandList();
-			commandList.GetGraphicsInterface()->ClearSurface(pTexture->GetSurface(0, mipLevel), clearValue);
-		}
-		else
-		{
+			// TODO: batch rect clears
 			D3D11_RECT box = { static_cast<LONG>(pRects[i].dstX),
 							   static_cast<LONG>(pRects[i].dstY),
 							   static_cast<LONG>(pRects[i].dstX + pRects[i].width),

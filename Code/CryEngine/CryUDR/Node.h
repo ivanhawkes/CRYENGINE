@@ -34,14 +34,19 @@ namespace Cry
 			virtual INode&                           AddChild_FindLastAutoIncrementedUniqueNameOrCreateIfNotYetExisting(const char* szChildNodeNamePrefix) override;
 			virtual INode&                           AddChild_CurrentSystemFrame() override;
 			virtual IRenderPrimitiveCollection&      GetRenderPrimitiveCollection() override;
+			virtual ILogMessageCollection&           GetLogMessageCollection() override;
 			virtual const char*                      GetName() const override;
 			virtual const INode*                     GetParent() const override;
 			virtual size_t                           GetChildCount() const override;
 			virtual const INode&                     GetChild(size_t index) const override;
 			virtual void                             DrawRenderPrimitives(bool recursivelyDrawChildrenAsWell) const override;
+			virtual void                             VisitLogMessages(ILogMessageVisitor& visitor, bool bRecurseDownAllChildren) const override;
 			// ~INode
 
 			void                                     Serialize(Serialization::IArchive& ar);
+			CNode*                                   GetParentWritable() const;
+			CNode*                                   FindNodeByINode(const INode& nodeToSearchFor);
+			void                                     RemoveChild(size_t index);
 			void                                     RemoveChildren();
 			void                                     GatherStatisticsRecursively(SStatistics& outStats) const;
 			void                                     PrintHierarchyToConsoleRecursively(int indentLevel) const;
@@ -55,7 +60,6 @@ namespace Cry
 
 			CNode*                                   FindChildNode(const char* szChildNodeName) const;
 			CNode&                                   AddChildNode(const char* szChildNodeName);
-			void                                     RemoveChild(size_t index);
 			void                                     SetOwningTreeInChildrenRecursively();
 			void                                     SetParentInChildrenRecursively();
 			void                                     BuildFastLookupTable();
@@ -63,9 +67,10 @@ namespace Cry
 		private:
 
 			const CTree*                             m_pOwningTree;
-			const CNode*                             m_pParent;
+			CNode*                                   m_pParent;
 			string                                   m_name;
 			CRenderPrimitiveCollection               m_renderPrimitives;
+			CLogMessageCollection                    m_logMessageCollection;
 			std::vector <std::unique_ptr<CNode>>     m_children;
 			std::map <string, size_t>                m_childrenByName;   // for fast lookup in FindChildNode(); key = child name, value = index into m_children[]
 			std::map <string, int>                   m_uniqueNamesCache;    // for keeping track of when a unique name is to be generated using an integer-suffix that will auto-increment; key = name prefix, value = last auto-incremented integer value

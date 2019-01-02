@@ -23,7 +23,6 @@ class CCpuFeatures;
 class CCryPluginManager;
 class CDownloadManager;
 class CJSONUtils;
-class CLoadingProfilerSystem;
 class CLocalizedStringsManager;
 class CManualFrameStepController;
 class CMTRand_int32;
@@ -34,7 +33,6 @@ class CrySizerStats;
 class CServerThrottle;
 class CStreamEngine;
 class CThreadManager;
-class CThreadProfiler;
 class CUserAnalyticsSystem;
 class CXmlUtils;
 class ICrySizer;
@@ -108,7 +106,6 @@ class CLUADbg;
 struct SDefaultValidator;
 class CPhysRenderer;
 class CVisRegTest;
-class CThreadProfiler;
 class CImeManager;
 
 #define PHSYICS_OBJECT_ENTITY    0
@@ -184,6 +181,8 @@ struct SSystemCVars
 #endif
 
 	int sys_vr_support;
+
+	int memReplayRecordCallstacks;
 };
 extern SSystemCVars g_cvars;
 
@@ -351,7 +350,6 @@ public:
 	IPhysRenderer*               GetIPhysRenderer() override;
 	IFrameProfileSystem*         GetIProfileSystem() override         { return &m_FrameProfileSystem; }
 	virtual IDiskProfiler*       GetIDiskProfiler() override          { return m_pDiskProfiler; }
-	CThreadProfiler*             GetThreadProfiler()                  { return m_pThreadProfiler; }
 	INameTable*                  GetINameTable() override             { return m_env.pNameTable; }
 	IBudgetingSystem*            GetIBudgetingSystem() override       { return(m_pIBudgetingSystem); }
 	IFlowSystem*                 GetIFlowSystem() override            { return m_env.pFlowSystem; }
@@ -378,6 +376,7 @@ public:
 	IZLibDecompressor*           GetIZLibDecompressor() override    { return m_pIZLibDecompressor; }
 	ILZ4Decompressor*            GetLZ4Decompressor() override      { return m_pILZ4Decompressor; }
 	CRY_HWND                     GetHWND() override                 { return m_hWnd; }
+	CRY_HWND                     GetActiveHWND() override           { return m_hWndActive; }
 	//////////////////////////////////////////////////////////////////////////
 	// retrieves the perlin noise singleton instance
 	CPNoise3*      GetNoiseGen() override;
@@ -535,8 +534,6 @@ private:
 
 	// Release all resources.
 	void ShutDown();
-
-	void SleepIfInactive();
 
 	//! @name Initialization routines
 	//@{
@@ -845,7 +842,6 @@ private: // ------------------------------------------------------
 	ICVar* m_sys_max_step;
 	ICVar* m_sys_enable_budgetmonitoring;
 	ICVar* m_sys_memory_debug;
-	ICVar* m_sys_preload;
 	ICVar* m_sys_use_Mono;
 
 	//	ICVar *m_sys_filecache;
@@ -866,6 +862,8 @@ private: // ------------------------------------------------------
 #endif // defined(CVARS_WHITELIST)
 
 	CRY_HWND m_hWnd = nullptr;
+	CRY_HWND m_hWndActive = nullptr;
+	bool m_throttleFPS = false;
 
 	// this is the memory statistics that is retained in memory between frames
 	// in which it's not gathered
@@ -874,7 +872,6 @@ private: // ------------------------------------------------------
 
 	CFrameProfileSystem          m_FrameProfileSystem;
 
-	CThreadProfiler*             m_pThreadProfiler;
 	IDiskProfiler*               m_pDiskProfiler;
 
 	std::unique_ptr<IPlatformOS> m_pPlatformOS;
@@ -909,8 +906,6 @@ private: // ------------------------------------------------------
 	bool   m_bNoUpdate;
 
 	uint64 m_nUpdateCounter;
-
-	int    sys_ProfileLevelLoading, sys_ProfileLevelLoadingDump;
 
 	// MT random generator
 	CryCriticalSection m_mtLock;
@@ -949,12 +944,6 @@ public:
 
 	void                        Deltree(const char* szFolder, bool bRecurse);
 	void                        UpdateMovieSystem(const int updateFlags, const float fFrameTime, const bool bPreUpdate);
-
-	// level loading profiling
-	virtual void                          OutputLoadingTimeStats() override;
-	virtual struct SLoadingTimeContainer* StartLoadingSectionProfiling(CLoadingTimeProfiler* pProfiler, const char* szFuncName) override;
-	virtual void                          EndLoadingSectionProfiling(CLoadingTimeProfiler* pProfiler) override;
-	virtual const char*                   GetLoadingProfilerCallstack() override;
 
 	//////////////////////////////////////////////////////////////////////////
 	virtual CBootProfilerRecord* StartBootSectionProfiler(const char* name, const char* args, EProfileDescription type) override;

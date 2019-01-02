@@ -19,6 +19,7 @@
 #include "Material/MaterialFXGraphMan.h"
 
 #include "GameEngine.h"
+#include "LogFile.h"
 
 #include "HyperGraph/HyperGraphManager.h"
 #include "HyperGraph/FlowGraphManager.h"
@@ -48,9 +49,11 @@
 #include "Controls/PropertyCtrl.h"
 #include "Controls/SharedFonts.h"
 #include "Util/MFCUtil.h"
+#include "Util/FileUtil.h"
 
 #include "Objects/EntityObject.h"
 #include "Objects/PrefabObject.h"
+#include "Commands/CommandManager.h"
 
 namespace
 {

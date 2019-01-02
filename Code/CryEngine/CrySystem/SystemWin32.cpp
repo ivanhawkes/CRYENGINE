@@ -1089,53 +1089,6 @@ void CSystem::DumpWinHeaps()
 #endif
 }
 
-// Make system error message string
-//////////////////////////////////////////////////////////////////////////
-//! \return pointer to the null terminated error string or 0
-static const char* GetLastSystemErrorMessage()
-{
-#if CRY_PLATFORM_WINDOWS
-	DWORD dwError = GetLastError();
-
-	static char szBuffer[512]; // function will return pointer to this buffer
-
-	if (dwError)
-	{
-		LPVOID lpMsgBuf = 0;
-
-		if (FormatMessage(
-		      FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		      FORMAT_MESSAGE_FROM_SYSTEM |
-		      FORMAT_MESSAGE_IGNORE_INSERTS,
-		      NULL,
-		      GetLastError(),
-		      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), // Default language
-		      (LPTSTR) &lpMsgBuf,
-		      0,
-		      NULL))
-		{
-			cry_strcpy(szBuffer, (char*)lpMsgBuf);
-			LocalFree(lpMsgBuf);
-		}
-		else return 0;
-
-		//#else
-
-		//cry_sprintf(szBuffer, "Win32 ERROR: %i", dwError);
-		//OutputDebugString(szBuffer);
-
-		//#endif
-
-		return szBuffer;
-	}
-#else
-	return 0;
-
-#endif // CRY_PLATFORM_WINDOWS
-
-	return 0;
-}
-
 //////////////////////////////////////////////////////////////////////////
 void CSystem::FatalError(const char* format, ...)
 {
@@ -1149,7 +1102,7 @@ void CSystem::FatalError(const char* format, ...)
 	va_end(ArgList);
 
 	// get system error message before any attempt to write into log
-	const char* szSysErrorMessage = GetLastSystemErrorMessage();
+	const char* szSysErrorMessage = CryGetLastSystemErrorMessage();
 
 	CryLogAlways("=============================================================================");
 	CryLogAlways("*ERROR");
@@ -1159,10 +1112,6 @@ void CSystem::FatalError(const char* format, ...)
 
 	if (szSysErrorMessage)
 		CryLogAlways("<CrySystem> Last System Error: %s", szSysErrorMessage);
-
-	if (const char* pLoadingProfilerCallstack = GetLoadingProfilerCallstack())
-		if (pLoadingProfilerCallstack[0])
-			CryLogAlways("<CrySystem> LoadingProfilerCallstack: %s", pLoadingProfilerCallstack);
 
 	assert(szBuffer[0] >= ' ');
 	//	strcpy(szBuffer,szBuffer+1);	// remove verbosity tag since it is not supported by ::MessageBox

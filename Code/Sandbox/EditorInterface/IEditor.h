@@ -383,7 +383,7 @@ struct IEditor
 	virtual CPrefabManager*        GetPrefabManager() = 0;
 	virtual const char*            GetLevelName() = 0;
 	virtual const char*            GetLevelPath() = 0;
-	virtual void                   StartObjectCreation(const char* type, const char* file = nullptr) = 0;
+	virtual bool                   StartObjectCreation(const char* type, const char* file = nullptr) = 0;
 	virtual CHeightmap*            GetHeightmap() = 0;
 	// end level editor methods
 
@@ -444,7 +444,6 @@ struct IEditor
 	virtual void             AddWaitProgress(CWaitProgress* pProgress) = 0;
 	virtual void             RemoveWaitProgress(CWaitProgress* pProgress) = 0;
 	virtual void             OnObjectContextMenuOpened(CPopupMenuItem* pMenu, const CBaseObject* pObject) = 0;
-	virtual void             OnPrefabMake() = 0;
 	virtual IEditorMaterial* LoadMaterial(const string& name) = 0;
 	virtual void             OnRequestMaterial(IMaterial* pMatInfo) = 0;
 	virtual bool             IsCGroup(CBaseObject* pObject) = 0;

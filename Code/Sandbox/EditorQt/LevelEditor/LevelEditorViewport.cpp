@@ -20,9 +20,9 @@
 #include <Gizmos/Gizmo.h>
 #include <LevelEditor/Tools/EditTool.h>
 #include <Objects/BaseObject.h>
+#include "Objects/ObjectManager.h"
 #include <Preferences/SnappingPreferences.h>
 #include <Preferences/ViewportPreferences.h>
-#include <DragDrop.h>
 #include <ILevelEditor.h>
 #include <IObjectManager.h>
 #include <IUndoManager.h>
@@ -30,6 +30,7 @@
 #include <QtUtil.h>
 #include <RenderLock.h>
 #include <ViewportInteraction.h>
+#include <Util/AffineParts.h>
 
 #include <Cry3DEngine/I3DEngine.h>
 #include <CryAISystem/IAISystem.h>
@@ -79,16 +80,16 @@ static CPopupMenuItem& AddCheckbox(CPopupMenuItem& menu, const char* text, int* 
 
 namespace Private_AssetDrag
 {
-static CAsset* GetAsset(const CDragDropData* pDragDropData)
+static CAsset* GetAsset(const CDragDropData& pDragDropData)
 {
-	if (!pDragDropData->HasCustomData("Assets"))
+	if (!pDragDropData.HasCustomData("Assets"))
 	{
 		return nullptr;
 	}
 
 	QVector<quintptr> assets;
 	{
-		QByteArray byteArray = pDragDropData->GetCustomData("Assets");
+		QByteArray byteArray = pDragDropData.GetCustomData("Assets");
 		QDataStream stream(byteArray);
 		stream >> assets;
 	}
@@ -103,7 +104,7 @@ static CAsset* GetAsset(const CDragDropData* pDragDropData)
 	return reinterpret_cast<CAsset*>(assets[0]);
 }
 
-static bool TryObjectCreate(const CDragDropData* pDragDropData, string& className)
+static bool FindClassName(const CDragDropData* pDragDropData, string& className)
 {
 	if (!pDragDropData->HasCustomData("EngineFilePaths") || !pDragDropData->HasCustomData("ObjectClassNames"))
 	{
@@ -140,7 +141,7 @@ static bool TryObjectCreate(const CDragDropData* pDragDropData, string& classNam
 CLevelEditorViewport::CLevelEditorViewport()
 	: m_camFOV(gViewportPreferences.defaultFOV)
 	, m_headerWidget(nullptr)
-{	
+{
 }
 
 CLevelEditorViewport::~CLevelEditorViewport()
@@ -161,59 +162,41 @@ bool CLevelEditorViewport::DragEvent(EDragEvent eventId, QEvent* event, int flag
 	bool result = CRenderViewport::DragEvent(eventId, event, flags);
 	if (!result)
 	{
-		return AssetDragEvent(eventId, event, flags);
+		return HandleDragEvent(eventId, event, flags);
 	}
 	return result;
 }
 
-bool CLevelEditorViewport::AssetDragEvent(EDragEvent eventId, QEvent* event, int flags)
+bool CLevelEditorViewport::HandleDragEvent(EDragEvent eventId, QEvent* event, int flags)
 {
-	using namespace Private_AssetDrag;
 
-	QDropEvent* const pDragEvent = eventId != EDragEvent::eDragLeave ? (QDropEvent*)event : nullptr;
-	const CDragDropData* const pDragDropData = pDragEvent != nullptr ? CDragDropData::FromMimeData(pDragEvent->mimeData()) : nullptr;
+	CDragDropData::ClearDragTooltip(GetViewWidget());
+
+	//just return if we are leaving from drop action
+	if (eventId == EDragEvent::eDragLeave)
+	{
+		return true;
+	}
+
+	//Get drag&drop info from generic QEvent
+	QDropEvent* const pDragEvent = (QDropEvent*)event;
+	const CDragDropData* const pDragDropData = CDragDropData::FromMimeData(pDragEvent->mimeData());
 
 	string className;
-	CAsset* pAsset = pDragDropData != nullptr ? GetAsset(pDragDropData) : nullptr;
-	if (pAsset != nullptr)
+
+	//Check if this event is an asset drop
+	if (DropHasAsset(*pDragDropData))
 	{
-		QDropEvent* drop = static_cast<QDropEvent*>(event);
-		CPoint point(drop->pos().x(), drop->pos().y());
-		HitContext hitContext(this);
-		string dragText;
-		if (HitTest(point, hitContext) && hitContext.object != nullptr && hitContext.object->CanApplyAsset(*pAsset, &dragText))
+		//Check if we can apply this asset to an object
+		if (ApplyAsset(*pDragDropData, pDragEvent, eventId))
 		{
-			switch (eventId)
-			{
-				case eDragMove:
-				{
-					QDragMoveEvent* dragMove = static_cast<QDragMoveEvent*>(event);
-
-					CDragDropData::ShowDragText(GetViewWidget(), QString(dragText));
-				}
-				break;
-				case eDragLeave:
-				{
-					CDragDropData::ClearDragTooltip(GetViewWidget());
-				}
-				break;
-				case eDrop:
-				{
-					auto action = drop->proposedAction();
-					drop->acceptProposedAction();
-
-					CUndo undo("Apply asset");
-					hitContext.object->ApplyAsset(*pAsset, &hitContext);
-				}
-				break;
-			}
-
-			event->accept();
-
 			return true;
 		}
 
+		//Check if this asset has a class name that can be instantiated in the level
+		CAsset* pAsset = Private_AssetDrag::GetAsset(*pDragDropData);
 		className = pAsset->GetType()->GetObjectClassName();
+
 		if (className.empty())
 		{
 			if (eventId == eDragEnter)
@@ -225,24 +208,29 @@ bool CLevelEditorViewport::AssetDragEvent(EDragEvent eventId, QEvent* event, int
 			return false;
 		}
 	}
-	else if (pDragDropData != nullptr && !TryObjectCreate(pDragDropData, className))
+
+	//The asset does not have a valid class name, search in the dragDrop data for a class name that we can instantiate
+	if (className.empty())
+	{
+		if (pDragDropData && !Private_AssetDrag::FindClassName(pDragDropData, className))
+		{
+			return false;
+		}
+	}
+
+	//Create the ObjectCreateTool too for this class
+	if (!GetIEditor()->StartObjectCreation(className.c_str(), nullptr))
 	{
 		return false;
 	}
 
-	GetIEditor()->StartObjectCreation(className.c_str(), nullptr);
-	CEditTool* const pEditTool = GetIEditor()->GetLevelEditorSharedState()->GetEditTool();
-	if (!pEditTool)
-	{
-		return false;
-	}
-
+	//If we destroy the drag object we want to stop creation
 	QDrag* const pDrag = pDragEvent->source()->findChild<QDrag*>();
 	assert(pDrag);
 	QObject::connect(pDrag, &QObject::destroyed, [](auto)
 	{
-		CEditTool* editTool = GetIEditor()->GetLevelEditorSharedState()->GetEditTool();
-		CObjectCreateTool* objectCreateTool = editTool ? DYNAMIC_DOWNCAST(CObjectCreateTool, editTool) : nullptr;
+		CEditTool* pEditTool = GetIEditor()->GetLevelEditorSharedState()->GetEditTool();
+		CObjectCreateTool* objectCreateTool = pEditTool ? DYNAMIC_DOWNCAST(CObjectCreateTool, pEditTool) : nullptr;
 
 		if (objectCreateTool)
 		{
@@ -250,19 +238,65 @@ bool CLevelEditorViewport::AssetDragEvent(EDragEvent eventId, QEvent* event, int
 		}
 	});
 
-	return pEditTool->OnDragEvent(this, eventId, event, flags);
+	//pass drag info to current edit tool
+	return GetIEditor()->GetLevelEditorSharedState()->GetEditTool()->OnDragEvent(this, eventId, event, flags);
+}
+
+bool CLevelEditorViewport::DropHasAsset(const CDragDropData& dragDropData)
+{
+	return Private_AssetDrag::GetAsset(dragDropData);
+}
+
+bool CLevelEditorViewport::ApplyAsset(const CDragDropData& dragDropData, QDropEvent* pDropEvent, EDragEvent eventId)
+{
+	CPoint point(pDropEvent->pos().x(), pDropEvent->pos().y());
+	HitContext hitContext(this);
+
+	CAsset* pAsset = Private_AssetDrag::GetAsset(dragDropData);
+	//find if we are hitting an object at "point", if we are check if the asset can be applied
+	if (HitTest(point, hitContext) && hitContext.object != nullptr && hitContext.object->CanApplyAsset(*pAsset))
+	{
+		string dragText;
+		dragText.Format("Assign %s \"%s\" to \"%s\"", pAsset->GetType()->GetUiTypeName(), pAsset->GetName(), hitContext.object->GetName());
+		switch (eventId)
+		{
+		case eDragMove:
+			{
+				const QDragMoveEvent* dragMove = static_cast<const QDragMoveEvent*>(pDropEvent);
+				CDragDropData::ShowDragText(GetViewWidget(), QString(dragText));
+			}
+			break;
+		case eDrop:
+			{
+				string undoDescription;
+				undoDescription.Format("Apply %s \"%s\" to \"%s\"", pAsset->GetType()->GetUiTypeName(), pAsset->GetName(), hitContext.object->GetName());
+				CUndo undo(undoDescription.c_str());
+				hitContext.object->ApplyAsset(*pAsset, &hitContext);
+
+				//accept action to complete drop operation
+				pDropEvent->acceptProposedAction();
+			}
+			break;
+		}
+
+		pDropEvent->accept();
+
+		return true;
+	}
+
+	return false;
 }
 
 void CLevelEditorViewport::PopulateMenu(CPopupMenuItem& menu)
 {
 	{
 		ICommandManager* pCommandManager = GetIEditor()->GetICommandManager();
-		CPopupMenuItem& itemZ = menu.AddCommand("Speed Height-Relative", "camera.toggle_speed_height_relative");
-		pCommandManager->GetAction("camera.toggle_speed_height_relative")->setChecked(s_cameraPreferences.speedHeightRelativeEnabled);
-		CPopupMenuItem& itemT = menu.AddCommand("Terrain Collision", "camera.toggle_terrain_collisions");
-		pCommandManager->GetAction("camera.toggle_terrain_collisions")->setChecked(s_cameraPreferences.terrainCollisionEnabled);
-		CPopupMenuItem& itemO = menu.AddCommand("Object Collision", "camera.toggle_object_collisions");
-		pCommandManager->GetAction("camera.toggle_object_collisions")->setChecked(s_cameraPreferences.objectCollisionEnabled);
+		CPopupMenuItem& itemZ = menu.AddCommand("camera.toggle_speed_height_relative");
+		pCommandManager->GetAction("camera.toggle_speed_height_relative")->setChecked(s_cameraPreferences.IsSpeedHeightRelativeEnabled());
+		CPopupMenuItem& itemT = menu.AddCommand("camera.toggle_terrain_collisions");
+		pCommandManager->GetAction("camera.toggle_terrain_collisions")->setChecked(s_cameraPreferences.IsTerrainCollisionEnabled());
+		CPopupMenuItem& itemO = menu.AddCommand("camera.toggle_object_collisions");
+		pCommandManager->GetAction("camera.toggle_object_collisions")->setChecked(s_cameraPreferences.IsObjectCollisionEnabled());
 		menu.AddSeparator();
 	}
 
@@ -490,8 +524,7 @@ void CLevelEditorViewport::OnRender(SDisplayContext& context)
 			Matrix34::CreateRotationX(DEG2RAD(90)),
 			Matrix34::CreateRotationX(DEG2RAD(-90)),
 			Matrix34::CreateIdentity(),
-			Matrix34::CreateRotationZ(DEG2RAD(180))
-		};
+			Matrix34::CreateRotationZ(DEG2RAD(180)) };
 
 		CVarAutoSetAndRestore<int> intCvars[] = {
 			CVarAutoSetAndRestore<int>("r_motionblur",               0),
@@ -500,14 +533,12 @@ void CLevelEditorViewport::OnRender(SDisplayContext& context)
 			CVarAutoSetAndRestore<int>("e_clouds",                   0),
 			CVarAutoSetAndRestore<int>("r_sunshafts",                0),
 			CVarAutoSetAndRestore<int>("e_CoverageBuffer",           0),
-			CVarAutoSetAndRestore<int>("e_StatObjBufferRenderTasks", 0)
-		};
+			CVarAutoSetAndRestore<int>("e_StatObjBufferRenderTasks", 0) };
 		CVarAutoSetAndRestore<float> floatCvars[] = {
 			CVarAutoSetAndRestore<float>("e_LodRatio",                1000.0f),
 			CVarAutoSetAndRestore<float>("e_ViewDistRatio",           10000.0f),
 			CVarAutoSetAndRestore<float>("e_ViewDistRatioVegetation", 10000.0f),
-			CVarAutoSetAndRestore<float>("t_scale",                   0.0f)
-		};
+			CVarAutoSetAndRestore<float>("t_scale",                   0.0f) };
 
 		m_engine->Tick();
 		m_engine->Update();
@@ -711,7 +742,7 @@ void CLevelEditorViewport::RenderSnappingGrid(SDisplayContext& context)
 			int nSteps = pos_directed_rounding(180.0f / step);
 			for (int i = 0; i < nSteps; ++i)
 			{
-				AngleAxis rot(i * step * gf_PI / 180.0, rotAxis);
+				AngleAxis rot(i* step* gf_PI / 180.0, rotAxis);
 				Vec3 dir = rot * anotherAxis;
 				context.DrawLine(p, p + dir,
 				                 ColorF(0, 0, 0, alphaMax), ColorF(0, 0, 0, alphaMin));

@@ -2,9 +2,11 @@
 
 #include "StdAfx.h"
 #include "AIManager.h"
+#include "IEditorImpl.h"
 
 #include "GameExporter.h"
 #include "AiBehaviorLibrary.h"
+#include <IObjectManager.h>
 
 #include <CryAISystem/IAgent.h>
 #include <CryAISystem/IAISystem.h>
@@ -28,6 +30,7 @@
 #include "Notifications/NotificationCenter.h"
 
 #include <Preferences/ViewportPreferences.h>
+#include <Util/FileUtil.h>
 
 #define GRAPH_FILE_FILTER         "Graph XML Files (*.xml)|*.xml"
 
@@ -104,6 +107,8 @@ CAIManager::CAIManager()
 	, m_MNMRegenerationPausedCount(0)
 	, m_navigationUpdatePaused(false)
 	, m_resumeMNMRegenWhenPumpedPhysicsEventsAreFinished(false)
+	, m_frameStartTime(0.0f)
+	, m_frameDeltaTime(0.0f)
 {
 	m_pAISystem = nullptr;
 	m_pBehaviorLibrary = new CAIBehaviorLibrary;
@@ -147,10 +152,13 @@ void CAIManager::Init(ISystem* system)
 	LoadNavigationEditorSettings();
 }
 
-void CAIManager::Update(uint32 updateFlags)
+void CAIManager::Update(const CTimeValue frameStartTime, const float frameDeltaTime, uint32 updateFlags)
 {
 	if (!m_pAISystem)
 		return;
+
+	m_frameStartTime = frameStartTime;
+	m_frameDeltaTime = frameDeltaTime;
 
 	if (updateFlags & ESYSUPDATE_EDITOR)
 	{
@@ -832,7 +840,7 @@ void CAIManager::NavigationContinuousUpdate()
 			// By resuming paused WorldMonitor here after physics event we skip overflowing the WorldMonitor right after level load.
 			StartNavigationWorldMonitorIfNeeded();
 		}
-		pNavigationSystem->Update();
+		pNavigationSystem->Update(m_frameStartTime, m_frameDeltaTime);
 	}
 }
 

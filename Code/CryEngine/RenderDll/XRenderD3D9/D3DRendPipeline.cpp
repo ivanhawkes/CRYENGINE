@@ -29,8 +29,8 @@
 #include "GraphicsPipeline/ComputeSkinning.h"
 #include "GraphicsPipeline/SceneGBuffer.h"
 #include "GraphicsPipeline/SceneCustom.h"
+#include "GraphicsPipeline/SceneDepth.h"
 #include "GraphicsPipeline/PostAA.h"
-#include "GraphicsPipeline/DepthReadback.h"
 #include "Common/RenderView.h"
 #include "CompiledRenderObject.h"
 
@@ -163,8 +163,6 @@ void CD3D9Renderer::RT_GraphicsPipelineBootup()
 void CD3D9Renderer::RT_GraphicsPipelineShutdown()
 {
 	CREParticle::ResetPool();
-
-	CStretchRegionPass::Shutdown();
 
 	if (m_pStereoRenderer)
 		m_pStereoRenderer->ReleaseBuffers();
@@ -421,9 +419,9 @@ void CD3D9Renderer::EF_EndEf2D(const bool bSort)
 //==============================================================================================
 float* CD3D9Renderer::PinOcclusionBuffer(Matrix44A &camera)
 {
-	if (auto pDepthReadbackStage = m_pGraphicsPipeline->GetDepthReadbackStage())
+	if (auto pSceneDepthStage = m_pGraphicsPipeline->GetSceneDepthStage())
 	{
-		return pDepthReadbackStage->PinOcclusionBuffer(camera);
+		return pSceneDepthStage->PinOcclusionBuffer(camera);
 	}
 
 	return nullptr;
@@ -431,9 +429,9 @@ float* CD3D9Renderer::PinOcclusionBuffer(Matrix44A &camera)
 
 void CD3D9Renderer::UnpinOcclusionBuffer()
 {
-	if (auto pDepthReadbackStage = m_pGraphicsPipeline->GetDepthReadbackStage())
+	if (auto pSceneDepthStage = m_pGraphicsPipeline->GetSceneDepthStage())
 	{
-		pDepthReadbackStage->UnpinOcclusionBuffer();
+		pSceneDepthStage->UnpinOcclusionBuffer();
 	}
 }
 
@@ -602,13 +600,10 @@ void CD3D9Renderer::RT_PostRenderScene(CRenderView* pRenderView)
 // Render thread only scene rendering
 void CD3D9Renderer::RT_RenderScene(CRenderView* pRenderView)
 {
+	FUNCTION_PROFILER_RENDERER();
 	PROFILE_LABEL_SCOPE(pRenderView->IsRecursive() ? "SCENE_REC" : "SCENE");
 
 	gcpRendD3D->SetCurDownscaleFactor(gcpRendD3D->m_CurViewportScale);
-
-	// Skip scene rendering when device is lost
-	if (m_bDeviceLost)
-		return;
 
 	{
 		PROFILE_FRAME(WaitForRenderView);
@@ -923,10 +918,8 @@ bool CD3D9Renderer::StoreGBufferToAtlas(const RectI& rcDst, int nSrcWidth, int n
 	SrcBox.left = 0; SrcBox.top = 0; SrcBox.right = nSrcWidth; SrcBox.bottom = nSrcHeight;
 	DstBox.left = rcDst.x; DstBox.top = rcDst.y; DstBox.right = rcDst.x + nDstWidth; DstBox.bottom = rcDst.y + nDstHeight;
 
-	CStretchRegionPass::GetPass().Execute(pGBuffD, pDstD, &SrcBox, &DstBox);
-
-	CStretchRegionPass::GetPass().Execute(pGBuffN, pDstN, &SrcBox, &DstBox);
-
+	CStretchRegionPass().Execute(pGBuffD, pDstD, &SrcBox, &DstBox);
+	CStretchRegionPass().Execute(pGBuffN, pDstN, &SrcBox, &DstBox);
 
 	return bRes;
 }

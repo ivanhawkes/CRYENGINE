@@ -3,6 +3,7 @@
 #pragma once
 
 #include "PlatformIdentifier.h"
+#include "CryExtension/CryTypeID.h"
 #include <CrySerialization/CryStringsImpl.h>
 
 class ITexture;
@@ -11,6 +12,8 @@ namespace Cry
 {
 	namespace GamePlatform
 	{
+		struct IBase;
+		struct IPlugin;
 		struct IAccount;
 		struct IAchievement;
 		struct ILeaderboards;
@@ -24,7 +27,7 @@ namespace Cry
 		struct IUser;
 		struct IUserGeneratedContent;
 		class  UserIdentifier;
-		
+
 		struct SRichPresence
 		{
 			enum class ETimer
@@ -34,8 +37,8 @@ namespace Cry
 				Remaining
 			};
 
-			CryFixedStringT<128> status;
-			CryFixedStringT<128> details;
+			CryFixedStringT<128> activity;
+			CryFixedStringT<128> headline;
 			ETimer countdownTimer = ETimer::None;
 			int64 seconds = 0;
 			uint32 partySize = 0;
@@ -47,8 +50,8 @@ namespace Cry
 					&& partySize == other.partySize
 					&& partyMax == other.partyMax
 					&& seconds == other.seconds
-					&& details == other.status
-					&& status == other.status;
+					&& activity == other.activity
+					&& headline == other.headline;
 			}
 
 			bool operator!=(const SRichPresence& other) const
@@ -66,7 +69,8 @@ namespace Cry
 			Players,
 			Settings,
 			Group,
-			Achievements
+			Achievements,
+			Stats
 		};
 
 		//! Represents the current connection to the platform's services
@@ -97,9 +101,9 @@ namespace Cry
 		//! Determines the size of a user's avatar, used when retrieving the avatar as a texture (see GetAvatar)
 		enum class EAvatarSize
 		{
-			Large,
-			Medium,
-			Small
+			Large,  //!< E.g. for Steam: 184x184
+			Medium, //!< E.g. for Steam: 64x64
+			Small   //!< E.g. for Steam: 32x32
 		};
 
 		//! Type of in-game overlay dialog with a target user, used together with IPlugin::OpenDialogWithTargetUser
@@ -116,7 +120,7 @@ namespace Cry
 			Achievements
 		};
 
-		//! Flags to be passed to platform service for querying/downloading 
+		//! Flags to be passed to platform service for querying/downloading
 		//! information about users.
 		enum EUserInformationFlags : uint8
 		{
@@ -128,9 +132,6 @@ namespace Cry
 		//! to store combinations of EUserInformationFlags bits.
 		using UserInformationMask = std::underlying_type<EUserInformationFlags>::type;
 
-		//! Platform-specific identifier of an application or DLC
-		using ApplicationIdentifier = unsigned int;
-
 		//! Unique identifier for a service
 		using ServiceIdentifier = CryGUID;
 
@@ -138,45 +139,46 @@ namespace Cry
 		constexpr ServiceIdentifier SteamServiceID = CryClassID("{4DFCDCE3-9985-42E5-A702-5A64D849DC8F}"_cry_guid);
 		constexpr ServiceIdentifier PSNServiceID = CryClassID("{F7729E26-464F-4BE9-A58E-06C72C03EAE1}"_cry_guid);
 		constexpr ServiceIdentifier DiscordServiceID = CryClassID("{D68238FE-AA88-4C0C-9E9C-56A848AE0F37}"_cry_guid);
+		constexpr ServiceIdentifier RailServiceID = CryClassID("{B536B2AE-E363-4765-8E15-7B021C356E9C}"_cry_guid);
 
-		constexpr const char* GetServiceDebugName(const ServiceIdentifier& svcId)
+		inline const char* GetServiceDebugName(const ServiceIdentifier& svcId)
 		{
-			return (svcId == SteamServiceID) ? "Steam" : 
-					((svcId == PSNServiceID) ? "PSN" : 
+			return (svcId == SteamServiceID) ? "Steam" :
+					((svcId == PSNServiceID) ? "PSN" :
 					((svcId == DiscordServiceID) ? "Discord" :
-					((svcId == NullServiceID) ? "Null" : "Unknown")));
+					((svcId == RailServiceID) ? "Rail" :
+					((svcId == NullServiceID) ? "Null" : "Unknown"))));
 		}
 
 		namespace Detail
 		{
-			using NumericIdentifierValue = uint64; // Steam, PSN
-			using StringIdentifierValue = CryFixedStringT<32>; // Discord
+			using NumericIdentifierValue = uint64;
+			using StringIdentifierValue = CryFixedStringT<32>;
 
-			struct SAccountTraits
+			struct STraitsBase
 			{
 				using ServiceType = ServiceIdentifier;
 				// Note: When adding types here make sure you update the code using stl::holds_alternative
 				// and stl::get
 				using ValueType = CryVariant<StringIdentifierValue, NumericIdentifierValue>;
-			
-			private:
-				template<size_t I>
-				using RawType = typename stl::variant_alternative<I, ValueType>::type;
-			
-			public:
-				static const char* ToDebugString(const ServiceIdentifier& svcId, const ValueType& value)
+
+				static const char* ToDebugString(const ServiceIdentifier& svcId, const char* szIdKind, const ValueType& value)
 				{
 					static stack_string debugStr;
-					
+
 					if (stl::holds_alternative<StringIdentifierValue>(value))
 					{
-						debugStr.Format("%sAccount:%s", GetServiceDebugName(svcId), stl::get<StringIdentifierValue>(value).c_str());
+						debugStr.Format("%s%s:%s", GetServiceDebugName(svcId), szIdKind, stl::get<StringIdentifierValue>(value).c_str());
 					}
 					else if (stl::holds_alternative<NumericIdentifierValue>(value))
 					{
-						debugStr.Format("%sAccount:%" PRIu64, GetServiceDebugName(svcId), stl::get<NumericIdentifierValue>(value));
+						debugStr.Format("%s%s:%" PRIu64, GetServiceDebugName(svcId), szIdKind, stl::get<NumericIdentifierValue>(value));
 					}
-					
+					else
+					{
+						return debugStr.Format("%s%s:?",  GetServiceDebugName(svcId), szIdKind);
+					}
+
 					return debugStr.c_str();
 				}
 
@@ -185,7 +187,7 @@ namespace Cry
 					if (stl::holds_alternative<StringIdentifierValue>(value))
 					{
 						const StringIdentifierValue& str = stl::get<StringIdentifierValue>(value);
-						const int ok = sscanf_s(str.c_str(), "%" PRIx64, out);
+						const int ok = sscanf_s(str.c_str(), "%" PRIu64, out);
 						return ok == 1;
 					}
 					else if (stl::holds_alternative<NumericIdentifierValue>(value))
@@ -207,7 +209,7 @@ namespace Cry
 					}
 					else if (stl::holds_alternative<NumericIdentifierValue>(value))
 					{
-						out.Format("%" PRIx64, stl::get<NumericIdentifierValue>(value));
+						out.Format("%" PRIu64, stl::get<NumericIdentifierValue>(value));
 						return true;
 					}
 
@@ -215,29 +217,27 @@ namespace Cry
 				}
 			};
 
-			struct SLobbyTraits
+			struct SAccountTraits : public STraitsBase
 			{
-				using ServiceType = ServiceIdentifier;
-				using ValueType = NumericIdentifierValue;
-
 				static const char* ToDebugString(const ServiceIdentifier& svcId, const ValueType& value)
 				{
-					static stack_string debugStr;
-					debugStr.Format("%sLobby:%" PRIu64, GetServiceDebugName(svcId), value);
-					return debugStr.c_str();
+					return STraitsBase::ToDebugString(svcId, "Account", value);
 				}
-				
-				static bool AsUint64(const ValueType& value, uint64& out)
+			};
+
+			struct SLobbyTraits : public STraitsBase
+			{
+				static const char* ToDebugString(const ServiceIdentifier& svcId, const ValueType& value)
 				{
-					out = value;
-					return true;
+					return STraitsBase::ToDebugString(svcId, "Lobby", value);
 				}
-				
-				template<class StrType>
-				static bool AsString(const ValueType& value, StrType& out)
+			};
+
+			struct SApplicationTraits : public STraitsBase
+			{
+				static const char* ToDebugString(const ServiceIdentifier& svcId, const ValueType& value)
 				{
-					out.Format("%" PRIu64, value);
-					return true;
+					return STraitsBase::ToDebugString(svcId, "Application", value);
 				}
 			};
 		}
@@ -247,6 +247,9 @@ namespace Cry
 
 		//! Identifies a game platform lobby.
 		using LobbyIdentifier = Identifier<Detail::SLobbyTraits>;
+
+		//! Identifies a game or DLC.
+		using ApplicationIdentifier = Identifier<Detail::SApplicationTraits>;
 	}
 }
 

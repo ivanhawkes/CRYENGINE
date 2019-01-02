@@ -24,7 +24,6 @@
 #include "AIPlayer.h"
 #include "ObjectContainer.h"
 #include <CryAISystem/IVisionMap.h>
-#include <CryAISystem/HidespotQueryContext.h>
 #include <CryAISystem/IAISystemComponent.h>
 #include "AuditionMap/AuditionMap.h"
 #include "SmartObjects.h"
@@ -41,7 +40,6 @@
 #include "BehaviorTree/BehaviorTreeManager.h"
 #include "BehaviorTree/BehaviorTreeNodeRegistration.h"
 #include "CollisionAvoidance/CollisionAvoidanceSystem.h"
-#include "BehaviorTree/BehaviorTreeGraft.h"
 #include <CryAISystem/IMovementSystem.h>
 #include "Movement/MovementSystemCreator.h"
 #include "Group/GroupManager.h"
@@ -67,7 +65,6 @@
 #endif
 
 #include "Sequence/SequenceFlowNodes.h"
-#include "FlyHelpers_TacticalPointLanguageExtender.h"
 
 #include "Navigation/NavigationSystemSchematyc.h"
 #include "Factions/FactionSystemSchematyc.h"
@@ -78,9 +75,6 @@
 
 #include <CryCore/StaticInstanceList.h>
 #include <algorithm>
-
-
-FlyHelpers::CTacticalPointLanguageExtender g_flyHelpersTacticalLanguageExtender;
 
 // Description:
 //	 Helper class for declaring fire command descriptors.
@@ -267,7 +261,6 @@ CAISystem::~CAISystem()
 	SAFE_DELETE(gAIEnv.pCoverSystem);
 	SAFE_DELETE(gAIEnv.pNavigationSystem);
 	SAFE_DELETE(gAIEnv.pBehaviorTreeManager);
-	SAFE_DELETE(gAIEnv.pGraftManager);
 	SAFE_DELETE(gAIEnv.pVisionMap);
 	SAFE_DELETE(gAIEnv.pAuditionMap);
 	SAFE_DELETE(gAIEnv.pFactionSystem);
@@ -417,7 +410,6 @@ bool CAISystem::Init()
 		if (!gAIEnv.pTacticalPointSystem)
 		{
 			gAIEnv.pTacticalPointSystem = new CTacticalPointSystem();
-			g_flyHelpersTacticalLanguageExtender.Initialize();
 		}
 	}
 
@@ -518,7 +510,6 @@ void CAISystem::SetupAIEnvironment()
 
 	gAIEnv.pCommunicationManager = new CCommunicationManager("Scripts/AI/Communication/CommunicationSystemConfiguration.xml");
 	gAIEnv.pBehaviorTreeManager = new BehaviorTree::BehaviorTreeManager();
-	gAIEnv.pGraftManager = new BehaviorTree::GraftManager();
 
 	if (!gAIEnv.pFactionSystem)
 	{
@@ -588,7 +579,6 @@ void CAISystem::Reload()
 
 	gAIEnv.pFactionMap->Reload();
 	m_globalPerceptionScale.Reload();
-	g_flyHelpersTacticalLanguageExtender.Initialize();
 
 	// Reload the root of the AI system scripts, forcing reload of this and all dependencies
 	if (m_pScriptAI->RunStartupScript(true))
@@ -611,7 +601,6 @@ void CAISystem::Reload()
 	gAIEnv.pCoverSystem->ReloadConfig();
 
 	gAIEnv.pBehaviorTreeManager->Reset();
-	gAIEnv.pGraftManager->Reset();
 }
 
 //====================================================================
@@ -718,7 +707,6 @@ int CAISystem::GetAlertness(const IAIAlertnessPredicate& alertnessPredicate)
 void CAISystem::ClearForReload(void)
 {
 	m_PipeManager.ClearAllGoalPipes();
-	g_flyHelpersTacticalLanguageExtender.Deinitialize();
 	gAIEnv.pTacticalPointSystem->DestroyAllQueries();
 }
 
@@ -1506,7 +1494,6 @@ void CAISystem::Reset(IAISystem::EResetReason reason)
 		if (!gAIEnv.pTacticalPointSystem)
 		{
 			gAIEnv.pTacticalPointSystem = new CTacticalPointSystem();
-			g_flyHelpersTacticalLanguageExtender.Initialize();
 		}
 		if (!gAIEnv.pNavigation)
 		{
@@ -1631,7 +1618,6 @@ void CAISystem::Reset(IAISystem::EResetReason reason)
 #endif //CRYAISYSTEM_DEBUG
 
 			gAIEnv.pBehaviorTreeManager->Reset();
-			gAIEnv.pGraftManager->Reset();
 			gAIEnv.pMovementSystem->Reset();
 
 			m_bInitialized = false;
@@ -1728,7 +1714,6 @@ void CAISystem::Reset(IAISystem::EResetReason reason)
 	if (editorToGameMode)
 	{
 		gAIEnv.pBehaviorTreeManager->Reset();
-		gAIEnv.pGraftManager->Reset();
 
 		CallReloadTPSQueriesScript();
 	}
@@ -1809,8 +1794,6 @@ void CAISystem::Reset(IAISystem::EResetReason reason)
 
 	CPathObstacles::ResetOfStaticData();
 
-	m_dynHideObjectManager.Reset();
-
 	m_mapBeacons.clear();
 
 	// Remove temporary shapes and re-enable all shapes.
@@ -1857,9 +1840,6 @@ void CAISystem::Reset(IAISystem::EResetReason reason)
 	{
 		if (gAIEnv.pBehaviorTreeManager)
 			gAIEnv.pBehaviorTreeManager->Reset();
-
-		if (gAIEnv.pGraftManager)
-			gAIEnv.pGraftManager->Reset();
 	}
 }
 
@@ -2295,8 +2275,6 @@ void CAISystem::FlushSystem(bool bDeleteAll)
 	if (m_pSmartObjectManager)
 		m_pSmartObjectManager->ResetBannedSOs();
 
-	m_dynHideObjectManager.Reset();
-
 	m_mapFaction.clear();
 	m_mapGroups.clear();
 	m_mapBeacons.clear();
@@ -2359,7 +2337,6 @@ void CAISystem::FlushSystem(bool bDeleteAll)
 	stl::free_container(m_mapGenericShapes);
 
 	gAIEnv.pBehaviorTreeManager->Reset();
-	gAIEnv.pGraftManager->Reset();
 }
 
 void CAISystem::LayerEnabled(const char* layerName, bool enabled, bool serialized)
@@ -2502,6 +2479,7 @@ void CAISystem::Update(const CTimeValue frameStartTime, const float frameDeltaTi
 	CRY_PROFILE_REGION(PROFILE_AI, "AI System: Update");
 	CRYPROFILE_SCOPE_PROFILE_MARKER("AI System: Update");
 	AISYSTEM_LIGHT_PROFILER();
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "AISystem::Update");
 
 	if (!InitUpdate(frameStartTime, frameDeltaTime))
 		return;
@@ -2514,43 +2492,43 @@ void CAISystem::Update(const CTimeValue frameStartTime, const float frameDeltaTi
 		SubsystemUpdateActionManager();
 		SubsystemUpdateRadialOcclusionRaycast();
 		SubsystemUpdateLightManager();
-		SubsystemUpdateNavigation(frameStartTime, frameDeltaTime);
-		SubsystemUpdateBannedSOs(frameDeltaTime);
+		SubsystemUpdateNavigation();
+		SubsystemUpdateBannedSOs();
 	}
 
 	{
 		CRY_PROFILE_REGION(PROFILE_AI, "AIUpdate 2")
-		SubsystemUpdateSystemComponents(frameDeltaTime);
+		SubsystemUpdateSystemComponents();
 		SubsystemUpdateAmbientFire();
 		SubsystemUpdateExpensiveAccessoryQuota();
-		SubsystemUpdateCommunicationManager(frameDeltaTime);
-		TrySubsystemUpdateVisionMap(frameDeltaTime, isAutomaticUpdate);
-		TrySubsystemUpdateAuditionMap(frameDeltaTime, isAutomaticUpdate);
-		SubsystemUpdateGroupManager(frameDeltaTime);
-		TrySubsystemUpdateCoverSystem(frameDeltaTime, isAutomaticUpdate);
-		TrySubsystemUpdateNavigationSystem(isAutomaticUpdate);
+		SubsystemUpdateCommunicationManager();
+		TrySubsystemUpdateVisionMap(frameStartTime, frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateAuditionMap(frameStartTime, frameDeltaTime, isAutomaticUpdate);
+		SubsystemUpdateGroupManager();
+		TrySubsystemUpdateCoverSystem(frameStartTime, frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateNavigationSystem(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 	}
 
 	{
 		CRY_PROFILE_REGION(PROFILE_AI, "AIUpdate 3")
 		SubsystemUpdatePlayers();
-		SubsystemUpdateGroups(frameStartTime);
+		SubsystemUpdateGroups();
 	}
 
-	TrySubsystemUpdateMovementSystem(frameDeltaTime, isAutomaticUpdate);
+	TrySubsystemUpdateMovementSystem(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 
 	{
 		CRY_PROFILE_REGION(PROFILE_AI, "AIUpdate 4");
-		SubsystemUpdateActorsAndTargetTrackAndORCA(frameDeltaTime);
-		SubsystemUpdateLeaders(frameDeltaTime);
+		SubsystemUpdateActorsAndTargetTrackAndORCA();
+		SubsystemUpdateLeaders();
 		SubsystemUpdateSmartObjectManager();	
-		SubsystemUpdateInterestManager(frameDeltaTime);
+		SubsystemUpdateInterestManager();
 	}
 
-	TrySubsystemUpdateBehaviorTreeManager(isAutomaticUpdate);
-	TrySubsystemUpdateGlobalRayCaster(frameDeltaTime, isAutomaticUpdate);
-	TrySubsystemUpdateGlobalIntersectionTester(frameDeltaTime, isAutomaticUpdate);
-	TrySubsystemUpdateClusterDetector(frameDeltaTime, isAutomaticUpdate);
+	TrySubsystemUpdateBehaviorTreeManager(frameStartTime, frameDeltaTime, isAutomaticUpdate);
+	TrySubsystemUpdateGlobalRayCaster(frameStartTime, frameDeltaTime, isAutomaticUpdate);
+	TrySubsystemUpdateGlobalIntersectionTester(frameStartTime, frameDeltaTime, isAutomaticUpdate);
+	TrySubsystemUpdateClusterDetector(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 	SubsystemUpdateTacticalPointSystem();
 
 #ifdef CRYAISYSTEM_DEBUG
@@ -2573,31 +2551,31 @@ void CAISystem::UpdateSubsystem(const CTimeValue frameStartTime, const float fra
 	switch (subsystemUpdateFlag)
 	{
 	case IAISystem::ESubsystemUpdateFlag::AuditionMap:
-		TrySubsystemUpdateAuditionMap(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateAuditionMap(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::BehaviorTreeManager:
-		TrySubsystemUpdateBehaviorTreeManager(isAutomaticUpdate);
+		TrySubsystemUpdateBehaviorTreeManager(frameStartTime, frameDeltaTime,isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::ClusterDetector:
-		TrySubsystemUpdateClusterDetector(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateClusterDetector(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::CoverSystem:
-		TrySubsystemUpdateCoverSystem(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateCoverSystem(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::MovementSystem:
-		TrySubsystemUpdateMovementSystem(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateMovementSystem(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::NavigationSystem:
-		TrySubsystemUpdateNavigationSystem(isAutomaticUpdate);
+		TrySubsystemUpdateNavigationSystem(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::VisionMap:
-		TrySubsystemUpdateVisionMap(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateVisionMap(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::GlobalIntersectionTester:
-		TrySubsystemUpdateGlobalIntersectionTester(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateGlobalIntersectionTester(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	case IAISystem::ESubsystemUpdateFlag::GlobalRaycaster:
-		TrySubsystemUpdateGlobalRayCaster(frameDeltaTime, isAutomaticUpdate);
+		TrySubsystemUpdateGlobalRayCaster(frameStartTime, frameDeltaTime, isAutomaticUpdate);
 		break;
 	default:
 		CRY_ASSERT_MESSAGE(false, "Provided flag is not valid.");
@@ -3518,62 +3496,6 @@ void CAISystem::OffsetAllAreas(const Vec3& additionalOffset)
 
 	if (m_pNavigation)
 		m_pNavigation->OffsetAllAreas(additionalOffset);
-}
-
-//====================================================================
-// GetOccupiedHideObjectPositions
-//====================================================================
-void CAISystem::GetOccupiedHideObjectPositions(const CPipeUser* pRequester, std::vector<Vec3>& hideObjectPositions)
-{
-	CCCPOINT(GetOccupiedHideObjectPositions);
-
-	// Iterate over the list of active puppets and collect positions of the valid hidespots in use.
-	hideObjectPositions.clear();
-
-	AIActorSet::const_iterator it = m_enabledAIActorsSet.begin();
-	AIActorSet::const_iterator end = m_enabledAIActorsSet.end();
-
-	for (; it != end; ++it)
-	{
-		CPipeUser* pOther = it->GetAIObject()->CastToCPipeUser();
-		if (!pOther || (pRequester && (pRequester == pOther)))
-			continue;
-
-		// Include the position of each enemy regardless of the validity of the hidepoint itself - seems to get better results
-		hideObjectPositions.push_back(pOther->GetPos());
-
-		if (!pOther->m_CurrentHideObject.IsValid())
-			continue;
-
-		// One reason why it can be important to also add the hidepoint itself is because the AI may not have reached it yet
-		hideObjectPositions.push_back(pOther->m_CurrentHideObject.GetObjectPos());
-	}
-}
-
-// Mrcio: Seriously, we need to get some kind of ID system for HideSpots.
-// God kills a kitten each time he looks at this code.
-bool CAISystem::IsHideSpotOccupied(CPipeUser* pRequester, const Vec3& pos) const
-{
-	AIActorSet::const_iterator it = m_enabledAIActorsSet.begin();
-	AIActorSet::const_iterator end = m_enabledAIActorsSet.end();
-
-	for (; it != end; ++it)
-	{
-		CPipeUser* pOther = it->GetAIObject()->CastToCPipeUser();
-		if (!pOther || (pRequester && (pRequester == pOther)))
-			continue;
-
-		if ((pOther->GetPos() - pos).len2() < 0.5 * 0.5f)
-			return true;
-
-		if (!pOther->m_CurrentHideObject.IsValid())
-			continue;
-
-		if ((pOther->m_CurrentHideObject.GetObjectPos() - pos).len2() < 0.5 * 0.5f)
-			return true;
-	}
-
-	return false;
 }
 
 //
@@ -5223,11 +5145,6 @@ BehaviorTree::IBehaviorTreeManager* CAISystem::GetIBehaviorTreeManager() const
 	return gAIEnv.pBehaviorTreeManager;
 }
 
-BehaviorTree::IGraftManager* CAISystem::GetIGraftManager() const
-{
-	return gAIEnv.pGraftManager;
-}
-
 ITargetTrackManager* CAISystem::GetTargetTrackManager() const
 {
 	return gAIEnv.pTargetTrackManager;
@@ -5367,11 +5284,6 @@ const CAISystem::TDamageRegions& CAISystem::GetDamageRegions() const
 CAILightManager* CAISystem::GetLightManager()
 {
 	return &m_lightManager;
-}
-
-CAIDynHideObjectManager* CAISystem::GetDynHideObjectManager()
-{
-	return &m_dynHideObjectManager;
 }
 
 bool CAISystem::IsRecording(const IAIObject* pTarget, IAIRecordable::e_AIDbgEvent event) const

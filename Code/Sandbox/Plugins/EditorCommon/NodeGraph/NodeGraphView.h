@@ -197,16 +197,17 @@ public:
 	bool OnDeleteEvent();
 	bool OnUndoEvent();
 	bool OnRedoEvent();
-private:
-	// ~TODO
 
-	//
-	void ReloadItems();
+protected:
+	virtual void ReloadItems();
 
+	void ClearItems();
 	void AddNodeItem(CAbstractNodeItem& node);
 	void AddGroupItem(CAbstractGroupItem& group);
 	void AddCommentItem(CAbstractCommentItem& comment);
 	void AddConnectionItem(CAbstractConnectionItem& connection);
+
+private:
 
 	void BroadcastSelectionChange(bool forceClear = false);
 
@@ -267,7 +268,7 @@ private:
 	CNodeGraphViewBackground*        m_pBackground;
 	GraphViewWidgetSet               m_selectedWidgets;
 	GraphItemSet                     m_selectedItems;
-	QPopupWidget                     m_contentEditPopup;
+	std::unique_ptr<QPopupWidget>    m_pContentEditPopup;
 
 	QPoint                           m_lastMouseActionPressPos;
 	CConnectionPoint                 m_mouseConnectionPoint;

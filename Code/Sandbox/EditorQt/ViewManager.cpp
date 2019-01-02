@@ -8,6 +8,7 @@
 #include "Qt/QMainFrameMenuBar.h"
 #include "Qt/QtMainFrame.h"
 #include "TopRendererWnd.h"
+#include "IEditorImpl.h"
 
 #include <Preferences/ViewportPreferences.h>
 #include <ModelViewport.h>
@@ -323,7 +324,10 @@ void CViewManager::IdleUpdate()
 	// Depending on user preferences, update active viewport solely
 	if (gViewportPreferences.toolsRenderUpdateMutualExclusive)
 	{
-		if (GetActiveViewport()) GetActiveViewport()->Update();
+		if (GetActiveViewport()) 
+		{
+			GetActiveViewport()->Update();
+		}
 		return;
 	}
 

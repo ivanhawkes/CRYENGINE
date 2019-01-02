@@ -425,6 +425,7 @@ void SRenderThread::RC_StopVideoThread()
 void SRenderThread::ProcessCommands()
 {
 #ifndef STRIP_RENDER_THREAD
+	MEMSTAT_FUNCTION_CONTEXT(EMemStatContextTypes::MSC_Other);
 	assert(IsRenderThread());
 	if (!CheckFlushCond())
 		return;
@@ -478,6 +479,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_CreateDevice:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_CreateDevice");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_CreateDevice");
 			START_PROFILE_RT();
 			m_bSuccessful &= gcpRendD3D->RT_CreateDevice();
 			END_PROFILE_PLUS_RT(SRenderStatistics::Write().m_Summary.miscTime);
@@ -486,6 +488,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_ResetDevice:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_ResetDevice");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_ResetDevice");
 			START_PROFILE_RT();
 			if (m_eVideoThreadMode == eVTM_Disabled)
 				gcpRendD3D->RT_Reset();
@@ -496,6 +499,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_SuspendDevice:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_SuspendDevice");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_SuspendDevice");
 			START_PROFILE_RT();
 			if (m_eVideoThreadMode == eVTM_Disabled)
 				gcpRendD3D->RT_SuspendDevice();
@@ -505,6 +509,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_ResumeDevice:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_ResumeDevice");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_ResumeDevice");
 			START_PROFILE_RT();
 			if (m_eVideoThreadMode == eVTM_Disabled)
 			{
@@ -520,6 +525,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_BeginFrame:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_BeginFrame");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_BeginFrame");
 			START_PROFILE_RT();
 			m_displayContextKey = ReadCommand<SDisplayContextKey>(n);
 			if (m_eVideoThreadMode == eVTM_Disabled)
@@ -537,6 +543,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_EndFrame:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_EndFrame");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_EndFrame");
 			START_PROFILE_RT();
 			if (m_eVideoThreadMode == eVTM_Disabled)
 			{
@@ -559,6 +566,7 @@ void SRenderThread::ProcessCommands()
 
 		case eRC_FlashRender:
 			{
+				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_FlashRender");
 				START_PROFILE_RT();
 				std::shared_ptr<IFlashPlayer_RenderProxy> pPlayer = ReadCommand<std::shared_ptr<IFlashPlayer_RenderProxy>>(n);
 				gcpRendD3D->RT_FlashRenderInternal(std::move(pPlayer), m_eVideoThreadMode == eVTM_Disabled);
@@ -567,6 +575,7 @@ void SRenderThread::ProcessCommands()
 			break;
 		case eRC_FlashRenderLockless:
 			{
+				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_FlashRenderLockless");
 				START_PROFILE_RT();
 				std::shared_ptr<IFlashPlayer_RenderProxy> pPlayer = ReadCommand<std::shared_ptr<IFlashPlayer_RenderProxy>>(n);
 				int cbIdx = ReadCommand<int>(n);
@@ -579,6 +588,7 @@ void SRenderThread::ProcessCommands()
 		case eRC_LambdaCall:
 		{
 			CRY_PROFILE_REGION(PROFILE_RENDERER, "SRenderThread: eRC_LambdaCall");
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "eRC_LambdaCall");
 			START_PROFILE_RT();
 			SRenderThreadLambdaCallback* pRTCallback = ReadCommand<SRenderThreadLambdaCallback*>(n);
 			bool bSkipCommand = (m_eVideoThreadMode != eVTM_Disabled) && (uint32(pRTCallback->flags & ERenderCommandFlags::SkipDuringLoading) != 0);
@@ -653,6 +663,10 @@ void SRenderThread::Process()
 			{
 				CTimeValue lastTime = gEnv->pTimer->GetAsyncTime();
 
+				// Enable v-sync for the loading screen to cap frame-rate
+				const int vSync = gcpRendD3D->m_VSync;
+				gcpRendD3D->m_VSync = true;
+
 				while (m_eVideoThreadMode != eVTM_ProcessingStop)
 				{
 #if CRY_PLATFORM_DURANGO
@@ -699,13 +713,12 @@ void SRenderThread::Process()
 						m_rdldLock.Unlock();
 					}
 
-					// Make sure we aren't running with thousands of FPS with VSync disabled
-					gRenDev->LimitFramerate(120, true);
-
 #if defined(SUPPORT_DEVICE_INFO_MSG_PROCESSING)
 					gcpRendD3D->DevInfo().ProcessSystemEventQueue();
 #endif
 				}
+
+				gcpRendD3D->m_VSync = vSync;
 			}
 			if (m_pThreadLoading)
 				QuitRenderLoadingThread();
@@ -884,7 +897,9 @@ void SRenderThread::QuitRenderThread()
 		m_nCurThreadProcess = m_nCurThreadFill;
 #endif
 	}
-	m_bQuit = 1;
+
+	m_bQuit.store(true);
+
 	//SAFE_RELEASE(m_pFlashPlayer);
 }
 
@@ -962,15 +977,26 @@ void SRenderThread::WaitFlushFinishedCond()
 	START_PROFILE_RT_SCOPE();
 
 #ifdef USE_LOCKS_FOR_FLUSH_SYNC
-	m_LockFlushNotify.Lock();
-	while (*(volatile int*)&m_nFlush)
+	while (true)
 	{
-		m_FlushFinishedCondition.Wait(m_LockFlushNotify);
+		{
+			std::unique_lock<std::mutex> lk(m_LockFlushStore);
+			auto NotFlushed = [this]() { return m_nFlush.load() == false; };
+			if (m_FlushCondition.wait_for(lk, std::chrono::milliseconds(10), NotFlushed))
+				break;
+		}
+
+		// If the RenderThread issues messages (rare occasion, e.g. setting window-styles)
+#if CRY_PLATFORM_WINDOWS
+		const HWND hWnd = GetRenderWindowHandle();
+		if (hWnd)
+		{
+			gEnv->pSystem->PumpWindowMessage(true, hWnd);
+		}
+#endif
 	}
-	m_LockFlushNotify.Unlock();
 #else
-	READ_WRITE_BARRIER
-	while (*(volatile int*)&m_nFlush)
+	while (m_nFlush.load())
 	{
 	#if CRY_PLATFORM_WINDOWS
 		const HWND hWnd = GetRenderWindowHandle();
@@ -978,9 +1004,8 @@ void SRenderThread::WaitFlushFinishedCond()
 		{
 			gEnv->pSystem->PumpWindowMessage(true, hWnd);
 		}
-		CrySleep(0);
+		CryMT::CryYieldThread();
 	#endif
-		READ_WRITE_BARRIER
 	}
 #endif
 
@@ -994,20 +1019,17 @@ void SRenderThread::WaitFlushCond()
 	START_PROFILE_RT_SCOPE();
 
 #ifdef USE_LOCKS_FOR_FLUSH_SYNC
-	m_LockFlushNotify.Lock();
-	while (!*(volatile int*)&m_nFlush)
 	{
-		m_FlushCondition.Wait(m_LockFlushNotify);
+		std::unique_lock<std::mutex> lk(m_LockFlushStore);
+		auto FlushedOrQuit = [this]() { return m_nFlush.load() == true || m_bQuit.load() == true; };
+		m_FlushCondition.wait(lk, FlushedOrQuit);
 	}
-	m_LockFlushNotify.Unlock();
 #else
-	READ_WRITE_BARRIER
-	while (!*(volatile int*)&m_nFlush)
+	while (!m_nFlush.load())
 	{
-		if (m_bQuit)
+		if (m_bQuit.load())
 			break;
-		CrySleep(0);
-		READ_WRITE_BARRIER
+		CryMT::CryYieldThread();
 	}
 #endif
 

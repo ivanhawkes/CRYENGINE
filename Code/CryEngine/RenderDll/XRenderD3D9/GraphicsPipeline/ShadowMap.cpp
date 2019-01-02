@@ -207,8 +207,9 @@ bool CShadowMapStage::CreatePipelineState(const SGraphicsPipelineStateDescriptio
 				psoDesc.m_ShaderFlags_MD |= pRes->m_Textures[EFTT_DIFFUSE]->m_Ext.m_nUpdateFlags;
 		}
 
+		// Merge EDeformType into EVertexModifier to save space/parameters
 		if (pRes->m_pDeformInfo)
-			psoDesc.m_ShaderFlags_MDV |= pRes->m_pDeformInfo->m_eType;
+			psoDesc.m_ShaderFlags_MDV |= EVertexModifier(pRes->m_pDeformInfo->m_eType);
 	}
 
 	if (m_shadowsLocalLightsLinearizeDepth == 1)
@@ -661,6 +662,7 @@ void CShadowMapStage::PrepareShadowPassForFrustum(const SShadowFrustumToRender& 
 		Matrix44A viewProjOrig = viewProj;
 		if (targetPass.m_pClearDepthMapProvider)
 		{
+			// If the sub-frustum falls out of the full frustum entirely, then no depth-copy is needed or possible
 			if (!CShadowUtils::GetSubfrustumMatrix(viewProj, targetPass.m_pClearDepthMapProvider->m_pFrustumToRender->pFrustum, &frustum))
 				targetPass.m_clearMode = CShadowMapPass::eClearMode_Fill;
 		}
@@ -1004,7 +1006,7 @@ void CShadowMapStage::Execute()
 
 			curPass.PreRender();
 			curPass.BeginExecution();
-			curPass.SetupDrawContext(m_stageID, curPass.m_eShadowPassID, TTYPE_SHADOWGEN, FB_MASK);
+			curPass.SetupDrawContext(m_stageID, curPass.m_eShadowPassID, TTYPE_SHADOWGEN, 0);
 			curPass.DrawRenderItems(pShadowsView, (ERenderListID)curPass.m_nShadowFrustumSide);
 			curPass.EndExecution();
 
@@ -1028,7 +1030,7 @@ void CShadowMapStage::Execute()
 
 				curPass.PreRender();
 				curPass.BeginExecution();
-				curPass.SetupDrawContext(m_stageID, curPass.m_eShadowPassID, TTYPE_SHADOWGEN, FB_MASK);
+				curPass.SetupDrawContext(m_stageID, curPass.m_eShadowPassID, TTYPE_SHADOWGEN, 0);
 				curPass.DrawRenderItems(pShadowsView, (ERenderListID)curPass.m_nShadowFrustumSide);
 				curPass.EndExecution();
 			}

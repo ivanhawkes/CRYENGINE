@@ -1,6 +1,7 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
+#include <CryEntitySystem/IEntityComponent.h>
 
 //////////////////////////////////////////////////////////////////////////
 // Description:
@@ -17,7 +18,7 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 	// IEntityComponent interface implementation.
 	//////////////////////////////////////////////////////////////////////////
-	virtual void   Initialize() final {};
+	virtual void   Initialize() final {}
 	virtual void   ProcessEvent(const SEntityEvent& event) final;
 	virtual Cry::Entity::EventFlags GetEventMask() const final;
 	//////////////////////////////////////////////////////////////////////////

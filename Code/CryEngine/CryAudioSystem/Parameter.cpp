@@ -1,6 +1,7 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
+#include "Object.h"
 #include "Parameter.h"
 #include "Common/IImpl.h"
 #include "Common/IObject.h"
@@ -29,7 +30,7 @@ void CParameter::Set(CObject const& object, float const value) const
 {
 	for (auto const pConnection : m_connections)
 	{
-		object.GetImplDataPtr()->SetParameter(pConnection, value);
+		pConnection->Set(object.GetImplDataPtr(), value);
 	}
 
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)

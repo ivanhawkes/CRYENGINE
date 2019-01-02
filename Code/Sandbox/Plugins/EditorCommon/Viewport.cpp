@@ -146,11 +146,8 @@ void CViewport::RegisterRenderListener(IRenderListener* piListener)
 
 bool CViewport::UnregisterRenderListener(IRenderListener* piListener)
 {
-	size_t nCount(0);
-	size_t nTotal(0);
-
-	nTotal = m_cRenderListeners.size();
-	for (nCount = 0; nCount < nTotal; ++nCount)
+	const size_t nTotal = m_cRenderListeners.size();
+	for (size_t nCount = 0; nCount < nTotal; ++nCount)
 	{
 		if (m_cRenderListeners[nCount] == piListener)
 		{
@@ -163,11 +160,8 @@ bool CViewport::UnregisterRenderListener(IRenderListener* piListener)
 
 bool CViewport::IsRenderListenerRegistered(IRenderListener* piListener)
 {
-	size_t nCount(0);
-	size_t nTotal(0);
-
-	nTotal = m_cRenderListeners.size();
-	for (nCount = 0; nCount < nTotal; ++nCount)
+	const size_t nTotal = m_cRenderListeners.size();
+	for (size_t nCount = 0; nCount < nTotal; ++nCount)
 	{
 		if (m_cRenderListeners[nCount] == piListener)
 		{
@@ -252,8 +246,6 @@ void CViewport::UpdateContent(int flags)
 void CViewport::Update()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_EDITOR);
-
-	CEditTool* pEditTool = GetIEditor()->GetLevelEditorSharedState()->GetEditTool();
 
 	//TODO : this is deprecated
 	bool bSpaceClick = CryGetAsyncKeyState(VK_SPACE);
@@ -588,7 +580,6 @@ bool CViewport::HitTest(CPoint point, HitContext& hitInfo)
 	if (hitInfo.bSkipIfGizmoHighlighted && GetIEditor()->GetGizmoManager()->GetHighlightedGizmo())
 		return false;
 
-	Vec3 raySrc(0, 0, 0), rayDir(1, 0, 0);
 	ViewToWorldRay(point, hitInfo.raySrc, hitInfo.rayDir);
 	hitInfo.view = this;
 	hitInfo.point2d = point;

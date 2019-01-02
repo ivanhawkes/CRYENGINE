@@ -6,6 +6,7 @@
 #include "LevelEditor/NewLevelDialog.h"
 #include "Mannequin/MannequinChangeMonitor.h"
 #include "Objects/Group.h"
+#include "Objects/SelectionGroup.h"
 #include "QT/QtMainFrame.h"
 #include "Terrain/Heightmap.h"
 #include "Terrain/TerrainManager.h"
@@ -21,17 +22,21 @@
 #include "IDevManager.h"
 #include "IEditorImpl.h"
 #include "LevelIndependentFileMan.h"
+#include "LogFile.h"
 #include "MainThreadWorker.h"
 #include "Mission.h"
 #include "ObjectCloneTool.h"
+#include "PluginManager.h"
 #include "ProcessInfo.h"
 #include "ResourceCompilerHelpers.h"
 #include "SplashScreen.h"
 #include "ViewManager.h"
 
+#include <AssetSystem/AssetManager.h>
 #include <Util/IndexedFiles.h>
 
 #include <FileUtils.h>
+#include <IObjectManager.h>
 #include <ModelViewport.h>
 #include <Notifications/NotificationCenter.h>
 #include <PathUtils.h>
@@ -70,7 +75,7 @@ int PyCreateLevel(const char* levelName, int resolution, float unitSize, bool bU
 	CRY_ASSERT(pLevelType);
 	const string levelPath = string().Format("%s.level.cryasset", levelName);
 
-	CLevelType::SCreateParams params {};
+	CLevelType::SLevelCreateParams params {};
 	params.resolution = resolution;
 	params.unitSize = unitSize;
 	params.bUseTerrain = bUseTerrain;

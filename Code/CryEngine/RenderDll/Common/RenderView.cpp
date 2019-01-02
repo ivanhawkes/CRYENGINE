@@ -7,6 +7,7 @@
 #include "GraphicsPipeline/SceneForward.h"
 #include "GraphicsPipeline/ShadowMap.h"
 #include "GraphicsPipeline/ClipVolumes.h"
+#include "GraphicsPipeline/SceneGBuffer.h"
 #include "CompiledRenderObject.h"
 #include "D3D_SVO.h"
 
@@ -243,6 +244,9 @@ CCompiledRenderObject* CRenderView::AllocCompiledObject(CRenderObject* pObj, CRe
 {
 	CCompiledRenderObject* pCompiledObject = CCompiledRenderObject::AllocateFromPool();
 	pCompiledObject->Init(shaderItem, pElem);
+
+	// Assign any compiled object to the RenderObject, just to be used as a root reference for constant buffer sharing
+	pObj->m_pCompiledObject = pCompiledObject;
 	pCompiledObject->m_pRO = pObj;
 
 	return pCompiledObject;
@@ -582,21 +586,18 @@ SRenderLight& CRenderView::GetDynamicLight(RenderLightIndex nLightId)
 //////////////////////////////////////////////////////////////////////////
 RenderLightIndex CRenderView::AddLight(eDeferredLightType lightType, const SRenderLight& light)
 {
-	assert((light.m_Flags & DLF_LIGHTTYPE_MASK) != 0);
+	CRY_ASSERT((light.m_Flags & DLF_LIGHTTYPE_MASK) != 0);
 
 	RenderLightIndex nLightId = -1;
-	if (m_lights[lightType].size() < MAX_DEFERRED_LIGHT_SOURCES)
+	if (!(light.m_Flags & DLF_FAKE))
 	{
-		if (!(light.m_Flags & DLF_FAKE))
-		{
-			nLightId = GetLightsCount(lightType);
-		}
-
-		m_lights[lightType].push_back(light);
-		SRenderLight* pLight = &m_lights[lightType].back();
-
-		pLight->m_Id = nLightId;
+		nLightId = GetLightsCount(lightType);
 	}
+
+	m_lights[lightType].push_back(light);
+	SRenderLight* pLight = &m_lights[lightType].back();
+
+	pLight->m_Id = nLightId;
 
 	return nLightId;
 }
@@ -604,8 +605,7 @@ RenderLightIndex CRenderView::AddLight(eDeferredLightType lightType, const SRend
 //////////////////////////////////////////////////////////////////////////
 SRenderLight* CRenderView::AddLightAtIndex(eDeferredLightType lightType, const SRenderLight& light, RenderLightIndex nLightId /*=-1*/)
 {
-	assert(nLightId                   <  GetLightsCount(lightType));
-	assert(MAX_DEFERRED_LIGHT_SOURCES >= GetLightsCount(lightType));
+	CRY_ASSERT(nLightId == -1 || nLightId <  GetLightsCount(lightType));
 
 	SRenderLight* pLight = nullptr;
 	if (nLightId < 0)
@@ -641,7 +641,8 @@ RenderLightIndex CRenderView::GetLightsCount(eDeferredLightType lightType) const
 
 SRenderLight& CRenderView::GetLight(eDeferredLightType lightType, RenderLightIndex nLightId)
 {
-	assert(nLightId >= 0 && nLightId < m_lights[lightType].size());
+	CRY_ASSERT(nLightId >= 0 && nLightId < m_lights[lightType].size());
+
 	// find iterator at given index (assuming no [] operator)
 	auto itr = m_lights[lightType].begin();
 	while (--nLightId >= 0)
@@ -994,20 +995,6 @@ void CRenderView::UnsetRenderOutput()
 }
 
 //////////////////////////////////////////////////////////////////////////
-CRenderView::RenderItems& CRenderView::GetRenderItems(int nRenderList)
-{
-	CRY_ASSERT(m_usageMode != eUsageModeWriting || nRenderList == EFSLIST_PREPROCESS); // While writing we must not read back items.
-
-	m_renderItems[nRenderList].CoalesceMemory();
-	return m_renderItems[nRenderList];
-}
-
-uint32 CRenderView::GetBatchFlags(int nRenderList) const
-{
-	return m_batchFlags[nRenderList];
-}
-
-//////////////////////////////////////////////////////////////////////////
 void CRenderView::AddPermanentObjectImpl(CPermanentRenderObject* pObject, const SRenderingPassInfo& passInfo)
 {
 	const int passId = IsShadowGenView() ? 1 : 0;
@@ -1092,7 +1079,7 @@ static inline uint32 CalculateRenderItemBatchFlags(SShaderItem& shaderItem, CRen
 
 	float fAlpha = pObj->m_fAlpha;
 	uint32 uTransparent = 0; //(bool)(fAlpha < 1.0f); Not supported in new rendering pipeline 
-	const uint64 ObjFlags = pObj->m_ObjFlags;
+	const ERenderObjectFlags ObjFlags = pObj->m_ObjFlags;
 
 	if (!passInfo.IsRecursivePass() && pTech)
 	{
@@ -1108,10 +1095,10 @@ static inline uint32 CalculateRenderItemBatchFlags(SShaderItem& shaderItem, CRen
 		if (!((nBatchFlags & FB_Z) && (!(pObj->m_RState & OS_NODEPTH_WRITE) || (pShader->m_Flags2 & EF2_FORCE_ZPASS))))
 			nBatchFlags &= ~FB_Z;
 
-		if ((ObjFlags & FOB_DECAL) || (ObjFlags & FOB_TERRAIN_LAYER) || isDecalOrOverlay || CRenderer::CV_r_usezpass != 2 || pObj->m_fDistance > CRenderer::CV_r_ZPrepassMaxDist)
+		if ((ObjFlags & FOB_DECAL) || (ObjFlags & FOB_TERRAIN_LAYER) || isDecalOrOverlay)
 			nBatchFlags &= ~FB_ZPREPASS;
 
-		pObj->m_ObjFlags |= (nBatchFlags & FB_ZPREPASS) ? FOB_ZPREPASS : 0;
+		pObj->m_ObjFlags |= (nBatchFlags & FB_ZPREPASS) ? FOB_ZPREPASS : FOB_NONE;
 
 		if (passInfo.IsShadowPass())
 			nBatchFlags &= ~FB_PREPROCESS;
@@ -1215,7 +1202,7 @@ static inline uint32 CalculateRenderItemBatchFlags(SShaderItem& shaderItem, CRen
 ///////////////////////////////////////////////////////////////////////////////
 static inline void AddEf_HandleOldRTMask(CRenderObject* obj) threadsafe
 {
-	uint64 objFlags = obj->m_ObjFlags;
+	ERenderObjectFlags objFlags = obj->m_ObjFlags;
 	uint32 ortFlags = 0;
 
 	objFlags |= FOB_UPDATED_RTMASK;
@@ -1350,7 +1337,7 @@ static inline ERenderListID CalculateRenderItemList(const SShaderItem& shaderIte
 
 	const EShaderDrawType shaderDrawType = pSH->m_eSHDType;
 	const uint32 nShaderFlags2 = pSH->m_Flags2;
-	const uint64 ObjDecalFlag = pObj->m_ObjFlags & FOB_DECAL;
+	const ERenderObjectFlags ObjDecalFlag = pObj->m_ObjFlags & FOB_DECAL;
 
 	// make sure decals go into proper render list
 	// also, set additional shadow flag (i.e. reuse the shadow mask generated for underlying geometry)
@@ -1377,7 +1364,7 @@ static inline ERenderListID CalculateRenderItemList(const SShaderItem& shaderIte
 	}
 
 	// Enable tessellation for water geometry
-	pObj->m_ObjFlags |= (pSH->m_Flags2 & EF2_HW_TESSELLATION && pSH->m_eShaderType == eST_Water) ? FOB_ALLOW_TESSELLATION : 0;
+	pObj->m_ObjFlags |= (pSH->m_Flags2 & EF2_HW_TESSELLATION && pSH->m_eShaderType == eST_Water) ? FOB_ALLOW_TESSELLATION : FOB_NONE;
 
 	const uint32 nForceFlags = (EF2_FORCE_DRAWLAST | EF2_FORCE_DRAWFIRST | EF2_FORCE_ZPASS | EF2_FORCE_TRANSPASS | EF2_FORCE_GENERALPASS | EF2_FORCE_DRAWAFTERWATER | EF2_FORCE_WATERPASS | EF2_AFTERHDRPOSTPROCESS | EF2_AFTERPOSTPROCESS);
 
@@ -1552,7 +1539,7 @@ void CRenderView::AddRenderItem(CRenderElement* pElem, CRenderObject* RESTRICT_P
 	const auto aabb = AABB{ aabb_min, aabb_max };
 	float objDistance;
 
-	uint64 objFlags = pObj->m_ObjFlags;    // last time we read flags from renderObject
+	ERenderObjectFlags objFlags = pObj->m_ObjFlags;    // last time we read flags from renderObject
 
 	{
 		// Use the (possibly) tighter AABB extracted from the render element and store distance squared.
@@ -1630,7 +1617,6 @@ void CRenderView::AddRenderItem(CRenderElement* pElem, CRenderObject* RESTRICT_P
 		{
 			// Allocate new CompiledRenderObject.
 			ri.pCompiledObject = AllocCompiledObject(pObj, pElem, shaderItem);
-			pObj->m_pCompiledObject = ri.pCompiledObject;
 			ri.nBatchFlags |= (ri.pCompiledObject ? FB_COMPILED_OBJECT : 0);
 
 			// Add to temporary objects to compile
@@ -1699,6 +1685,15 @@ inline void CRenderView::AddRenderItemToRenderLists(const SRendItem& ri, uint64 
 		const bool isEmissive   = shaderItem.IsEmissive();
 		const bool isVegetation = shaderItem.IsVegetation();
 		const bool isTesselated = shaderItem.IsTesselated();
+		const bool skipPrepass   =
+			(CRenderer::CV_r_UseZPass <= CSceneGBufferStage::eZPassMode_GBufferOnly) ||
+			(CRenderer::CV_r_UseZPass <= CSceneGBufferStage::eZPassMode_PartialZPrePass && (isDissolved && !isVegetation)) ||
+			(CRenderer::CV_r_UseZPass <= CSceneGBufferStage::eZPassMode_PartialZPrePass && (isAlphaTested && !isVegetation)) ||
+			(CRenderer::CV_r_UseZPass <= CSceneGBufferStage::eZPassMode_DiscardingZPrePass && (isTesselated)) ||
+			(CRenderer::CV_r_UseZPass <= CSceneGBufferStage::eZPassMode_DiscardingZPrePass && (objDistance > CRenderer::CV_r_ZPrepassMaxDist));
+
+		if (skipPrepass)
+			nBatchFlags &= ~FB_ZPREPASS;
 
 		// These lists are traversed by the GBuffer-pass by default (see CSceneGBufferStage::ExecuteSceneOpaque)
 		const bool isGeneralList =
@@ -1709,7 +1704,7 @@ inline void CRenderView::AddRenderItemToRenderLists(const SRendItem& ri, uint64 
 
 		if ((nBatchFlags & FB_ZPREPASS))
 		{
-			const ERenderListID targetRenderList = EFSLIST_ZPREPASS;
+			const ERenderListID targetRenderList = isNearest ? EFSLIST_ZPREPASS_NEAREST : EFSLIST_ZPREPASS;
 			m_renderItems[targetRenderList].push_back(PrepareRenderItemForRenderList(ri, nBatchFlags, objFlags, pObj, objDistance, targetRenderList));
 			UpdateRenderListBatchFlags<isConcurrent>(m_batchFlags[targetRenderList], nBatchFlags);
 		}
@@ -1816,27 +1811,24 @@ void CRenderView::ExpandPermanentRenderObjects()
 					SShaderItem shaderItem;
 					SRendItem::ExtractShaderItem(pri.m_sortValue, shaderItem);
 
-					if (!pri.m_pCompiledObject)
+					if (!(volatile CCompiledRenderObject*)pri.m_pCompiledObject)
 					{
+						bool bRequireCompiledRenderObject = false;
 						// This item will need a temporary compiled object
-						const bool bRequireCompiledRenderObject = pri.m_pRenderElement && 
-							(pri.m_pRenderElement->mfGetType() == eDATA_Mesh || pri.m_pRenderElement->mfGetType() == eDATA_Particle);
+						if (pri.m_pRenderElement && (pri.m_pRenderElement->mfGetType() == eDATA_Mesh || pri.m_pRenderElement->mfGetType() == eDATA_Particle))
+						{
+							bRequireCompiledRenderObject = true;
+						}
+
 						if (bRequireCompiledRenderObject)
 						{
-							auto allocatedCompiledObject = AllocCompiledObject(pRenderObject, pri.m_pRenderElement, shaderItem); // Allocate new CompiledRenderObject
-							if (CryInterlockedCompareExchangePointer((void* volatile*)&pri.m_pCompiledObject, allocatedCompiledObject, nullptr) != nullptr)
-							{
-								// Exchange failed, release the newly acquired compiled object.
-								CCompiledRenderObject::FreeToPool(allocatedCompiledObject);
-							}
-							else 
-							{
-								needsCompilation = true;
+							static CryCriticalSectionNonRecursive allocCS;
+							AUTO_LOCK_T(CryCriticalSectionNonRecursive, allocCS);
 
-								// We might need to update the root compiled object.
-								// We update it only once, first comes - wins.
-								if (i == 0)
-									CryInterlockedCompareExchangePointer((void* volatile*)&pRenderObject->m_pCompiledObject, pri.m_pCompiledObject, nullptr);
+							if (((volatile CCompiledRenderObject*)pri.m_pCompiledObject) == nullptr)
+							{
+								pri.m_pCompiledObject = AllocCompiledObject(pRenderObject, pri.m_pRenderElement, shaderItem); // Allocate new CompiledRenderObject.
+								needsCompilation = true;
 							}
 						}
 					}
@@ -2224,6 +2216,88 @@ struct SCompareRendItemSelectionPass
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+#if defined(DEBUG_PRINT_RENDERLISTS) // For printing out renderLists:
+extern const char* RenderListNames[];
+
+void DebugPrintRenderlists(CRenderView* pRenderView)
+{
+	const auto listCount = pRenderView->IsShadowGenView() ? OMNI_SIDES_NUM : EFSLIST_NUM;
+	for (int renderList = 0; renderList < listCount; renderList++)
+	{
+		auto& renderItems = pRenderView->GetRenderItems(ERenderListID(renderList));
+
+		CryLogAlways("renderList %s %d", RenderListNames[pRenderView->IsShadowGenView() ? EFSLIST_SHADOW_GEN : renderList], renderList);
+		for (size_t i = 0; i < renderItems.size(); i++)
+		{
+			if (renderItems[i].ObjSort & (FOB_SORT_MASK & FOB_ALPHATEST))
+			{
+				int a = 0;
+			}
+
+			if (renderItems[i].ObjSort & (FOB_SORT_MASK & FOB_HAS_PREVMATRIX))
+			{
+				int a = 0;
+			}
+
+			// SCompareRendItemZPrePass
+			if (renderList == EFSLIST_ZPREPASS_NEAREST ||
+				renderList == EFSLIST_ZPREPASS)
+
+				CryLogAlways("%6d: %c %2d 0x%04x 0x%016zx 0x%04x", i,
+					((renderItems[i].ObjSort & (FOB_SORT_MASK & FOB_ALPHATEST))) ? 'a' : 'o',
+					(renderItems[i].ObjSort >> 10) & 0x3F,
+					renderItems[i].SortVal,
+					renderItems[i].pElem,
+					renderItems[i].ObjSort & 0xFFFF
+				);
+
+			// SCompareRendItemZPass
+			if (renderList == EFSLIST_NEAREST_OBJECTS ||
+				renderList == EFSLIST_GENERAL ||
+				renderList == EFSLIST_SKIN)
+
+				CryLogAlways("%6d: %c %2d 0x%04x 0x%016zx 0x%04x", i,
+					((renderItems[i].ObjSort & (FOB_SORT_MASK & ~FOB_DISCARD_MASK)) >> 30) + 'A',
+					!(renderItems[i].ObjSort & FOB_ZPREPASS) ? (renderItems[i].ObjSort >> 10) & 0x3F : 0x3F,
+					renderItems[i].SortVal,
+					renderItems[i].pElem,
+					renderItems[i].ObjSort & 0xFFFF
+				);
+
+			// SCompareDist
+			if (renderList == EFSLIST_WATER_VOLUMES ||
+				renderList == EFSLIST_TRANSP_BW ||
+				renderList == EFSLIST_TRANSP_AW ||
+				renderList == EFSLIST_TRANSP_NEAREST ||
+				renderList == EFSLIST_WATER ||
+				renderList == EFSLIST_HALFRES_PARTICLES ||
+				renderList == EFSLIST_LENSOPTICS ||
+				renderList == EFSLIST_EYE_OVERLAY) int a = 0;
+
+			// SCompareItem_Decal
+			if (renderList == EFSLIST_DECAL) int a = 0;
+
+			// SCompareItem_NoPtrCompare
+			if (renderList == EFSLIST_TERRAINLAYER) int a = 0;
+
+			// SCompareRendItemZPrePass
+			if (renderList == EFSLIST_FORWARD_OPAQUE_NEAREST ||
+				renderList == EFSLIST_FORWARD_OPAQUE ||
+				IsShadowGenView())
+
+				CryLogAlways("%6d: %c %2d 0x%08x 0x%016zx 0x%04x", i,
+					((renderItems[i].ObjSort & (FOB_SORT_MASK & FOB_ALPHATEST))) ? 'a' : 'o',
+					(renderItems[i].ObjSort >> 10) & 0x3F,
+					renderItems[i].SortVal,
+					renderItems[i].pElem,
+					renderItems[i].ObjSort & 0xFFFF
+				);
+
+			renderItems[i].nBatchFlags;
+		}
+	}
+}
+#endif
 
 SRendItem CRenderView::PrepareRenderItemForRenderList(const SRendItem& ri_templ, uint32 nBatchFlags, uint64 objFlags, CRenderObject* pObj, float objDistance, ERenderListID renderList)
 {
@@ -2245,6 +2319,7 @@ SRendItem CRenderView::PrepareRenderItemForRenderList(const SRendItem& ri_templ,
 	case EFSLIST_FOG_VOLUME:
 		// No need to sort.
 		break;
+	case EFSLIST_ZPREPASS_NEAREST:
 	case EFSLIST_ZPREPASS:
 
 	case EFSLIST_NEAREST_OBJECTS:
@@ -2350,6 +2425,7 @@ void CRenderView::Job_SortRenderItemsInList(ERenderListID renderList)
 		}
 		break;
 
+	case EFSLIST_ZPREPASS_NEAREST:
 	case EFSLIST_ZPREPASS:
 		{
 			PROFILE_FRAME(State_SortingZPass);
@@ -2430,33 +2506,6 @@ void CRenderView::SortLights()
 
 	// does not invalidate references or iterators, but invalidates all m_Id in the lights
 	GetLightsArray(eDLT_DeferredCubemap).sort(CubemapCompare());
-}
-
-int CRenderView::FindRenderListSplit(ERenderListID nList, uint32 objFlag)
-{
-	FUNCTION_PROFILER_RENDERER();
-
-	CRY_ASSERT_MESSAGE(CRenderer::CV_r_ZPassDepthSorting == 1, "RendItem sorting has been overwritten and are not sorted by ObjFlags, this function can't be used!");;
-	CRY_ASSERT_MESSAGE(!(nList == EFSLIST_TRANSP_BW || nList == EFSLIST_TRANSP_AW || nList == EFSLIST_TRANSP_NEAREST || nList == EFSLIST_HALFRES_PARTICLES), "The requested list isn't sorted by ObjFlags!");
-	CRY_ASSERT_MESSAGE(objFlag & FOB_MASK_AFFECTS_MERGING, "The requested objFlag isn't used for sorting!");
-
-	// Binary search, assumes that list is sorted by objFlag
-	auto& renderItems = GetRenderItems(nList);
-
-	int first = 0;
-	int last = renderItems.size() - 1;
-
-	while (first <= last)
-	{
-		int middle = (first + last) / 2;
-
-		if (SRendItem::TestIndividualObjFlag(objFlag, renderItems[middle].ObjSort))
-			first = middle + 1;
-		else
-			last = middle - 1;
-	}
-
-	return last + 1;
 }
 
 //////////////////////////////////////////////////////////////////////////

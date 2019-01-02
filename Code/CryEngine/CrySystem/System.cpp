@@ -53,7 +53,6 @@
 #include "CrySizerStats.h"
 #include "CrySizerImpl.h"
 #include "NotificationNetwork.h"
-#include <CrySystem/Profilers/ProfileLog.h>
 #include <CryString/CryPath.h>
 
 #include "XML/xml.h"
@@ -65,7 +64,6 @@
 #include "LocalizedStringManager.h"
 #include "XML/XmlUtils.h"
 #include "Serialization/ArchiveHost.h"
-#include "ThreadProfiler.h"
 #include <CrySystem/Profilers/IDiskProfiler.h>
 #include <CrySystem/Profilers/FrameProfiler/FrameProfiler_JobSystem.h>
 #include "SystemEventDispatcher.h"
@@ -74,7 +72,6 @@
 #include <CryMemory/ILocalMemoryUsage.h>
 #include "ResourceManager.h"
 #include "MemoryManager.h"
-#include "LoadingProfiler.h"
 #include <CryLiveCreate/ILiveCreateHost.h>
 #include <CryLiveCreate/ILiveCreateManager.h>
 #include "OverloadSceneManager/OverloadSceneManager.h"
@@ -221,8 +218,7 @@ CSystem::CSystem(const SSystemInitParams& startupParams)
 	: m_gameLibrary(nullptr)
 #endif
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Main");
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CSystem::Construct");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CSystem Constructor");
 
 	m_pSystemEventDispatcher = new CSystemEventDispatcher(); // Must be first.
 	m_pSystemEventDispatcher->RegisterListener(this, "CSystem");
@@ -329,7 +325,6 @@ CSystem::CSystem(const SSystemInitParams& startupParams)
 	m_sys_spec = nullptr;
 	m_sys_firstlaunch = nullptr;
 	m_sys_enable_budgetmonitoring = nullptr;
-	m_sys_preload = nullptr;
 	m_sys_use_Mono = nullptr;
 	m_sys_dll_ai = nullptr;
 	m_sys_dll_response_system = nullptr;
@@ -398,7 +393,6 @@ CSystem::CSystem(const SSystemInitParams& startupParams)
 	m_pMemoryManager = CryGetIMemoryManager();
 	m_pResourceManager = new CResourceManager;
 	m_pTextModeConsole = nullptr;
-	m_pThreadProfiler = nullptr;
 	m_pDiskProfiler = nullptr;
 	m_ttMemStatSS = 0;
 
@@ -476,7 +470,6 @@ CSystem::~CSystem()
 	FreeLib(m_dll.hGame);
 	FreeLib(m_dll.hSound);
 	SAFE_DELETE(m_pVisRegTest);
-	SAFE_DELETE(m_pThreadProfiler);
 #if defined(USE_DISK_PROFILER)
 	SAFE_DELETE(m_pDiskProfiler);
 #endif
@@ -563,10 +556,6 @@ void CSystem::ShutDown()
 
 	m_FrameProfileSystem.Enable(false, false);
 
-#if defined(ENABLE_LOADING_PROFILER)
-	CLoadingProfilerSystem::ShutDown();
-#endif
-
 	if (m_pSystemEventDispatcher)
 	{
 		m_pSystemEventDispatcher->RemoveListener(this);
@@ -589,7 +578,7 @@ void CSystem::ShutDown()
 	KillPhysicsThread();
 
 	if (m_sys_firstlaunch)
-		m_sys_firstlaunch->Set("0");
+		m_sys_firstlaunch->Set(0);
 
 	if (m_env.IsEditor())
 	{
@@ -633,7 +622,6 @@ void CSystem::ShutDown()
 			SAFE_RELEASE(m_env.pAudioSystem);
 
 			// Log must be last thing released.
-			SAFE_RELEASE(m_env.pProfileLogSystem);
 			m_env.pLog->FlushAndClose();
 			SAFE_RELEASE(m_env.pLog); // creates log backup
 
@@ -849,7 +837,6 @@ void CSystem::ShutDown()
 	SAFE_RELEASE(m_env.pConsole);
 
 	// Log must be last thing released.
-	SAFE_RELEASE(m_env.pProfileLogSystem);
 	m_env.pLog->FlushAndClose();
 	SAFE_RELEASE(m_env.pLog);   // creates log backup
 
@@ -1271,64 +1258,6 @@ int CSystem::SetThreadState(ESubsystem subsys, bool bActive)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CSystem::SleepIfInactive()
-{
-	LOADING_TIME_PROFILE_SECTION;
-#if !defined(_RELEASE) || defined(PERFORMANCE_BUILD)
-	// Disable throttling, when various Profilers are in use
-
-	#if defined(CRY_PROFILE_MARKERS_USE_GPA)
-	return;
-	#endif
-
-	#if ALLOW_BROFILER
-	if (::Profiler::IsActive())
-	{
-		return;
-	}
-	#endif
-
-	if (gEnv->pConsole->GetCVar("e_StatoscopeEnabled")->GetIVal())
-	{
-		return;
-	}
-#endif
-
-	// ProcessSleep()
-	if (m_env.IsDedicated() || m_env.IsEditor() || gEnv->bMultiplayer)
-		return;
-
-#if CRY_PLATFORM_WINDOWS
-	if (GetIRenderer())
-	{
-		CRY_HWND hRendWnd = GetIRenderer()->GetHWND();
-		if (!hRendWnd)
-			return;
-
-		// Loop here waiting for window to be activated.
-		for (int nLoops = 0; nLoops < 5; nLoops++)
-		{
-			CRY_HWND hActiveWnd = ::GetActiveWindow();
-			if (hActiveWnd == hRendWnd)
-				break;
-
-			if (m_hWnd)
-			{
-				PumpWindowMessage(true, m_hWnd);
-			}
-			if (gEnv->pGameFramework)
-			{
-				// During the time demo, do not sleep even in inactive window.
-				if (gEnv->pGameFramework->IsInTimeDemo())
-					break;
-			}
-			CrySleep(5);
-		}
-	}
-#endif
-}
-
-//////////////////////////////////////////////////////////////////////////
 void CSystem::SleepIfNeeded()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_SYSTEM)
@@ -1359,7 +1288,7 @@ void CSystem::SleepIfNeeded()
 				if (maxFPS == 0)
 				{
 					const bool bInLoading = (ESYSTEM_GLOBAL_STATE_RUNNING != m_systemGlobalState);
-					if (bInLoading || IsPaused())
+					if (bInLoading || IsPaused() || m_throttleFPS)
 					{
 						maxFPS = 60;
 					}
@@ -1525,6 +1454,8 @@ void CSystem::PrePhysicsUpdate()
 
 void CSystem::RunMainLoop()
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CSystem::MainLoop");
+
 	if (m_bShaderCacheGenMode)
 	{
 		return;
@@ -1565,8 +1496,6 @@ bool CSystem::DoFrame(const SDisplayContextKey& displayContextKey, CEnumFlags<ES
 	// The frame profile system already creates an "overhead" profile label
 	// in StartFrame(). Hence we have to set the FRAMESTART before.
 	CRY_PROFILE_FRAMESTART("Main");
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Main");
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CSystem: DoFrame");
 
 	if (m_pManualFrameStepController != nullptr && m_pManualFrameStepController->Update() == EManualFrameStepResult::Block)
 	{
@@ -1749,6 +1678,7 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 	CRY_PROFILE_REGION(PROFILE_SYSTEM, "System: Update");
 	CRY_PROFILE_FUNCTION(PROFILE_SYSTEM)
 	CRYPROFILE_SCOPE_PROFILE_MARKER("CSystem::Update()");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CSystem::Update");
 
 #ifndef EXCLUDE_UPDATE_ON_CONSOLE
 	// do the dedicated sleep earlier than the frame profiler to avoid having it counted
@@ -1815,9 +1745,6 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 		m_sDelayedScreeenshot.clear();
 	}
 
-	// Check if game needs to be sleeping when not active.
-	SleepIfInactive();
-
 	if (m_pUserCallback)
 		m_pUserCallback->OnUpdate();
 
@@ -1837,7 +1764,10 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 	CTimeValue updateStart = gEnv->pTimer->GetAsyncTime();
 
 	if (m_env.pLog)
+	{
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Log::Update");
 		m_env.pLog->Update();
+	}
 
 #if !defined(RELEASE) || defined(RELEASE_LOGGING)
 	GetIRemoteConsole()->Update();
@@ -1930,8 +1860,6 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 		}
 	}
 
-	//static bool sbPause = false;
-	//bool bPause = false;
 	bool bNoUpdate = false;
 #ifndef EXCLUDE_UPDATE_ON_CONSOLE
 	//check what is the current process
@@ -1945,8 +1873,6 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 		updateFlags = { ESYSUPDATE_IGNORE_AI, ESYSUPDATE_IGNORE_PHYSICS };
 	}
 
-	//if ((pProcess->GetFlags() & PROC_MENU) || (m_sysNoUpdate && m_sysNoUpdate->GetIVal()))
-	//		bPause = true;
 	m_bNoUpdate = bNoUpdate;
 #endif //EXCLUDE_UPDATE_ON_CONSOLE
 	//check if we are quitting from the game
@@ -2218,7 +2144,6 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 					pVars->threadLag = lag + m_Time.GetFrameTime();
 					//GetILog()->Log("Physics thread lags behind; accum time %.3f", pVars->threadLag);
 				}
-
 			}
 			else
 			{
@@ -2408,7 +2333,6 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 	UpdateUpdateTimes();
 
 	return !m_bQuit;
-
 }
 
 IManualFrameStepController* CSystem::GetManualFrameStepController() const
@@ -3429,6 +3353,19 @@ int CSystem::PumpWindowMessage(bool bAll, CRY_HWND opaqueHWnd)
 		if (msg.message == WM_QUIT)
 		{
 			return -1;
+		}
+
+		if (msg.message == WM_ACTIVATE)
+		{
+			if (msg.wParam != WA_INACTIVE)
+				m_hWndActive = msg.hwnd;
+			else
+				m_hWndActive = (CRY_HWND)msg.lParam;
+
+			// During the time demo, do not sleep even in inactive window.
+			if (!gEnv->pGameFramework || !gEnv->pGameFramework->IsInTimeDemo())
+				// use sys_maxFPS to throttle the engine
+				m_throttleFPS = msg.wParam != WA_INACTIVE;
 		}
 
 		// Pre-process the message for IME

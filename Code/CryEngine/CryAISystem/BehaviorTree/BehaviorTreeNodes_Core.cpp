@@ -11,7 +11,6 @@
 #include <CrySystem/Timer.h>
 #include <CryCore/Containers/VariableCollection.h>
 #include "BehaviorTreeManager.h"
-#include "BehaviorTreeGraft.h"
 
 #ifdef USING_BEHAVIOR_TREE_SERIALIZATION
 	#include <CrySerialization/Enum.h>
@@ -1178,8 +1177,6 @@ struct State
 		HandleXmlLineNumberSerialization(archive, xmlLine);
 	#endif
 
-		std::sort(transitions.begin(), transitions.end());
-
 		Serialization::SContext context(archive, this);
 
 		archive(name, "name", "^State Name");
@@ -1193,13 +1190,10 @@ struct State
 		archive(transitions, "transitions", "+[<>]Transitions");
 		archive.doc("List of transitions for this state. Each transition specifies a Destination State when a specific Event is triggered");
 
-		for (Transitions::const_iterator it = transitions.begin(), end = transitions.end(); it != end; ++it)
+		const std::vector<size_t> duplicatedIndices = Variables::GetIndicesOfDuplicatedEntries(transitions);
+		for (const size_t i : duplicatedIndices)
 		{
-			const Transitions::const_iterator itNext = std::next(it, 1);
-			if (itNext != transitions.end() && *it == *itNext)
-			{
-				archive.error(*itNext, SerializationUtils::Messages::ErrorDuplicatedValue("Transition event", itNext->triggerEventName));
-			}
+			archive.error(transitions[i].triggerEventName, SerializationUtils::Messages::ErrorDuplicatedValue("Transition event", transitions[i].triggerEventName));
 		}
 
 		archive(node, "node", "+<>" NODE_COMBOBOX_FIXED_WIDTH "> Root");
@@ -1231,10 +1225,16 @@ struct State
 		return NULL;
 	}
 
-#ifdef STORE_INFORMATION_FOR_STATE_MACHINE_NODE
+
+#if defined(USING_BEHAVIOR_TREE_SERIALIZATION) && defined(STORE_INFORMATION_FOR_STATE_MACHINE_NODE)
 	bool operator < (const State &rhs) const
 	{
 		return name < rhs.name;
+	}
+
+	bool operator ==(const State& rhs) const
+	{
+		return nameCRC32 == rhs.nameCRC32;
 	}
 #endif
 
@@ -1263,8 +1263,7 @@ void Transition::Serialize(Serialization::IArchive& archive)
 		return;
 	}
 
-	const Variables::Events events = eventsDeclaration->GetEventsWithFlags();
-	SerializeContainerAsStringList(archive, "triggerEventName", "^>" STATE_TRANSITION_EVENT_FIXED_WIDTH ">Trigger event", events, "Event", triggerEventName);
+	SerializeContainerAsSortedStringList(archive, "triggerEventName", "^>" STATE_TRANSITION_EVENT_FIXED_WIDTH ">Trigger event", eventsDeclaration->GetEventsWithFlags(), "Event", triggerEventName);
 	archive.doc("Event that triggers the transition to the Destination State");
 
 	const States* states = archive.context<States>();
@@ -1273,7 +1272,7 @@ void Transition::Serialize(Serialization::IArchive& archive)
 		return;
 	}
 
-	SerializeContainerAsStringList(archive, "destinationState", "^Destination state", *states, "State", destinationStateName);
+	SerializeContainerAsSortedStringList(archive, "destinationState", "^Destination state", *states, "State", destinationStateName);
 	archive.doc("Destination State of the State Machine after the given Event has been received");
 }
 #endif
@@ -1372,7 +1371,6 @@ public:
 #if defined(USING_BEHAVIOR_TREE_SERIALIZATION) && defined(STORE_INFORMATION_FOR_STATE_MACHINE_NODE)
 	virtual void Serialize(Serialization::IArchive& archive) override
 	{
-		std::stable_sort(m_states.begin(), m_states.end());
 		Serialization::SContext context(archive, &m_states);
 		archive(m_states, "states", "^[+<>]States");
 		archive.doc("List of states for the state machine");
@@ -1385,13 +1383,10 @@ public:
 		if (m_states.size() == 1)
 			archive.warning(m_states, "State machine with only one state is superfluous");
 
-		for (States::const_iterator it = m_states.begin(), end = m_states.end(); it != end; ++it)
+		const std::vector<size_t> duplicatedIndices = Variables::GetIndicesOfDuplicatedEntries(m_states);
+		for (const size_t i : duplicatedIndices)
 		{
-			const States::const_iterator itNext = std::next(it, 1);
-			if (itNext != m_states.end() && it->name == itNext->name)
-			{
-				archive.error(itNext->name, SerializationUtils::Messages::ErrorDuplicatedValue("State Name", itNext->name));
-			}
+			archive.error(m_states[i].name, SerializationUtils::Messages::ErrorDuplicatedValue("State name", m_states[i].name));
 		}
 
 		BaseClass::Serialize(archive);
@@ -1578,9 +1573,8 @@ public:
 			return;
 		}
 
-		const Variables::Events events = eventsDeclaration->GetEventsWithFlags();
 		string eventName = m_eventToSend.GetName();
-		SerializeContainerAsStringList(archive, "event", "^Event", events, "Event",  eventName);
+		SerializeContainerAsSortedStringList(archive, "event", "^Event", eventsDeclaration->GetEventsWithFlags(), "Event",  eventName);
 		m_eventToSend = Event(eventName);
 		archive.doc("Event to be sent");
 
@@ -1616,6 +1610,7 @@ protected:
 		}
 	}
 
+private:
 	Event m_eventToSend;
 	bool m_eventWasSent;
 };
@@ -1625,11 +1620,15 @@ protected:
 
 // Same as SendEvent with the exception that this node never finishes.
 // Usually used for transitions in state machines etc.
-class SendTransitionEvent : public SendEvent
+class SendTransitionEvent : public Action
 {
-	typedef SendEvent BaseClass;
+	typedef Action BaseClass;
 
 public:
+	struct RuntimeData
+	{
+	};
+
 	virtual LoadResult LoadFromXml(const XmlNodeRef& xml, const struct LoadContext& context, const bool isLoadingFromEditor) override
 	{
 		IF_UNLIKELY (BaseClass::LoadFromXml(xml, context, isLoadingFromEditor) == LoadFailure)
@@ -1670,7 +1669,7 @@ public:
 		else
 		{
 			string eventName = m_eventToSend.GetName();
-			SerializeContainerAsStringList(archive, "event", "^Event", state->transitions, "Transition event", eventName);
+			SerializeContainerAsSortedStringList(archive, "event", "^Event", state->transitions, "Transition event", eventName);
 			m_eventToSend = Event(eventName);
 
 			archive.doc("Transition event to be sent. Must be previously defined in the Transitions section of the State");
@@ -1681,10 +1680,27 @@ public:
 	}
 #endif
 protected:
+	virtual void OnInitialize(const UpdateContext& context) override
+	{
+
+#ifdef STORE_EVENT_NAME
+		if (!context.variables.eventsDeclaration.IsDeclared(m_eventToSend.GetName()))
+		{
+			gEnv->pLog->LogError("Event '%s' was not sent. Did you forget to declare it?", m_eventToSend.GetName());
+			return;
+		}
+#endif // #ifdef STORE_EVENT_NAME
+
+		gAIEnv.pBehaviorTreeManager->HandleEvent(context.entityId, m_eventToSend);
+	}
+
 	virtual Status Update(const UpdateContext& context) override
 	{
 		return Running;
 	}
+
+private:
+	Event m_eventToSend;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2364,9 +2380,8 @@ public:
 			return;
 		}
 
-		const Variables::Events events = eventsDeclaration->GetEventsWithFlags();
 		string eventName = m_eventToWaitFor.GetName();
-		SerializeContainerAsStringList(archive, "event", "^Event", events, "Event", eventName);
+		SerializeContainerAsSortedStringList(archive, "event", "^Event", eventsDeclaration->GetEventsWithFlags(), "Event", eventName);
 		m_eventToWaitFor = Event(eventName);
 
 		archive.doc("Event to wait for");
@@ -2496,13 +2511,13 @@ public:
 #ifdef USING_BEHAVIOR_TREE_SERIALIZATION
 	virtual void Serialize(Serialization::IArchive& archive) override
 	{	
-		const Timestamps* timestamps = archive.context<Timestamps>();
-		if (!timestamps)
+		const TimestampCollection* timestampCollection = archive.context<TimestampCollection>();
+		if (!timestampCollection)
 		{
 			return;
 		}
 		
-		SerializeContainerAsStringList(archive,  "name", "^Timestamp", *timestamps, "Timestamp", m_timeStampName);
+		SerializeContainerAsSortedStringList(archive,  "name", "^Timestamp", timestampCollection->GetTimestamps(), "Timestamp", m_timeStampName);
 		archive.doc("Timestamp to track");
 
 		archive(m_compareOp, "compareOp", "^Comparator");
@@ -2674,13 +2689,13 @@ public:
 #ifdef USING_BEHAVIOR_TREE_SERIALIZATION
 	virtual void Serialize(Serialization::IArchive& archive) override
 	{
-		const Timestamps* timestamps = archive.context<Timestamps>();
-		if (!timestamps)
+		const TimestampCollection* timestampCollection = archive.context<TimestampCollection>();
+		if (!timestampCollection)
 		{
 			return;
 		}
 
-		SerializeContainerAsStringList(archive,  "name", "^Timestamp", *timestamps, "Timestamp", m_timeStampName);
+		SerializeContainerAsSortedStringList(archive,  "name", "^Timestamp", timestampCollection->GetTimestamps(), "Timestamp", m_timeStampName);
 		archive.doc("Timestamp to track");
 
 		archive(m_compareOp, "compareOp", "^Comparator");
@@ -2826,13 +2841,13 @@ public:
 #ifdef USING_BEHAVIOR_TREE_SERIALIZATION
 	virtual void Serialize(Serialization::IArchive& archive) override
 	{
-		const Timestamps* timestamps = archive.context<Timestamps>();
-		if (!timestamps)
+		const TimestampCollection* timestampCollection = archive.context<TimestampCollection>();
+		if (!timestampCollection)
 		{
 			return;
 		}
 
-		SerializeContainerAsStringList(archive,  "name", "^Timestamp", *timestamps, "Timestamp", m_timeStampName);
+		SerializeContainerAsSortedStringList(archive,  "name", "^Timestamp", timestampCollection->GetTimestamps(), "Timestamp", m_timeStampName);
 		archive.doc("Timestamp to check");
 
 		archive(m_compareOp, "compareOp", "^Comparator");
@@ -3070,133 +3085,6 @@ protected:
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-class Graft : public Action
-{
-public:
-	typedef Action BaseClass;
-
-	struct RuntimeData final : public IGraftNode
-	{
-		virtual bool RunBehavior(EntityId entityId, const char* behaviorName, XmlNodeRef behaviorXmlNode) override
-		{
-			if (behaviorTreeInstance.get() != NULL)
-			{
-				BehaviorVariablesContext variables(
-					behaviorTreeInstance->variables,
-					behaviorTreeInstance->behaviorTreeTemplate->variableDeclarations,
-					behaviorTreeInstance->behaviorTreeTemplate->eventsDeclaration,
-					behaviorTreeInstance->variables.Changed());
-
-				IEntity* entity = gEnv->pEntitySystem->GetEntity(entityId);
-				assert(entity);
-
-				UpdateContext context(
-					entityId,
-					*entity,
-					variables,
-					behaviorTreeInstance->timestampCollection,
-					behaviorTreeInstance->blackboard
-#ifdef DEBUG_MODULAR_BEHAVIOR_TREE
-					,
-					behaviorTreeInstance->behaviorLog
-#endif // DEBUG_MODULAR_BEHAVIOR_TREE
-				);
-
-				behaviorTreeInstance->behaviorTreeTemplate->rootNode->Terminate(context);
-			}
-
-			behaviorTreeInstance = gAIEnv.pBehaviorTreeManager->CreateBehaviorTreeInstanceFromXml(behaviorName, behaviorXmlNode);
-			if (behaviorTreeInstance.get() != NULL)
-			{
-#ifdef DEBUG_MODULAR_BEHAVIOR_TREE
-				behaviorTreeName = behaviorName;
-#endif // DEBUG_MODULAR_BEHAVIOR_TREE
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-
-		BehaviorTreeInstancePtr behaviorTreeInstance;
-
-#ifdef DEBUG_MODULAR_BEHAVIOR_TREE
-		string behaviorTreeName;
-#endif // DEBUG_MODULAR_BEHAVIOR_TREE
-	};
-
-	virtual LoadResult LoadFromXml(const XmlNodeRef& xml, const struct LoadContext& context, const bool isLoadingFromEditor) override
-	{
-		if (BaseClass::LoadFromXml(xml, context, isLoadingFromEditor) == LoadFailure)
-			return LoadFailure;
-
-		return LoadSuccess;
-	}
-
-	virtual void OnInitialize(const UpdateContext& context) override
-	{
-		RuntimeData& runtimeData = GetRuntimeData<RuntimeData>(context);
-		gAIEnv.pGraftManager->GraftNodeReady(context.entityId, &runtimeData);
-	}
-
-	virtual Status Update(const UpdateContext& context) override
-	{
-		RuntimeData& runtimeData = GetRuntimeData<RuntimeData>(context);
-
-		if (!runtimeData.behaviorTreeInstance.get())
-			return Running;
-
-		Status behaviorStatus = runtimeData.behaviorTreeInstance->behaviorTreeTemplate->rootNode->Tick(context);
-		if (behaviorStatus == Failure)
-		{
-			ErrorReporter(*this, context).LogError("Graft behavior failed to execute.");
-			return Failure;
-		}
-
-		if (behaviorStatus == Success)
-		{
-			gAIEnv.pGraftManager->GraftBehaviorComplete(context.entityId);
-			runtimeData.behaviorTreeInstance.reset();
-#ifdef DEBUG_MODULAR_BEHAVIOR_TREE
-			runtimeData.behaviorTreeName.clear();
-#endif // DEBUG_MODULAR_BEHAVIOR_TREE
-		}
-
-		return Running;
-	}
-
-	virtual void OnTerminate(const UpdateContext& context) override
-	{
-		RuntimeData& runtimeData = GetRuntimeData<RuntimeData>(context);
-		if (runtimeData.behaviorTreeInstance.get())
-			runtimeData.behaviorTreeInstance->behaviorTreeTemplate->rootNode->Terminate(context);
-
-		gAIEnv.pGraftManager->GraftNodeTerminated(context.entityId);
-	}
-
-	virtual void HandleEvent(const EventContext& context, const Event& event) override
-	{
-		RuntimeData& runtimeData = GetRuntimeData<RuntimeData>(context);
-		if (runtimeData.behaviorTreeInstance.get())
-		{
-			runtimeData.behaviorTreeInstance->behaviorTreeTemplate->signalHandler.ProcessSignal(event.GetCRC(), runtimeData.behaviorTreeInstance->variables);
-			runtimeData.behaviorTreeInstance->timestampCollection.HandleEvent(event.GetCRC());
-			runtimeData.behaviorTreeInstance->behaviorTreeTemplate->rootNode->SendEvent(context, event);
-		}
-	}
-
-#ifdef DEBUG_MODULAR_BEHAVIOR_TREE
-	virtual void GetCustomDebugText(const UpdateContext& updateContext, stack_string& debugText) const
-	{
-		const RuntimeData& runtimeData = GetRuntimeData<RuntimeData>(updateContext);
-		debugText.Format("%s", runtimeData.behaviorTreeName.c_str());
-	}
-#endif // DEBUG_MODULAR_BEHAVIOR_TREE
-};
-
-//////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
 void RegisterBehaviorTreeNodes_Core()
@@ -3243,6 +3131,5 @@ void RegisterBehaviorTreeNodes_Core()
 	REGISTER_BEHAVIOR_TREE_NODE_WITH_SERIALIZATION(manager, Log, "Debug\\Log message", COLOR_DEBUG);
 
 	REGISTER_BEHAVIOR_TREE_NODE(manager, Breakpoint);
-	REGISTER_BEHAVIOR_TREE_NODE(manager, Graft);
 }
 }

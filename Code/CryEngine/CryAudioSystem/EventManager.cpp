@@ -64,6 +64,7 @@ void CEventManager::Release()
 //////////////////////////////////////////////////////////////////////////
 CEvent* CEventManager::ConstructEvent()
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CEvent");
 	auto const pEvent = new CEvent;
 	pEvent->m_pImplData = g_pIImpl->ConstructEvent(*pEvent);
 	m_constructedEvents.push_back(pEvent);
@@ -98,13 +99,13 @@ void CEventManager::DestructEvent(CEvent* const pEvent)
 	delete pEvent;
 }
 
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 size_t CEventManager::GetNumConstructed() const
 {
 	return m_constructedEvents.size();
 }
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 void CEventManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY) const
 {

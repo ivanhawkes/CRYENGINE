@@ -172,7 +172,10 @@ void CAssetManager::Init()
 		std::vector<string> changedFiles;
 		for (CAsset* pAsset : m_assets)
 		{
-			if (pAsset->IsModified() && !pAsset->IsBeingEdited())
+			// Here we check only those assets that support the editing sessions. 
+			// Active asset editors are responsible for checking otherwise.
+			// See CAssetEditor::CanQuit
+			if (pAsset->IsModified() && pAsset->GetEditingSession())
 			{
 				changedFiles.push_back(pAsset->GetName());
 			}
@@ -651,6 +654,22 @@ void CAssetManager::UpdateAssetTypes()
 	{
 		pAssetType->Init();
 	}
+
+	// Log asset types.
+	const char* szSeparator = ", ";
+	const size_t pad = strlen(szSeparator);
+	string types;
+	types.reserve(m_assetTypes.size() * 25);
+	for (const auto& element : m_assetTypes)
+	{
+		types.Append(element->GetUiTypeName());
+		types.Append(szSeparator);
+	}
+	if (types.size() && pad)
+	{
+		types.Truncate(types.size() - pad);
+	}
+	GetIEditor()->GetSystem()->GetILog()->LogToFile("Asset Browser types: %s", types.c_str());
 }
 
 void CAssetManager::UpdateAssetImporters()

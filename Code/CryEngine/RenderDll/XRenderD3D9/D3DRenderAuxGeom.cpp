@@ -545,7 +545,7 @@ CDeviceGraphicsPSOPtr CRenderAuxGeomD3D::GetGraphicsPSO(const SAuxGeomRenderFlag
 	psoDesc.m_technique = techique;
 	psoDesc.m_ShaderFlags_RT = 0;
 	psoDesc.m_ShaderFlags_MD = 0;
-	psoDesc.m_ShaderFlags_MDV = 0;
+	psoDesc.m_ShaderFlags_MDV = MDV_NONE;
 	psoDesc.m_PrimitiveType = topology;
 	psoDesc.m_VertexFormat = format;
 	psoDesc.m_RenderState = 0;
@@ -951,9 +951,6 @@ void CRenderAuxGeomD3D::Prepare(const SAuxGeomRenderFlags& renderFlags, Matrix44
 void CRenderAuxGeomD3D::RT_Flush(const SAuxGeomCBRawDataPackagedConst& data)
 {
 	if (!CV_r_auxGeom)
-		return;
-
-	if (m_renderer.IsDeviceLost())
 		return;
 
 	PROFILE_LABEL_SCOPE("AuxGeom_Flush");

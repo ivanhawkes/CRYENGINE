@@ -5,6 +5,7 @@
 #include <CryThreading/CryThreadSafeRendererContainer.h>
 #include <CryCore/Containers/CryListenerSet.h>
 #include <CryThreading/IJobManager.h>
+#include <CryMemory/IMemory.h>
 #include "VisibleRenderNodeManager.h"
 #include "LightVolumeManager.h"
 
@@ -14,9 +15,12 @@
 
 // forward declaration
 struct SNodeInfo;
+struct SRNInfo;
+class C3DEngineLevelLoadTimeslicer;
+class CRESky;
+class CREHDRSky;
 class CStitchedImage;
 class CWaterRippleManager;
-class C3DEngineLevelLoadTimeslicer;
 
 struct SEntInFoliage
 {
@@ -1258,7 +1262,7 @@ private:
 	ITexture*                      m_ptexIconEditorConnectedToConsole;
 
 	std::vector<IDecalRenderNode*> m_decalRenderNodes; // list of registered decal render nodes, used to clean up longer not drawn decals
-	std::vector<IRenderNode*>      m_renderNodesToDelete[4];    // delay deletion of rendernodes by few frames to make sure
+	std::vector<IRenderNode*>      m_renderNodesToDelete[2];    // delay deletion of rendernodes by few frames to make sure
 	uint32                         m_renderNodesToDeleteID = 0; // they can be safely used on render and voxelization threads
 
 	SImageSubInfo* RegisterImageInfo(byte** pMips, int nDim, const char* pName);

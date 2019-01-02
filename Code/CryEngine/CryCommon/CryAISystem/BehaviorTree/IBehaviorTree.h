@@ -139,12 +139,15 @@ struct LoadContext
 		INodeFactory&                       _nodeFactory,
 		const char*                         _treeName,
 		const Variables::Declarations&      _variableDeclarations,
-		Variables::EventsDeclaration&        _eventsDeclaration
+		Variables::EventsDeclaration&       _eventsDeclaration,
+		const TimestampCollection&          _timestampCollection
+
 	)
 		: nodeFactory(_nodeFactory)
 		, treeName(_treeName)
 		, variableDeclarations(_variableDeclarations)
 		, eventsDeclaration(_eventsDeclaration)
+		, timestampCollection(_timestampCollection)
 	{
 	}
 
@@ -153,6 +156,8 @@ struct LoadContext
 	const Variables::Declarations&       variableDeclarations;
 	// non-const in order to automatically declare events when loading the XML
 	Variables::EventsDeclaration&        eventsDeclaration;
+	const TimestampCollection&           timestampCollection;
+
 
 	// Warning! If you're thinking about adding the entity id to the
 	// LoadContext you need to keep one thing in mind:
@@ -563,11 +568,12 @@ struct UpdateContext
 		, BehaviorVariablesContext& _variables
 		, TimestampCollection& _timestamps
 		, Blackboard& _blackboard
+		, CTimeValue _frameStartTime
+		, float _frameDeltaTime
 #ifdef DEBUG_MODULAR_BEHAVIOR_TREE
 		, MessageQueue& _behaviorLog
 		, DebugTree* _debugTree = NULL
 #endif // DEBUG_MODULAR_BEHAVIOR_TREE
-
 	)
 		: entityId(_id)
 		, entity(_entity)
@@ -575,6 +581,8 @@ struct UpdateContext
 		, variables(_variables)
 		, timestamps(_timestamps)
 		, blackboard(_blackboard)
+		, frameStartTime(_frameStartTime)
+		, frameDeltaTime(_frameDeltaTime)
 #ifdef DEBUG_MODULAR_BEHAVIOR_TREE
 		, behaviorLog(_behaviorLog)
 		, debugTree(_debugTree)
@@ -589,11 +597,13 @@ struct UpdateContext
 	TimestampCollection&      timestamps;
 	Blackboard&               blackboard;
 
+	CTimeValue                frameStartTime;
+	float                     frameDeltaTime;
+
 #ifdef DEBUG_MODULAR_BEHAVIOR_TREE
 	MessageQueue& behaviorLog;
 	DebugTree* debugTree;
 #endif // DEBUG_MODULAR_BEHAVIOR_TREE
-
 };
 
 struct EventContext
@@ -713,7 +723,7 @@ struct IBehaviorTreeManager
 {
 	virtual ~IBehaviorTreeManager() {}
 
-	virtual void                           Update() = 0;
+	virtual void                           Update(const CTimeValue frameStartTime, const float frameDeltaTime) = 0;
 
 	virtual struct IMetaExtensionFactory&  GetMetaExtensionFactory() = 0;
 	virtual struct INodeFactory&           GetNodeFactory() = 0;

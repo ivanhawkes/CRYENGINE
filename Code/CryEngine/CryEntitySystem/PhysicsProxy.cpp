@@ -8,6 +8,8 @@
 #include <CryNetwork/ISerialize.h>
 #include "AffineParts.h"
 #include <Cry3DEngine/CGF/CryHeaders.h>
+#include <Cry3DEngine/IMaterial.h>
+#include <Cry3DEngine/ISurfaceType.h>
 
 #include <CrySystem/TimeValue.h>
 #include <CryAnimation/ICryAnimation.h>
@@ -17,10 +19,13 @@
 
 #include <CrySystem/ICodeCheckpointMgr.h>
 #include <CryMemory/AddressHelpers.h>
+#include <CryPhysics/IPhysics.h>
+#include <CryParticleSystem/IParticles.h>
+#include <CryAnimation/IAttachment.h>
 
 #define MAX_MASS_TO_RESTORE_VELOCITY 500
 
-#define PHYS_DEFAULT_DENSITY 1000.0f
+#define PHYS_DEFAULT_DENSITY         1000.0f
 
 #if !defined(_RELEASE)
 namespace
@@ -259,9 +264,9 @@ void CEntityPhysics::OnChildEntityAttached(EntityId childEntityId)
 		CEntityPhysics* pChildProxy, *pAdamProxy;
 
 		if (i < 0 &&
-			(pChildProxy = pChild->GetPhysicalProxy()) && pChildProxy->m_pPhysicalEntity && pChildProxy->m_pPhysicalEntity->GetType() <= PE_RIGID &&
-			pAdam && (pAdamProxy = pAdam->GetPhysicalProxy()) && pAdamProxy->m_pPhysicalEntity &&
-			(i = pAdamProxy->m_pPhysicalEntity->GetType()) <= PE_WHEELEDVEHICLE && i != PE_STATIC)
+		    (pChildProxy = pChild->GetPhysicalProxy()) && pChildProxy->m_pPhysicalEntity && pChildProxy->m_pPhysicalEntity->GetType() <= PE_RIGID &&
+		    pAdam && (pAdamProxy = pAdam->GetPhysicalProxy()) && pAdamProxy->m_pPhysicalEntity &&
+		    (i = pAdamProxy->m_pPhysicalEntity->GetType()) <= PE_WHEELEDVEHICLE && i != PE_STATIC)
 		{
 			// Move pChild (and all of its children) to pAdam
 			int idmap[EntityPhysicsUtils::PARTID_MAX_ATTACHMENTS + 1];
@@ -285,8 +290,8 @@ void CEntityPhysics::OnChildEntityDetached(EntityId childEntityId)
 	{
 		CEntityPhysics* pChildProxy, *pAdamProxy;
 		if ((pChildProxy = pChild->GetPhysicalProxy()) && pChildProxy->m_pPhysicalEntity &&
-			pAdam && (pAdamProxy = pAdam->GetPhysicalProxy()) && pAdamProxy->m_pPhysicalEntity &&
-			pChild->m_hierarchy.attachId >= 0)
+		    pAdam && (pAdamProxy = pAdam->GetPhysicalProxy()) && pAdamProxy->m_pPhysicalEntity &&
+		    pChild->m_hierarchy.attachId >= 0)
 		{
 			Matrix34 childWorldTM = pChild->GetWorldTM();
 			childWorldTM.OrthonormalizeFast();
@@ -352,7 +357,7 @@ void CEntityPhysics::SendBreakEvent(EventPhysJointBroken* pEvent)
 				{
 					for (i = pent->GetSlotCount() - 1, j = -1, mindist = 1E10f; i > 0; i--)
 						if ((pStatObj = pent->GetStatObj(i | ENTITY_SLOT_ACTUAL)) && !(pStatObj->GetFlags() & STATIC_OBJECT_GENERATED) &&
-							!pStatObj->GetPhysGeom() && (dist = (pent->GetSlotWorldTM(i).GetTranslation() - pEvent->pt).len2()) < mindist)
+						    !pStatObj->GetPhysGeom() && (dist = (pent->GetSlotWorldTM(i).GetTranslation() - pEvent->pt).len2()) < mindist)
 							mindist = dist, j = i;
 					if (j >= 0)
 					{
@@ -500,7 +505,7 @@ void CEntityPhysics::Serialize(TSerialize ser)
 			IPhysicalEntity* pCharPhys;
 			// character physics is equal to the physics proxy's physics only for ragdolls
 			bool bSerializableRopes =
-			  pSlot && pSlot->GetCharacter() && (!(pCharPhys = pSlot->GetCharacter()->GetISkeletonPose()->GetCharacterPhysics()) || pCharPhys == m_pPhysicalEntity);
+				pSlot && pSlot->GetCharacter() && (!(pCharPhys = pSlot->GetCharacter()->GetISkeletonPose()->GetCharacterPhysics()) || pCharPhys == m_pPhysicalEntity);
 			if (bSerializableRopes && ser.BeginOptionalGroup("SerializableRopes", bSerializableRopes))
 			{
 				for (int i = 0; pSlot->GetCharacter()->GetISkeletonPose()->GetCharacterPhysics(i); i++)
@@ -565,7 +570,7 @@ void CEntityPhysics::OnEntityXForm(EntityTransformationFlagsMask transformReason
 		AABB bbox;
 		bbox.Reset();
 		if ((pAdam = GetAdam(GetEntity(), mtxLoc)) != GetEntity() &&
-			pAdam->GetPhysicalProxy()->m_pPhysicalEntity && pAdam->GetPhysicalProxy()->m_pPhysicalEntity->GetType() <= PE_WHEELEDVEHICLE)
+		    pAdam->GetPhysicalProxy()->m_pPhysicalEntity && pAdam->GetPhysicalProxy()->m_pPhysicalEntity->GetType() <= PE_WHEELEDVEHICLE)
 		{
 			for (sp.ipart = 0; pAdam->GetPhysicalProxy()->m_pPhysicalEntity->GetStatus(&sp); sp.ipart++)
 			{
@@ -592,9 +597,9 @@ void CEntityPhysics::OnEntityXForm(EntityTransformationFlagsMask transformReason
 	}
 
 	if (transformReasons & ENTITY_XFORM_IGNORE_PHYSICS ||
-		transformReasons & ENTITY_XFORM_FROM_PARENT && (
-	      GetEntity()->GetParentBindingType() == CEntity::EBindingType::eBT_LocalSim ||
-	      m_pPhysicalEntity && m_pPhysicalEntity->GetType() == PE_GRID))
+	    transformReasons & ENTITY_XFORM_FROM_PARENT && (
+				GetEntity()->GetParentBindingType() == CEntity::EBindingType::eBT_LocalSim ||
+				m_pPhysicalEntity && m_pPhysicalEntity->GetType() == PE_GRID))
 		return;
 
 	if (!GetEntity()->HasInternalFlag(CEntity::EInternalFlag::PhysicsIgnoreTransformEvent))
@@ -970,7 +975,7 @@ void CEntityPhysics::CreatePhysicalEntity(SEntityPhysicalizeParams& params)
 	if (params.type == PE_ARTICULATED)
 		ppos.iSimClass = 2;
 	m_pPhysicalEntity = PhysicalWorld()->CreatePhysicalEntity(
-	  (pe_type)params.type, &ppos, GetEntity(), PHYS_FOREIGN_ID_ENTITY, CEntitySystem::IdToHandle(GetEntity()->GetId()).GetIndex());
+		(pe_type)params.type, &ppos, GetEntity(), PHYS_FOREIGN_ID_ENTITY, CEntitySystem::IdToHandle(GetEntity()->GetId()).GetIndex());
 	m_pPhysicalEntity->AddRef();
 
 	if (params.nFlagsOR != 0)
@@ -1095,7 +1100,10 @@ int CEntityPhysics::AddSlotGeometry(int nSlot, SEntityPhysicalizeParams& params,
 	//if (pSlot->HaveLocalMatrix())
 	{
 		mtx = GetEntity()->GetSlotLocalTM(nSlot | ENTITY_SLOT_ACTUAL & - bNoSubslots, false);
-		mtx.SetTranslation(Diag33(scale) * mtx.GetTranslation());
+		if (max(max(fabs_tpl(scale.x - 1.0f), fabs_tpl(scale.y - 1.0f)), fabs_tpl(scale.z - 1.0f)) > 0.0001f)
+			mtx = Matrix34::CreateScale(scale) * mtx;
+		else 
+			mtx.SetTranslation(Diag33(scale) * mtx.GetTranslation());
 		//scale *= mtx.GetColumn(0).len();
 	}
 	partpos.pMtx3x4 = &mtx;
@@ -1106,8 +1114,6 @@ int CEntityPhysics::AddSlotGeometry(int nSlot, SEntityPhysicalizeParams& params,
 		pAdamProxy = this;
 	if (pAdamProxy != this)
 		mtx = GetEntity()->GetLocalTM() * mtx;
-	else if (max(max(fabs_tpl(scale.x - 1.0f), fabs_tpl(scale.y - 1.0f)), fabs_tpl(scale.z - 1.0f)) > 0.0001f)
-		mtx = mtx * Matrix33::CreateScale(scale);
 
 	partpos.flags = geom_collides | geom_floats;
 	partpos.flags &= params.nFlagsAND;
@@ -1743,7 +1749,7 @@ bool CEntityPhysics::ConvertCharacterToRagdoll(SEntityPhysicalizeParams& params,
 
 	// This is special case when converting living character into the rag-doll
 	IPhysicalEntity* pPhysEntity = pCharacter->GetISkeletonPose()->RelinquishCharacterPhysics(//GetEntity()->GetSlotWorldTM(params.nSlot),
-	  GetEntity()->GetWorldTM(), params.fStiffnessScale, params.bCopyJointVelocities, velInitial);
+		GetEntity()->GetWorldTM(), params.fStiffnessScale, params.bCopyJointVelocities, velInitial);
 	if (pPhysEntity)
 	{
 		// Store current velocity.
@@ -1939,7 +1945,7 @@ void CEntityPhysics::OnPhysicsPostStep(EventPhysPostStep* pEvent)
 
 	EntityTransformationFlagsMask nWhyFlags = {
 		ENTITY_XFORM_PHYSICS_STEP, GetEntity()->HasInternalFlag(CEntity::EInternalFlag::PhysicsDisableNetworkSerialization) ? ENTITY_XFORM_NO_PROPOGATE : EEntityXFormFlags(0),
-		EEntityXFormFlags(ENTITY_XFORM_NO_EVENT & gEnv->pPhysicalWorld->GetPhysVars()->bLogStructureChanges - 1)
+		EEntityXFormFlags(ENTITY_XFORM_NO_EVENT & gEnv->pPhysicalWorld->GetPhysVars()->bLogStructureChanges - 1) 
 	};
 	if (!m_pPhysicalEntity)
 	{
@@ -2023,7 +2029,7 @@ void CEntityPhysics::OnPhysicsPostStep(EventPhysPostStep* pEvent)
 			GetEntity()->GetEntityRender()->InvalidateLocalBounds();
 			// need to force BBox to the brush since it can skip BBox update from XForm if the matrix doesn't change
 			CEntitySlot *pSlot = GetEntity()->GetSlot(0);
-			AABB bbox, bboxLoc(AABB::RESET); 
+			AABB bbox, bboxLoc(AABB::RESET);
 			pSlot->GetLocalBounds(bboxLoc);
 			bbox.SetTransformedAABB(pSlot->GetWorldTM(), bboxLoc);
 			pRenderNode->SetBBox(bbox);
@@ -2093,7 +2099,7 @@ void CEntityPhysics::OnPhysicsStateChanged(int previousSimulationClass)
 		event.nParam[0] = 1;
 		GetEntity()->SendEvent(event);
 	}
-	else if(previousSimulationClass == SC_SLEEPING_RIGID)
+	else if (previousSimulationClass == SC_SLEEPING_RIGID)
 	{
 		GetEntity()->GetEntityRender()->TryInvalidateParticleEmitters();
 

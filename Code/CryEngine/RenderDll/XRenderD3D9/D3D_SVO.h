@@ -172,14 +172,6 @@ protected:
 	SVoxPool             vp_RGB4;
 	SVoxPool             vp_NORM;
 	SVoxPool             vp_ALDI;
-
-	_smart_ptr<CTexture> m_pTexTexA;
-	_smart_ptr<CTexture> m_pTexTriA;
-	_smart_ptr<CTexture> m_pTexIndA;
-	_smart_ptr<CTexture> m_pTexTree;
-	_smart_ptr<CTexture> m_pTexOpac;
-	_smart_ptr<CTexture> m_pTexTris;
-	_smart_ptr<CTexture> m_pGlobalSpecCM;
 	#endif
 
 	PodArray<I3DEngine::SSvoNodeInfo> m_arrNodesForUpdateIncr;
@@ -214,6 +206,7 @@ protected:
 	  INIT_SVO_CVAR(int, e_svoRender);                              \
 	  INIT_SVO_CVAR(int, e_svoTI_ResScaleBase);                     \
 	  INIT_SVO_CVAR(int, e_svoTI_ResScaleAir);                      \
+	  INIT_SVO_CVAR(int, e_svoTI_ResScaleSpecular);                 \
 	  INIT_SVO_CVAR(int, e_svoTI_Active);                           \
 	  INIT_SVO_CVAR(int, e_svoTI_IntegrationMode);                  \
 	  INIT_SVO_CVAR(float, e_svoTI_InjectionMultiplier);            \
@@ -257,7 +250,11 @@ protected:
 	  INIT_SVO_CVAR(float, e_svoTI_Troposphere_CloudGenTurb_Freq);  \
 	  INIT_SVO_CVAR(float, e_svoTI_Troposphere_CloudGenTurb_Scale); \
 	  INIT_SVO_CVAR(float, e_svoTI_Troposphere_Density);            \
-	  INIT_SVO_CVAR(float, e_svoTI_RT_MaxDist);                     \
+	  INIT_SVO_CVAR(int,   e_svoTI_RT_Active);                      \
+	  INIT_SVO_CVAR(float, e_svoTI_RT_MaxDistRay);                  \
+	  INIT_SVO_CVAR(float, e_svoTI_RT_MaxDistCam);                  \
+	  INIT_SVO_CVAR(float, e_svoTI_RT_MinGloss);                    \
+	  INIT_SVO_CVAR(float, e_svoTI_RT_MinRefl);                     \
 	  INIT_SVO_CVAR(float, e_svoTI_ShadowsSoftness);                \
 	  INIT_SVO_CVAR(float, e_svoTI_Specular_Sev);                   \
 	  INIT_SVO_CVAR(float, e_svoTI_SSAOAmount);                     \

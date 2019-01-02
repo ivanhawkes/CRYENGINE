@@ -657,6 +657,7 @@ void CXMLProcessor::ParsePreloads(XmlNodeRef const pPreloadDataRoot, EDataScope 
 
 					if (pPreloadRequest == nullptr)
 					{
+						MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CPreloadRequest");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 						pPreloadRequest = new CPreloadRequest(preloadRequestId, dataScope, isAutoLoad, cFileEntryIDs, szPreloadRequestName);
 #else
@@ -740,7 +741,7 @@ void CXMLProcessor::ParseEnvironments(XmlNodeRef const pEnvironmentRoot, EDataSc
 
 					if (pEnvironmentImplNode != nullptr)
 					{
-						Impl::IEnvironmentConnection const* const pConnection = g_pIImpl->ConstructEnvironmentConnection(pEnvironmentImplNode);
+						Impl::IEnvironmentConnection* const pConnection = g_pIImpl->ConstructEnvironmentConnection(pEnvironmentImplNode);
 
 						if (pConnection != nullptr)
 						{
@@ -756,6 +757,7 @@ void CXMLProcessor::ParseEnvironments(XmlNodeRef const pEnvironmentRoot, EDataSc
 
 				if (!connections.empty())
 				{
+					MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CEnvironment");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 					auto const pNewEnvironment = new CEnvironment(environmentId, dataScope, connections, szEnvironmentName);
 #else
@@ -820,7 +822,7 @@ void CXMLProcessor::ParseSettings(XmlNodeRef const pRoot, EDataScope const dataS
 
 						if (pSettingImplNode != nullptr)
 						{
-							Impl::ISettingConnection const* const pConnection = g_pIImpl->ConstructSettingConnection(pSettingImplNode);
+							Impl::ISettingConnection* const pConnection = g_pIImpl->ConstructSettingConnection(pSettingImplNode);
 
 							if (pConnection != nullptr)
 							{
@@ -834,6 +836,7 @@ void CXMLProcessor::ParseSettings(XmlNodeRef const pRoot, EDataScope const dataS
 						connections.shrink_to_fit();
 					}
 
+					MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CSetting");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 					auto const pNewSetting = new CSetting(settingId, dataScope, isAutoLoad, connections, szSettingName);
 #else
@@ -885,7 +888,7 @@ void CXMLProcessor::ParseTriggers(XmlNodeRef const pXMLTriggerRoot, EDataScope c
 					if (pTriggerImplNode)
 					{
 						float radius = 0.0f;
-						Impl::ITriggerConnection const* const pConnection = g_pIImpl->ConstructTriggerConnection(pTriggerImplNode, radius);
+						Impl::ITriggerConnection* const pConnection = g_pIImpl->ConstructTriggerConnection(pTriggerImplNode, radius);
 
 						if (pConnection != nullptr)
 						{
@@ -903,6 +906,7 @@ void CXMLProcessor::ParseTriggers(XmlNodeRef const pXMLTriggerRoot, EDataScope c
 					connections.shrink_to_fit();
 				}
 
+				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CTrigger");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 				CTrigger* const pNewTrigger = new CTrigger(triggerId, dataScope, connections, maxRadius, szTriggerName);
 #else
@@ -946,7 +950,7 @@ void CXMLProcessor::ParseDefaultTriggers(XmlNodeRef const pXMLTriggerRoot)
 				if (pConnectionNode != nullptr)
 				{
 					float radius = 0.0f;
-					Impl::ITriggerConnection const* const pConnection = g_pIImpl->ConstructTriggerConnection(pConnectionNode, radius);
+					Impl::ITriggerConnection* const pConnection = g_pIImpl->ConstructTriggerConnection(pConnectionNode, radius);
 
 					if (pConnection != nullptr)
 					{
@@ -1016,6 +1020,7 @@ void CXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataScope co
 
 			if ((switchId != InvalidControlId) && (stl::find_in_map(g_switches, switchId, nullptr) == nullptr))
 			{
+				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CSwitch");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 				auto const pNewSwitch = new CSwitch(switchId, dataScope, szSwitchName);
 #else
@@ -1045,7 +1050,7 @@ void CXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataScope co
 
 								if (pStateImplNode != nullptr)
 								{
-									Impl::ISwitchStateConnection const* const pConnection = g_pIImpl->ConstructSwitchStateConnection(pStateImplNode);
+									Impl::ISwitchStateConnection* const pConnection = g_pIImpl->ConstructSwitchStateConnection(pStateImplNode);
 
 									if (pConnection != nullptr)
 									{
@@ -1054,6 +1059,7 @@ void CXMLProcessor::ParseSwitches(XmlNodeRef const pXMLSwitchRoot, EDataScope co
 								}
 							}
 
+							MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CSwitchState");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 							auto const pNewState = new CSwitchState(switchId, switchStateId, connections, szSwitchStateName);
 #else
@@ -1101,7 +1107,7 @@ void CXMLProcessor::ParseParameters(XmlNodeRef const pXMLParameterRoot, EDataSco
 
 					if (pParameterImplNode != nullptr)
 					{
-						Impl::IParameterConnection const* const pConnection = g_pIImpl->ConstructParameterConnection(pParameterImplNode);
+						Impl::IParameterConnection* const pConnection = g_pIImpl->ConstructParameterConnection(pParameterImplNode);
 
 						if (pConnection != nullptr)
 						{
@@ -1115,6 +1121,7 @@ void CXMLProcessor::ParseParameters(XmlNodeRef const pXMLParameterRoot, EDataSco
 					connections.shrink_to_fit();
 				}
 
+				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::CParameter");
 #if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 				auto const pParameter = new CParameter(parameterId, dataScope, connections, szParameterName);
 #else

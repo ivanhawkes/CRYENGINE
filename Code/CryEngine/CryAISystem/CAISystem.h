@@ -22,12 +22,10 @@ typedef std::vector<Vec3> ListPositions;
 #include <CryCore/Containers/MiniQueue.h>
 #include "AIRadialOcclusion.h"
 #include "AILightManager.h"
-#include "AIDynHideObjectManager.h"
 #include "Shape.h"
 #include "ShapeContainer.h"
 #include "Shape2.h"
 #include "Navigation.h"
-#include "HideSpot.h"
 #include "VisionMap.h"
 #include "Group/Group.h"
 #include "Factions/FactionSystem.h"
@@ -35,7 +33,6 @@ typedef std::vector<Vec3> ListPositions;
 #include "GlobalPerceptionScaleHandler.h"
 #include "ClusterDetector.h"
 #include "ActorLookUp.h"
-#include <CryAISystem/BehaviorTree/IBehaviorTreeGraft.h>
 
 #ifdef CRYAISYSTEM_DEBUG
 	#include "AIDbgRecorder.h"
@@ -67,7 +64,6 @@ namespace AISignals
 
 class CAIActionManager;
 class ICentralInterestManager;
-class CAIHideObject;
 
 class CScriptBind_AI;
 
@@ -226,37 +222,37 @@ public:
 	void SubsystemUpdateActionManager();
 	void SubsystemUpdateRadialOcclusionRaycast();
 	void SubsystemUpdateLightManager();
-	void SubsystemUpdateNavigation(const CTimeValue frameStartTime, const float frameDeltaTime);
-	void SubsystemUpdateBannedSOs(const float frameDeltaTime);
-	void SubsystemUpdateSystemComponents(const float frameDeltaTime);
-	void SubsystemUpdateCommunicationManager(const float frameDeltaTime);
-	void SubsystemUpdateGroupManager(const float frameDeltaTime);
+	void SubsystemUpdateNavigation();
+	void SubsystemUpdateBannedSOs();
+	void SubsystemUpdateSystemComponents();
+	void SubsystemUpdateCommunicationManager();
+	void SubsystemUpdateGroupManager();
 	void SubsystemUpdatePlayers();
-	void SubsystemUpdateGroups(const CTimeValue frameStartTime);
-	void SubsystemUpdateLeaders(const float frameDeltaTime);
+	void SubsystemUpdateGroups();
+	void SubsystemUpdateLeaders();
 	void SubsystemUpdateSmartObjectManager();
-	void SubsystemUpdateInterestManager(const float frameDeltaTime);
+	void SubsystemUpdateInterestManager();
 	void SubsystemUpdateTacticalPointSystem();
 	void SubsystemUpdateAmbientFire();
 	void SubsystemUpdateExpensiveAccessoryQuota();
-	void SubsystemUpdateActorsAndTargetTrackAndORCA(const float frameDeltaTime);
+	void SubsystemUpdateActorsAndTargetTrackAndORCA();
 	void SubsystemUpdateTargetTrackManager();
-	void SubsystemUpdateCollisionAvoidanceSystem(const float frameDeltaTime);
+	void SubsystemUpdateCollisionAvoidanceSystem();
 
 	// These subsystems are updated in the Update(...) function if the respective subsystem flag is not set in m_overrideUpdateFlags
 	// If it's set the subsystem will not get updated when executing Update(...) function but
 	// may get updated via UpdateSubsystem with the specific flag from Game code
 
-	void TrySubsystemUpdateVisionMap(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateAuditionMap(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateCoverSystem(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateNavigationSystem(const bool isAutomaticUpdate);
+	void TrySubsystemUpdateVisionMap(const CTimeValue frameStartTime, const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateAuditionMap(const CTimeValue frameStartTime,const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateCoverSystem(const CTimeValue frameStartTime,const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateNavigationSystem(const CTimeValue frameStartTime, const float frameDeltaTime,const bool isAutomaticUpdate);
 
-	void TrySubsystemUpdateMovementSystem(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateGlobalRayCaster(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateGlobalIntersectionTester(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateClusterDetector(const float frameDeltaTime, const bool isAutomaticUpdate);
-	void TrySubsystemUpdateBehaviorTreeManager(const bool isAutomaticUpdate);
+	void TrySubsystemUpdateMovementSystem(const CTimeValue frameStartTime, const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateGlobalRayCaster(const CTimeValue frameStartTime, const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateGlobalIntersectionTester(const CTimeValue frameStartTime, const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateClusterDetector(const CTimeValue frameStartTime, const float frameDeltaTime, const bool isAutomaticUpdate);
+	void TrySubsystemUpdateBehaviorTreeManager(const CTimeValue frameStartTime, const float frameDeltaTime, const bool isAutomaticUpdate);
 	
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//Time/Updates/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -376,7 +372,6 @@ public:
 	virtual ICoverSystem*                       GetCoverSystem() const override;
 	virtual INavigationSystem*                  GetNavigationSystem() const override;
 	virtual BehaviorTree::IBehaviorTreeManager* GetIBehaviorTreeManager() const override;
-	virtual BehaviorTree::IGraftManager*        GetIGraftManager() const override;
 	virtual ITargetTrackManager*                GetTargetTrackManager() const override;
 	virtual struct IMovementSystem*             GetMovementSystem() const override;
 	virtual AIActionSequence::ISequenceManager* GetSequenceManager() const override;
@@ -513,7 +508,6 @@ public:
 	//CAISystem/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	CAILightManager*         GetLightManager();
-	CAIDynHideObjectManager* GetDynHideObjectManager();
 
 	bool                     InitSmartObjects();
 
@@ -598,11 +592,6 @@ public:
 	float GetWaterOcclusionValue(const Vec3& targetPos) const;
 
 	bool  CheckVisibilityToBody(CAIActor* pObserver, CAIActor* pBody, float& closestDistSq, IPhysicalEntity* pSkipEnt = 0);
-
-	/// Returns positions of currently occupied hide point objects excluding the requesters hide spot.
-	void GetOccupiedHideObjectPositions(const CPipeUser* pRequester, std::vector<Vec3>& hideObjectPositions);
-
-	bool IsHideSpotOccupied(CPipeUser* pRequester, const Vec3& pos) const;
 
 	void AdjustOmniDirectionalCoverPosition(Vec3& pos, Vec3& dir, float hideRadius, float agentRadius, const Vec3& hideFrom, const bool hideBehind = true);
 
@@ -692,7 +681,6 @@ public:
 	////////////////////////////////////////////////////////////////////
 	//Subsystems
 	CAILightManager         m_lightManager;
-	CAIDynHideObjectManager m_dynHideObjectManager;
 	SAIRecorderDebugContext m_recorderDebugContext;
 	//Subsystems
 	////////////////////////////////////////////////////////////////////
@@ -918,9 +906,6 @@ public:
 	void DebugDrawGroups();
 	void DebugDrawOneGroup(float x, float& y, float& w, float fontSize, short groupID, const ColorB& textColor,
 	                       const ColorB& worldColor, bool drawWorld);
-	void DebugDrawDynamicHideObjects();
-	void DebugDrawMyHideSpot(CAIObject* pAIObj) const;
-	void DebugDrawSelectedHideSpots() const;
 	void DebugDrawCrowdControl();
 	void DebugDrawRadar();
 	void DebugDrawDistanceLUT();

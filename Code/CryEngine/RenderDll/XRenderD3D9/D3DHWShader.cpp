@@ -612,24 +612,25 @@ bool CHWShader_D3D::mfWarmupCache(CShader* pFX)
 
 			validCache = validationResult == cacheValidationResult::ok;
 
-			std::string error;
+			const char* error = nullptr;
 			switch (validationResult)
 			{
 			case cacheValidationResult::no_lookup:
-				error = std::string("WARNING: Shader cache '") + cache->m_pRes->mfGetFileName() + "' does not have lookup data!";
+				error = "Shader cache '%s' does not have lookup data!";
 				break;
 			case cacheValidationResult::version_mismatch:
-				error = std::string("WARNING: Shader cache '") + cache->m_pRes->mfGetFileName() + "' version mismatch";
+				error = "Shader cache '%s' version mismatch";
 				break;
 			case cacheValidationResult::checksum_mismatch:
-				error = std::string("WARNING: Shader cache '") + cache->m_pRes->mfGetFileName() + "' CRC mismatch";
+				error = "Shader cache '%s' CRC mismatch";
 				break;
-			default: {}
+			default:
+				error = "Shader cache '%s' unspecified error";
 			}
 
 			// Output error only for readonly cache
 			if (cacheType == cacheSource::readonly && !validCache)
-				LogWarningEngineOnly(error.c_str());
+				LogWarningEngineOnly(error, cache->m_pRes->mfGetFileName());
 		}
 
 		if (cacheType == cacheSource::user && !validCache)
@@ -690,8 +691,8 @@ SDeviceShaderEntry CHWShader_D3D::mfShaderEntryFromCache(CShader* pFX, const CDi
 	instance.m_eClass = this->m_eSHClass;
 	instance.m_nVertexFormat = cacheItemHeader.m_nVertexFormat;
 	instance.m_nInstructions = cacheItemHeader.m_nInstructions;
-	instance.m_VStreamMask_Decl = cacheItemHeader.m_StreamMask_Decl;
-	instance.m_VStreamMask_Stream = cacheItemHeader.m_StreamMask_Stream;
+	instance.m_VStreamMask_Decl = EStreamMasks(cacheItemHeader.m_StreamMask_Decl);
+	instance.m_VStreamMask_Stream = EStreamMasks(cacheItemHeader.m_StreamMask_Stream);
 
 	std::vector<SCGBind> bindsFromCache;
 	const byte* pShaderData = pData.get() + sizeof(SShaderCacheHeaderItem);
@@ -1742,14 +1743,9 @@ int CHWShader_D3D::CheckActivation(CShader* pSH, SHWSInstance*& pInst, uint32 nF
 	{
 		if (pInst->m_Handle.m_pData)
 		{
-			if (gRenDev && !gRenDev->CheckDeviceLost())
-			{
-				mfUploadHW(pInst, pInst->m_Handle.m_pData, pInst->m_Handle.m_nData, pSH, nFlags);
-				SAFE_DELETE_ARRAY(pInst->m_Handle.m_pData);
-				pInst->m_Handle.m_nData = 0;
-			}
-			else
-				eError = ED3DShError_CompilingError;
+			mfUploadHW(pInst, pInst->m_Handle.m_pData, pInst->m_Handle.m_nData, pSH, nFlags);
+			SAFE_DELETE_ARRAY(pInst->m_Handle.m_pData);
+			pInst->m_Handle.m_nData = 0;
 		}
 	}
 	if (eError == ED3DShError_CompilingError)

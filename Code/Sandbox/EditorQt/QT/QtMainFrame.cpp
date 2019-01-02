@@ -372,10 +372,10 @@ public:
 		pActionGroup->addAction(menuEditing_Mode->AddCommand("tools.move"));
 		pActionGroup->addAction(menuEditing_Mode->AddCommand("tools.rotate"));
 		pActionGroup->addAction(menuEditing_Mode->AddCommand("tools.scale"));
-		menuConstrain->AddCommand("tools.enable_x_axis_contraint");
-		menuConstrain->AddCommand("tools.enable_y_axis_contraint");
-		menuConstrain->AddCommand("tools.enable_z_axis_contraint");
-		menuConstrain->AddCommand("tools.enable_xy_axis_contraint");
+		menuConstrain->AddCommand("tools.enable_x_axis_constraint");
+		menuConstrain->AddCommand("tools.enable_y_axis_constraint");
+		menuConstrain->AddCommand("tools.enable_z_axis_constraint");
+		menuConstrain->AddCommand("tools.enable_xy_axis_constraint");
 		menuFast_Rotate->AddCommand("tools.fast_rotate_x");
 		menuFast_Rotate->AddCommand("tools.fast_rotate_y");
 		menuFast_Rotate->AddCommand("tools.fast_rotate_z");
@@ -1165,9 +1165,9 @@ void CEditorMainFrame::InitMenus()
 		connect(displayMenu, &QMenu::aboutToShow, [this]()
 		{
 			ICommandManager* pCommandManager = GetIEditorImpl()->GetICommandManager();
-			pCommandManager->GetAction("camera.toggle_speed_height_relative")->setChecked(CRenderViewport::s_cameraPreferences.speedHeightRelativeEnabled);
-			pCommandManager->GetAction("camera.toggle_terrain_collisions")->setChecked(CRenderViewport::s_cameraPreferences.terrainCollisionEnabled);
-			pCommandManager->GetAction("camera.toggle_object_collisions")->setChecked(CRenderViewport::s_cameraPreferences.objectCollisionEnabled);
+			pCommandManager->GetAction("camera.toggle_speed_height_relative")->setChecked(CRenderViewport::s_cameraPreferences.IsSpeedHeightRelativeEnabled());
+			pCommandManager->GetAction("camera.toggle_terrain_collisions")->setChecked(CRenderViewport::s_cameraPreferences.IsTerrainCollisionEnabled());
+			pCommandManager->GetAction("camera.toggle_object_collisions")->setChecked(CRenderViewport::s_cameraPreferences.IsObjectCollisionEnabled());
 		});
 	}
 

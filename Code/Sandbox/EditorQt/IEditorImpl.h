@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "SandboxAPI.h"
 #include "IEditor.h"
 #include "Util/XmlTemplate.h"
 #include "Version.h"
@@ -26,6 +27,7 @@ class CExportManager;
 class CFlowGraphDebuggerEditor;
 class CGameTokenManager;
 class CGizmoManager;
+class CHeightmap;
 class CIconManager;
 class CLensFlareManager;
 class CLevelIndependentFileMan;
@@ -150,7 +152,7 @@ public:
 
 	void                            DeleteObject(CBaseObject* obj);
 	CBaseObject*                    CloneObject(CBaseObject* obj);
-	void                            StartObjectCreation(const char* type, const char* file = nullptr) override;
+	bool                            StartObjectCreation(const char* type, const char* file = nullptr) override;
 	IObjectManager*                 GetObjectManager();
 	IGizmoManager*                  GetGizmoManager();
 	const CSelectionGroup*          GetSelection() const;
@@ -307,7 +309,6 @@ public:
 	virtual void             UnRegisterEntityAsJob(IRenderNode* pRenderNode);
 	virtual void             SyncPrefabCPrefabObject(CBaseObject* pObject, const SObjectChangedContext& context);
 	virtual bool             IsModifyInProgressCPrefabObject(CBaseObject* oObject);
-	virtual void             OnPrefabMake();
 	virtual IEditorMaterial* LoadMaterial(const string& name);
 	virtual void             OnRequestMaterial(IMaterial* pMatInfo);
 	virtual bool             IsCGroup(CBaseObject* pObject);

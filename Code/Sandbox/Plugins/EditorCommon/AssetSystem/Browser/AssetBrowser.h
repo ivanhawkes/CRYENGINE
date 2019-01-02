@@ -8,12 +8,11 @@
 #include "EditorFramework/Editor.h"
 #include "ProxyModels/ItemModelAttribute.h"
 #include <CrySandbox/CrySignal.h>
+#include "AssetSystem/AssetType.h"
 
-class CAsset;
 class CAssetDropHandler;
 class CAssetFolderFilterModel;
 class CAssetFoldersView;
-class CAssetType;
 class CBreadcrumbsBar;
 class CLineEditDelegate;
 class QAction;
@@ -81,7 +80,7 @@ public:
 	void    SetRecursiveSearch(bool recursiveSearch);
 	void    SetFoldersViewVisible(bool isVisible);
 
-	CAsset* QueryNewAsset(const CAssetType& type, const void* pTypeSpecificParameter);
+	CAsset* QueryNewAsset(const CAssetType& type, const CAssetType::SCreateParams* pCreateParams);
 
 	void    NotifyContextMenuCreation(CAbstractMenu& menu, const std::vector<CAsset*>& assets, const std::vector<string>& folders);
 
@@ -125,7 +124,7 @@ private:
 
 	void               FillCreateAssetMenu(CAbstractMenu* menu, const QString& folder);
 
-	void               BeginCreateAsset(const CAssetType& type, const void* pTypeSpecificParameter);
+	void               BeginCreateAsset(const CAssetType& type, const CAssetType::SCreateParams* pCreateParams);
 	void               EndCreateAsset();
 
 	QAbstractItemView* GetFocusedView() const;
@@ -147,6 +146,8 @@ private:
 	void                BuildContextMenuForEmptiness(CAbstractMenu& abstractMenu);
 	void                BuildContextMenuForFolders(const std::vector<string>& folders, CAbstractMenu& abstractMenu);
 	void                BuildContextMenuForAssets(const std::vector<CAsset*>& assets, const std::vector<string>& folders, CAbstractMenu& abstractMenu);
+
+	void                AddWorkFilesMenu(CAbstractMenu& abstractMenu, CAsset* pAsset);
 
 	void                OnFolderSelectionChanged(const QStringList& selectedFolders);
 	void                OnActivated(const QModelIndex& index);
@@ -173,9 +174,14 @@ private:
 	void                EditNewAsset();
 
 	// CEditor impl
-	bool OnFind() override;
-	bool OnDelete() override;
-	bool OnOpen() override;
+	virtual bool OnFind() override;
+	virtual bool OnDelete() override;
+	virtual bool OnOpen() override;
+	virtual bool OnCopy() override;
+	virtual bool OnPaste() override;
+	virtual bool OnDuplicate() override;
+
+	void Paste(bool pasteNextToOriginal);
 
 	//ui components
 	CAssetFoldersView*                          m_pFoldersView = nullptr;

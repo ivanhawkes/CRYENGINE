@@ -64,6 +64,7 @@ namespace AK
 {
 void* AllocHook(size_t in_size)
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "AK::AllocHook");
 	return CryModuleMalloc(in_size);
 }
 
@@ -184,25 +185,12 @@ void CountPoolSizes(XmlNodeRef const pNode, SPoolSizes& poolSizes)
 //////////////////////////////////////////////////////////////////////////
 void AllocateMemoryPools(uint16 const objectPoolSize, uint16 const eventPoolSize)
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Object Pool");
 	CObject::CreateAllocator(objectPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Event Pool");
 	CEvent::CreateAllocator(eventPoolSize);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Trigger Pool");
 	CTrigger::CreateAllocator(g_poolSizes.triggers);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Parameter Pool");
 	CParameter::CreateAllocator(g_poolSizes.parameters);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Switch State Pool");
 	CSwitchState::CreateAllocator(g_poolSizes.switchStates);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise Environment Pool");
 	CEnvironment::CreateAllocator(g_poolSizes.environments);
-
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "Wwise File Pool");
 	CFile::CreateAllocator(g_poolSizes.files);
 }
 
@@ -268,7 +256,7 @@ void LoadEventsMaxAttenuations(const string& soundbanksPath)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-CSwitchState const* ParseWwiseRtpcSwitch(XmlNodeRef const pNode)
+CSwitchState* ParseWwiseRtpcSwitch(XmlNodeRef const pNode)
 {
 	CSwitchState* pSwitchStateImpl = nullptr;
 
@@ -281,6 +269,8 @@ CSwitchState const* ParseWwiseRtpcSwitch(XmlNodeRef const pNode)
 		if (pNode->getAttr(s_szValueAttribute, value))
 		{
 			AkUniqueID const rtpcId = AK::SoundEngine::GetIDFromString(szName);
+
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CSwitchState");
 			pSwitchStateImpl = new CSwitchState(ESwitchType::Rtpc, rtpcId, rtpcId, value);
 		}
 	}
@@ -293,6 +283,152 @@ CSwitchState const* ParseWwiseRtpcSwitch(XmlNodeRef const pNode)
 	}
 
 	return pSwitchStateImpl;
+}
+
+///////////////////////////////////////////////////////////////////////////
+void ParseRtpcImpl(XmlNodeRef const pNode, AkRtpcID& rtpcId, float& multiplier, float& shift)
+{
+	if (_stricmp(pNode->getTag(), s_szParameterTag) == 0)
+	{
+		char const* const szName = pNode->getAttr(s_szNameAttribute);
+		rtpcId = static_cast<AkRtpcID>(AK::SoundEngine::GetIDFromString(szName));
+
+		if (rtpcId != AK_INVALID_RTPC_ID)
+		{
+			//the Wwise name is supplied
+			pNode->getAttr(s_szMutiplierAttribute, multiplier);
+			pNode->getAttr(s_szShiftAttribute, shift);
+		}
+		else
+		{
+			// Invalid Wwise RTPC name!
+			Cry::Audio::Log(ELogType::Warning, "Invalid Wwise parameter name %s", szName);
+		}
+	}
+	else
+	{
+		// Unknown Wwise RTPC tag!
+		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag %s", pNode->getTag());
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+bool ParseSwitchOrState(XmlNodeRef const pNode, AkUInt32& stateOrSwitchGroupId, AkUInt32& stateOrSwitchId)
+{
+	bool bSuccess = false;
+	char const* const szStateOrSwitchGroupName = pNode->getAttr(s_szNameAttribute);
+
+	if ((szStateOrSwitchGroupName != nullptr) && (szStateOrSwitchGroupName[0] != 0) && (pNode->getChildCount() == 1))
+	{
+		XmlNodeRef const pValueNode(pNode->getChild(0));
+
+		if (pValueNode && _stricmp(pValueNode->getTag(), s_szValueTag) == 0)
+		{
+			char const* const szStateOrSwitchName = pValueNode->getAttr(s_szNameAttribute);
+
+			if ((szStateOrSwitchName != nullptr) && (szStateOrSwitchName[0] != 0))
+			{
+				stateOrSwitchGroupId = AK::SoundEngine::GetIDFromString(szStateOrSwitchGroupName);
+				stateOrSwitchId = AK::SoundEngine::GetIDFromString(szStateOrSwitchName);
+				bSuccess = true;
+			}
+		}
+	}
+	else
+	{
+		Cry::Audio::Log(
+			ELogType::Warning,
+			"A Wwise SwitchGroup or StateGroup %s inside SwitchState needs to have exactly one WwiseValue.",
+			szStateOrSwitchGroupName);
+	}
+
+	return bSuccess;
+}
+
+//////////////////////////////////////////////////////////////////////////
+AkUInt32 IntToAkSpeakerSetup(int const value)
+{
+	AkUInt32 speakerSetup = 0;
+
+	switch (value)
+	{
+	case 10:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_MONO;
+			break;
+		}
+	case 11:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_1POINT1;
+			break;
+		}
+	case 20:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_STEREO;
+			break;
+		}
+	case 21:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_2POINT1;
+			break;
+		}
+	case 30:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_3STEREO;
+			break;
+		}
+	case 31:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_3POINT1;
+			break;
+		}
+	case 40:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_4;
+			break;
+		}
+	case 41:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_4POINT1;
+			break;
+		}
+	case 50:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_5;
+			break;
+		}
+	case 51:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_5POINT1;
+			break;
+		}
+	case 60:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_6;
+			break;
+		}
+	case 61:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_6POINT1;
+			break;
+		}
+	case 70:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_7;
+			break;
+		}
+	case 71:
+		{
+			speakerSetup = AK_SPEAKER_SETUP_7POINT1;
+			break;
+		}
+	default:
+		{
+			break;
+		}
+	}
+
+	return speakerSetup;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -456,6 +592,7 @@ ERequestStatus CImpl::Init(uint16 const objectPoolSize, uint16 const eventPoolSi
 	initSettings.bEnableGameSyncPreparation = false;//TODO: ???
 	g_cvars.m_panningRule = crymath::clamp(g_cvars.m_panningRule, 0, 1);
 	initSettings.settingsMainOutput.ePanningRule = static_cast<AkPanningRule>(g_cvars.m_panningRule);
+	initSettings.settingsMainOutput.channelConfig.SetStandard(IntToAkSpeakerSetup(g_cvars.m_channelConfig));
 
 	initSettings.bUseLEngineThread = g_cvars.m_enableEventManagerThread > 0;
 	initSettings.bUseSoundBankMgrThread = g_cvars.m_enableSoundBankManagerThread > 0;
@@ -859,22 +996,21 @@ ERequestStatus CImpl::StopAllSounds()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::SetGlobalParameter(IParameterConnection const* const pIParameterConnection, float const value)
+void CImpl::SetGlobalParameter(IParameterConnection* const pIParameterConnection, float const value)
 {
-	auto const pParameter = static_cast<CParameter const*>(pIParameterConnection);
-
-	if (pParameter != nullptr)
+	if (pIParameterConnection != nullptr)
 	{
-		auto const rtpcValue = static_cast<AkRtpcValue>(pParameter->mult * value + pParameter->shift);
+		auto const pParameter = static_cast<CParameter const*>(pIParameterConnection);
+		auto const rtpcValue = static_cast<AkRtpcValue>(pParameter->GetMultiplier() * value + pParameter->GetShift());
 
-		AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(pParameter->id, rtpcValue, AK_INVALID_GAME_OBJECT);
+		AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(pParameter->GetId(), rtpcValue, AK_INVALID_GAME_OBJECT);
 
 		if (!IS_WWISE_OK(wwiseResult))
 		{
 			Cry::Audio::Log(
 				ELogType::Warning,
 				"Wwise - failed to set the Rtpc %" PRISIZE_T " globally to value %f",
-				pParameter->id,
+				pParameter->GetId(),
 				static_cast<AkRtpcValue>(value));
 		}
 	}
@@ -885,27 +1021,27 @@ void CImpl::SetGlobalParameter(IParameterConnection const* const pIParameterConn
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchStateConnection)
+void CImpl::SetGlobalSwitchState(ISwitchStateConnection* const pISwitchStateConnection)
 {
-	auto const pSwitchState = static_cast<CSwitchState const*>(pISwitchStateConnection);
-
-	if (pSwitchState != nullptr)
+	if (pISwitchStateConnection != nullptr)
 	{
-		switch (pSwitchState->type)
+		auto const pSwitchState = static_cast<CSwitchState const*>(pISwitchStateConnection);
+
+		switch (pSwitchState->GetType())
 		{
 		case ESwitchType::StateGroup:
 			{
 				AKRESULT const wwiseResult = AK::SoundEngine::SetState(
-					pSwitchState->stateOrSwitchGroupId,
-					pSwitchState->stateOrSwitchId);
+					pSwitchState->GetStateOrSwitchGroupId(),
+					pSwitchState->GetStateOrSwitchId());
 
 				if (!IS_WWISE_OK(wwiseResult))
 				{
 					Cry::Audio::Log(
 						ELogType::Warning,
 						"Wwise failed to set the StateGroup %" PRISIZE_T "to state %" PRISIZE_T,
-						pSwitchState->stateOrSwitchGroupId,
-						pSwitchState->stateOrSwitchId);
+						pSwitchState->GetStateOrSwitchGroupId(),
+						pSwitchState->GetStateOrSwitchId());
 				}
 
 				break;
@@ -919,8 +1055,8 @@ void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchSta
 		case ESwitchType::Rtpc:
 			{
 				AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(
-					pSwitchState->stateOrSwitchGroupId,
-					static_cast<AkRtpcValue>(pSwitchState->rtpcValue),
+					pSwitchState->GetStateOrSwitchGroupId(),
+					static_cast<AkRtpcValue>(pSwitchState->GetRtpcValue()),
 					AK_INVALID_GAME_OBJECT);
 
 				if (!IS_WWISE_OK(wwiseResult))
@@ -928,9 +1064,8 @@ void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchSta
 					Cry::Audio::Log(
 						ELogType::Warning,
 						"Wwise - failed to set the Rtpc %" PRISIZE_T " globally to value %f",
-						pSwitchState->stateOrSwitchGroupId,
-						static_cast<AkRtpcValue>(pSwitchState->rtpcValue),
-						AK_INVALID_GAME_OBJECT);
+						pSwitchState->GetStateOrSwitchGroupId(),
+						static_cast<AkRtpcValue>(pSwitchState->GetRtpcValue()));
 				}
 
 				break;
@@ -941,7 +1076,7 @@ void CImpl::SetGlobalSwitchState(ISwitchStateConnection const* const pISwitchSta
 			}
 		default:
 			{
-				Cry::Audio::Log(ELogType::Warning, "Wwise - Unknown ESwitchType: %" PRISIZE_T, pSwitchState->type);
+				Cry::Audio::Log(ELogType::Warning, "Wwise - Unknown ESwitchType: %" PRISIZE_T, pSwitchState->GetType());
 
 				break;
 			}
@@ -1049,6 +1184,8 @@ ERequestStatus CImpl::ConstructFile(XmlNodeRef const pRootNode, SFileInfo* const
 			pFileInfo->bLocalized = (szLocalized != nullptr) && (_stricmp(szLocalized, s_szTrueValue) == 0);
 			pFileInfo->szFileName = szFileName;
 			pFileInfo->memoryBlockAlignment = AK_BANK_PLATFORM_DATA_ALIGNMENT;
+
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CFile");
 			pFileInfo->pImplData = new CFile();
 			result = ERequestStatus::Success;
 		}
@@ -1112,6 +1249,8 @@ IObject* CImpl::ConstructGlobalObject()
 
 	CTransformation transformation;
 	ZeroStruct(transformation);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CObject");
 	g_pObject = new CObject(g_globalObjectId, transformation, szName);
 
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
@@ -1138,12 +1277,13 @@ IObject* CImpl::ConstructObject(CTransformation const& transformation, char cons
 	AK::SoundEngine::RegisterGameObj(m_gameObjectId);
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CObject");
 	auto const pObject = new CObject(m_gameObjectId++, transformation, szName);
 
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	{
 		CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
-		g_gameObjectIds[pObject->m_id] = pObject;
+		g_gameObjectIds[pObject->GetId()] = pObject;
 	}
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
@@ -1154,7 +1294,7 @@ IObject* CImpl::ConstructObject(CTransformation const& transformation, char cons
 void CImpl::DestructObject(IObject const* const pIObject)
 {
 	auto const pObject = static_cast<CObject const*>(pIObject);
-	AkGameObjectID const objectID = pObject->m_id == AK_INVALID_GAME_OBJECT ? g_globalObjectId : pObject->m_id;
+	AkGameObjectID const objectID = pObject->GetId() == AK_INVALID_GAME_OBJECT ? g_globalObjectId : pObject->GetId();
 	AKRESULT const wwiseResult = AK::SoundEngine::UnregisterGameObj(objectID);
 
 	if (!IS_WWISE_OK(wwiseResult))
@@ -1165,7 +1305,7 @@ void CImpl::DestructObject(IObject const* const pIObject)
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 	{
 		CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
-		g_gameObjectIds.erase(pObject->m_id);
+		g_gameObjectIds.erase(pObject->GetId());
 	}
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 
@@ -1191,6 +1331,7 @@ IListener* CImpl::ConstructListener(CTransformation const& transformation, char 
 
 		if (IS_WWISE_OK(wwiseResult))
 		{
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CListener");
 			g_pListener = new CListener(transformation, m_gameObjectId);
 
 	#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
@@ -1214,6 +1355,8 @@ IListener* CImpl::ConstructListener(CTransformation const& transformation, char 
 #else
 	AK::SoundEngine::RegisterGameObj(m_gameObjectId);
 	AK::SoundEngine::SetDefaultListeners(&m_gameObjectId, 1);
+
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CListener");
 	g_pListener = new CListener(transformation, m_gameObjectId);
 	pIListener = static_cast<IListener*>(g_pListener);
 #endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
@@ -1241,6 +1384,7 @@ void CImpl::DestructListener(IListener* const pIListener)
 //////////////////////////////////////////////////////////////////////////
 IEvent* CImpl::ConstructEvent(CryAudio::CEvent& event)
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CEvent");
 	return static_cast<IEvent*>(new CEvent(event));
 }
 
@@ -1263,6 +1407,7 @@ void CImpl::DestructEvent(IEvent const* const pIEvent)
 //////////////////////////////////////////////////////////////////////////
 IStandaloneFileConnection* CImpl::ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection /*= nullptr*/)
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CStandaloneFile");
 	return static_cast<IStandaloneFileConnection*>(new CStandaloneFile);
 }
 
@@ -1314,7 +1459,7 @@ void CImpl::GamepadDisconnected(DeviceId const deviceUniqueID)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ITriggerConnection const* CImpl::ConstructTriggerConnection(XmlNodeRef const pRootNode, float& radius)
+ITriggerConnection* CImpl::ConstructTriggerConnection(XmlNodeRef const pRootNode, float& radius)
 {
 	CTrigger* pTrigger = nullptr;
 
@@ -1333,6 +1478,7 @@ ITriggerConnection const* CImpl::ConstructTriggerConnection(XmlNodeRef const pRo
 				maxAttenuation = attenuationPair->second;
 			}
 
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CTrigger");
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
 			pTrigger = new CTrigger(uniqueId, maxAttenuation, szName);
 			radius = maxAttenuation;
@@ -1354,10 +1500,10 @@ ITriggerConnection const* CImpl::ConstructTriggerConnection(XmlNodeRef const pRo
 }
 
 //////////////////////////////////////////////////////////////////////////
-ITriggerConnection const* CImpl::ConstructTriggerConnection(ITriggerInfo const* const pITriggerInfo)
+ITriggerConnection* CImpl::ConstructTriggerConnection(ITriggerInfo const* const pITriggerInfo)
 {
 #if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	ITriggerConnection const* pITriggerConnection = nullptr;
+	ITriggerConnection* pITriggerConnection = nullptr;
 	auto const pTriggerInfo = static_cast<STriggerInfo const*>(pITriggerInfo);
 
 	if (pTriggerInfo != nullptr)
@@ -1365,7 +1511,8 @@ ITriggerConnection const* CImpl::ConstructTriggerConnection(ITriggerInfo const* 
 		char const* const szName = pTriggerInfo->name.c_str();
 		AkUniqueID const uniqueId = AK::SoundEngine::GetIDFromString(szName);
 
-		pITriggerConnection = static_cast<ITriggerConnection const*>(new CTrigger(uniqueId, 0.0f, szName));
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CTrigger");
+		pITriggerConnection = static_cast<ITriggerConnection*>(new CTrigger(uniqueId, 0.0f, szName));
 	}
 
 	return pITriggerConnection;
@@ -1381,7 +1528,7 @@ void CImpl::DestructTriggerConnection(ITriggerConnection const* const pITriggerC
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IParameterConnection const* CImpl::ConstructParameterConnection(XmlNodeRef const pRootNode)
+IParameterConnection* CImpl::ConstructParameterConnection(XmlNodeRef const pRootNode)
 {
 	CParameter* pParameter = nullptr;
 
@@ -1393,6 +1540,7 @@ IParameterConnection const* CImpl::ConstructParameterConnection(XmlNodeRef const
 
 	if (rtpcId != AK_INVALID_RTPC_ID)
 	{
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CParameter");
 		pParameter = new CParameter(rtpcId, multiplier, shift);
 	}
 
@@ -1406,10 +1554,10 @@ void CImpl::DestructParameterConnection(IParameterConnection const* const pIPara
 }
 
 ///////////////////////////////////////////////////////////////////////////
-ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef const pRootNode)
+ISwitchStateConnection* CImpl::ConstructSwitchStateConnection(XmlNodeRef const pRootNode)
 {
 	char const* const szTag = pRootNode->getTag();
-	CSwitchState const* pSwitchState = nullptr;
+	CSwitchState* pSwitchState = nullptr;
 
 	if (_stricmp(szTag, s_szStateGroupTag) == 0)
 	{
@@ -1418,6 +1566,7 @@ ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef c
 
 		if (ParseSwitchOrState(pRootNode, stateOrSwitchGroupId, stateOrSwitchId))
 		{
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CSwitchState");
 			pSwitchState = new CSwitchState(ESwitchType::StateGroup, stateOrSwitchGroupId, stateOrSwitchId);
 		}
 	}
@@ -1428,6 +1577,7 @@ ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef c
 
 		if (ParseSwitchOrState(pRootNode, stateOrSwitchGroupId, stateOrSwitchId))
 		{
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CSwitchState");
 			pSwitchState = new CSwitchState(ESwitchType::SwitchGroup, stateOrSwitchGroupId, stateOrSwitchId);
 		}
 	}
@@ -1440,7 +1590,7 @@ ISwitchStateConnection const* CImpl::ConstructSwitchStateConnection(XmlNodeRef c
 		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag: %s", szTag);
 	}
 
-	return static_cast<ISwitchStateConnection const*>(pSwitchState);
+	return static_cast<ISwitchStateConnection*>(pSwitchState);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1450,10 +1600,10 @@ void CImpl::DestructSwitchStateConnection(ISwitchStateConnection const* const pI
 }
 
 ///////////////////////////////////////////////////////////////////////////
-IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef const pRootNode)
+IEnvironmentConnection* CImpl::ConstructEnvironmentConnection(XmlNodeRef const pRootNode)
 {
 	char const* const szTag = pRootNode->getTag();
-	CEnvironment const* pEnvironment = nullptr;
+	CEnvironment* pEnvironment = nullptr;
 
 	if (_stricmp(szTag, s_szAuxBusTag) == 0)
 	{
@@ -1462,6 +1612,7 @@ IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef c
 
 		if (busId != AK_INVALID_AUX_ID)
 		{
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CEnvironment");
 			pEnvironment = new CEnvironment(EEnvironmentType::AuxBus, static_cast<AkAuxBusID>(busId));
 		}
 		else
@@ -1479,6 +1630,7 @@ IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef c
 
 		if (rtpcId != AK_INVALID_RTPC_ID)
 		{
+			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CEnvironment");
 			pEnvironment = new CEnvironment(EEnvironmentType::Rtpc, rtpcId, multiplier, shift);
 		}
 		else
@@ -1491,7 +1643,7 @@ IEnvironmentConnection const* CImpl::ConstructEnvironmentConnection(XmlNodeRef c
 		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag: %s", szTag);
 	}
 
-	return static_cast<IEnvironmentConnection const*>(pEnvironment);
+	return static_cast<IEnvironmentConnection*>(pEnvironment);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1501,8 +1653,9 @@ void CImpl::DestructEnvironmentConnection(IEnvironmentConnection const* const pI
 }
 
 //////////////////////////////////////////////////////////////////////////
-ISettingConnection const* CImpl::ConstructSettingConnection(XmlNodeRef const pRootNode)
+ISettingConnection* CImpl::ConstructSettingConnection(XmlNodeRef const pRootNode)
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::Wwise::CSetting");
 	return static_cast<ISettingConnection*>(new CSetting);
 }
 
@@ -1515,66 +1668,6 @@ void CImpl::DestructSettingConnection(ISettingConnection const* const pISettingC
 //////////////////////////////////////////////////////////////////////////
 void CImpl::GetFileData(char const* const szName, SFileData& fileData) const
 {
-}
-
-//////////////////////////////////////////////////////////////////////////
-bool CImpl::ParseSwitchOrState(XmlNodeRef const pNode, AkUInt32& stateOrSwitchGroupId, AkUInt32& stateOrSwitchId)
-{
-	bool bSuccess = false;
-	char const* const szStateOrSwitchGroupName = pNode->getAttr(s_szNameAttribute);
-
-	if ((szStateOrSwitchGroupName != nullptr) && (szStateOrSwitchGroupName[0] != 0) && (pNode->getChildCount() == 1))
-	{
-		XmlNodeRef const pValueNode(pNode->getChild(0));
-
-		if (pValueNode && _stricmp(pValueNode->getTag(), s_szValueTag) == 0)
-		{
-			char const* const szStateOrSwitchName = pValueNode->getAttr(s_szNameAttribute);
-
-			if ((szStateOrSwitchName != nullptr) && (szStateOrSwitchName[0] != 0))
-			{
-				stateOrSwitchGroupId = AK::SoundEngine::GetIDFromString(szStateOrSwitchGroupName);
-				stateOrSwitchId = AK::SoundEngine::GetIDFromString(szStateOrSwitchName);
-				bSuccess = true;
-			}
-		}
-	}
-	else
-	{
-		Cry::Audio::Log(
-			ELogType::Warning,
-			"A Wwise SwitchGroup or StateGroup %s inside SwitchState needs to have exactly one WwiseValue.",
-			szStateOrSwitchGroupName);
-	}
-
-	return bSuccess;
-}
-
-///////////////////////////////////////////////////////////////////////////
-void CImpl::ParseRtpcImpl(XmlNodeRef const pNode, AkRtpcID& rtpcId, float& multiplier, float& shift)
-{
-	if (_stricmp(pNode->getTag(), s_szParameterTag) == 0)
-	{
-		char const* const szName = pNode->getAttr(s_szNameAttribute);
-		rtpcId = static_cast<AkRtpcID>(AK::SoundEngine::GetIDFromString(szName));
-
-		if (rtpcId != AK_INVALID_RTPC_ID)
-		{
-			//the Wwise name is supplied
-			pNode->getAttr(s_szMutiplierAttribute, multiplier);
-			pNode->getAttr(s_szShiftAttribute, shift);
-		}
-		else
-		{
-			// Invalid Wwise RTPC name!
-			Cry::Audio::Log(ELogType::Warning, "Invalid Wwise parameter name %s", szName);
-		}
-	}
-	else
-	{
-		// Unknown Wwise RTPC tag!
-		Cry::Audio::Log(ELogType::Warning, "Unknown Wwise tag %s", pNode->getTag());
-	}
 }
 
 //////////////////////////////////////////////////////////////////////////

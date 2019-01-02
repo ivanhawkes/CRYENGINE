@@ -8,6 +8,7 @@
 		#include "D3D11/DeviceResources_D3D11_NVAPI.h"
 	#endif
 #endif
+#include <CryRenderer/RenderElements/RendElement.h>
 
 typedef uintptr_t DeviceBufferHandle;
 typedef uint32    buffer_size_t;
@@ -471,7 +472,7 @@ public:
 
 	static uint32 TextureDataSize(D3DBaseView* pView);
 	static uint32 TextureDataSize(D3DBaseView* pView, const uint numRects, const RECT* pRects);
-	static uint32 TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, uint32 nMips, uint32 nSlices, const ETEX_Format eTF, ETEX_TileMode eTM, uint32 eFlags);
+	static uint32 TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, int8 nMips, uint32 nSlices, const ETEX_Format eTF, ETEX_TileMode eTM, uint32 eFlags);
 
 #if DEVRES_USE_PINNING
 	void* WeakPin();

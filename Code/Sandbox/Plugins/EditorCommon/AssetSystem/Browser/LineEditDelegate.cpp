@@ -45,7 +45,11 @@ protected:
 		}
 		else
 		{
-			return QLineEdit::keyPressEvent(pEvent);
+			QLineEdit::keyPressEvent(pEvent);
+			if (pEvent->key() == Qt::Key_Enter || pEvent->key() == Qt::Key_Return)
+			{
+				pEvent->accept();
+			}
 		}
 	}
 
@@ -93,6 +97,8 @@ QWidget* CLineEditDelegate::createEditor(QWidget* pParent, const QStyleOptionVie
 
 	CLineEdit* const pEditor = new CLineEdit(pParent);
 
+	pEditor->activateWindow();
+	
 	pEditor->signalEditingAborted.Connect(std::function<void()>([this, pEditor, modelIndex]()
 	{
 		FinishEditing(this, pEditor, [this, modelIndex]()

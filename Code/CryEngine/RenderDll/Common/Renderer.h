@@ -831,8 +831,6 @@ public:
 
 	virtual bool IsDebugRenderNode(IRenderNode* pRenderNode) const override;
 
-	virtual bool         CheckDeviceLost() { return false; };
-
 	EScreenAspectRatio   GetScreenAspect(int nWidth, int nHeight);
 
 	virtual Vec2         SetViewportDownscale(float xscale, float yscale) override;
@@ -845,7 +843,6 @@ public:
 	virtual void         FillFrame(ColorF clearColor) override = 0;
 	virtual void         RenderDebug(bool bRenderStats = true) override = 0;
 	virtual void         EndFrame() override = 0;
-	virtual void         LimitFramerate(const int maxFPS, const bool bUseSleep) = 0;
 
 	virtual void         TryFlush() override = 0;
 
@@ -858,10 +855,10 @@ public:
 	virtual bool         SaveTga(unsigned char* sourcedata, int sourceformat, int w, int h, const char* filename, bool flip) const override;
 
 	//download an image to video memory. 0 in case of failure
-	virtual unsigned int UploadToVideoMemory(unsigned char* data, int w, int h, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nummipmap, bool repeat = true, int filter = FILTER_BILINEAR, int Id = 0, const char* szCacheName = NULL, int flags = 0, EEndian eEndian = eLittleEndian, RectI* pRegion = NULL, bool bAsynDevTexCreation = false) override = 0;
+	virtual unsigned int UploadToVideoMemory(unsigned char* data, int w, int h, ETEX_Format eTFSrc, ETEX_Format eTFDst, int8 nummipmap, bool repeat = true, int filter = FILTER_BILINEAR, int Id = 0, const char* szCacheName = NULL, int flags = 0, EEndian eEndian = eLittleEndian, RectI* pRegion = NULL, bool bAsynDevTexCreation = false) override = 0;
+	virtual unsigned int UploadToVideoMemory3D(unsigned char* data, int w, int h, int d, ETEX_Format eTFSrc, ETEX_Format eTFDst, int8 nummipmap, bool repeat = true, int filter = FILTER_BILINEAR, int Id = 0, const char* szCacheName = NULL, int flags = 0, EEndian eEndian = eLittleEndian, RectI* pRegion = NULL, bool bAsynDevTexCreation = false) override = 0;
+	virtual unsigned int UploadToVideoMemoryCube(unsigned char* data, int w, int h, ETEX_Format eTFSrc, ETEX_Format eTFDst, int8 nummipmap, bool repeat = true, int filter = FILTER_BILINEAR, int Id = 0, const char* szCacheName = NULL, int flags = 0, EEndian eEndian = eLittleEndian, RectI* pRegion = NULL, bool bAsynDevTexCreation = false) override = 0;
 	virtual void         UpdateTextureInVideoMemory(uint32 tnum, unsigned char* newdata, int posx, int posy, int w, int h, ETEX_Format eTFSrc = eTF_R8G8B8A8, int posz = 0, int sizez = 1) override = 0;
-	virtual unsigned int UploadToVideoMemory3D(unsigned char* data, int w, int h, int d, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nummipmap, bool repeat = true, int filter = FILTER_BILINEAR, int Id = 0, const char* szCacheName = NULL, int flags = 0, EEndian eEndian = eLittleEndian, RectI* pRegion = NULL, bool bAsynDevTexCreation = false) override = 0;
-	virtual unsigned int UploadToVideoMemoryCube(unsigned char* data, int w, int h, ETEX_Format eTFSrc, ETEX_Format eTFDst, int nummipmap, bool repeat = true, int filter = FILTER_BILINEAR, int Id = 0, const char* szCacheName = NULL, int flags = 0, EEndian eEndian = eLittleEndian, RectI* pRegion = NULL, bool bAsynDevTexCreation = false) override = 0;
 
 	virtual bool         DXTCompress(const byte* raw_data, int nWidth, int nHeight, ETEX_Format eTF, bool bUseHW, bool bGenMips, int nSrcBytesPerPix, MIPDXTcallback callback) override;
 	virtual bool         DXTDecompress(const byte* srcData, const size_t srcFileSize, byte* dstData, int nWidth, int nHeight, int nMips, ETEX_Format eSrcTF, bool bUseHW, int nDstBytesPerPix) override;
@@ -1173,7 +1170,7 @@ public:
 	bool                                              ReleaseChunk(int p, PodArray<alloc_info_struct>& alloc_info);
 
 	virtual const char*                               GetTextureFormatName(ETEX_Format eTF) override;
-	virtual uint32                                    GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF) override;
+	virtual uint32                                    GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF, ETEX_TileMode mode) override;
 	virtual void                                      SetDefaultMaterials(IMaterial* pDefMat, IMaterial* pTerrainDefMat) override                          { m_pDefaultMaterial = pDefMat; m_pTerrainDefaultMaterial = pTerrainDefMat; }
 	virtual byte*                                     GetTextureSubImageData32(byte* pData, int nDataSize, int nX, int nY, int nW, int nH, CTexture* pTex) { return 0; }
 
@@ -1383,7 +1380,6 @@ public:
 public:
 	Matrix44A m_IdentityMatrix;
 
-	byte           m_bDeviceLost;
 	byte           m_bSystemResourcesInit;
 	byte           m_bSystemTargetsInit;
 	bool           m_bAquireDeviceThread;
@@ -1404,6 +1400,7 @@ public:
 
 	int                  m_nGPU;
 	int                  m_VSync;
+	int                  m_Resizable;
 	int                  m_Predicated;
 
 	int                  m_nGraphicsPipeline;
@@ -1434,7 +1431,6 @@ public:
 	uint32    m_bUseSilhouettePOM              : 1;
 	uint32    m_bAllowTerrainLayerBlending     : 1;
 	uint32    m_bWaterCaustics                 : 1;
-	uint32    m_bIsWindowActive                : 1;
 	uint32    m_bInShutdown                    : 1;
 	uint32    m_bDeferredDecals                : 1;
 	uint32    m_bShadowsEnabled                : 1;
@@ -1448,6 +1444,7 @@ public:
 	uint32    m_bDeferredRainEnabled           : 1;
 	uint32    m_bDeferredRainOcclusionEnabled  : 1;
 	uint32    m_bDeferredSnowEnabled           : 1;
+	uint32    m_UseZPass                       : 2;
 
 	uint8     m_nDisableTemporalEffects;
 	uint32    m_nGPULimited;           // How many frames we are GPU limited

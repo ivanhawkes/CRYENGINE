@@ -4,12 +4,14 @@
 #include "HyperGraph.h"
 
 #include "GameEngine.h"
+#include "LogFile.h"
 #include "PathUtils.h"
 
 #include "HyperGraphManager.h"
 #include "Nodes/MissingNode.h"
 #include "Controls/HyperGraphEditorWnd.h"
 #include "FlowGraphPreferences.h"
+#include <Objects/SelectionGroup.h>
 
 /*
    //////////////////////////////////////////////////////////////////////////

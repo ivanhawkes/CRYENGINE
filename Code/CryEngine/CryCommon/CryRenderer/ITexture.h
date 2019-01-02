@@ -137,7 +137,7 @@ enum ETextureFlags : uint32
 {
 	FT_NOMIPS                  = BIT32(0),  // TR: don't allocate or use any mip-maps (even if they exist)
 	FT_TEX_NORMAL_MAP          = BIT32(1),  // T: indicator that a texture contains normal vectors (used for tracking statistics, debug messages and the default texture)
-	FT______________________00 = BIT32(2),  // UNUSED
+	FT_TAKEOVER_DATA_POINTER   = BIT32(2),  // T: when creating textures or updating them, take over ownership of the passed data-pointer
 	FT_USAGE_DEPTHSTENCIL      = BIT32(3),  // R: use as depth-stencil render-target
 	FT_USAGE_ALLOWREADSRGB     = BIT32(4),  // TR: allows the renderer to cast the texture-format to a sRGB type if available
 	FT_FILESINGLE              = BIT32(5),  // T: suppress loading of additional files like _DDNDIF (faster, RC can tag the file for that)
@@ -460,8 +460,8 @@ public:
 	virtual const int       GetDepth() const = 0;
 	virtual const int       GetTextureID() const = 0;
 	virtual const uint32    GetFlags() const = 0;
-	virtual const int       GetNumMips() const = 0;
-	virtual const int       GetRequiredMip() const = 0;
+	virtual const int8      GetNumMips() const = 0;
+	virtual const int8      GetRequiredMip() const = 0;
 	virtual const uint32    GetDeviceDataSize() const = 0;
 	virtual const uint32    GetDataSize() const = 0;
 	virtual const ETEX_Type GetTextureType() const = 0;
@@ -475,10 +475,11 @@ public:
 	virtual bool            Clear() = 0;
 	virtual bool            Clear(const ColorF& color) = 0;
 
-	virtual int             StreamCalculateMipsSigned(float fMipFactor) const = 0;
-	virtual int             GetStreamableMipNumber() const = 0;
-	virtual uint32          GetStreamableMemoryUsage(int nStartMip) const = 0;
-	virtual int             GetMinLoadedMip() const = 0;
+	virtual int8            StreamCalculateMipsSigned(float fMipFactor) const = 0;
+	virtual int8            StreamCalculateMips(float fMipFactor) const = 0;
+	virtual int8            GetStreamableMipNumber() const = 0;
+	virtual uint32          GetStreamableMemoryUsage(int8 nStartMip) const = 0;
+	virtual int8            GetMinLoadedMip() const = 0;
 
 	//! Used for debugging/profiling.
 	virtual const char*       GetFormatName() const = 0;
@@ -498,7 +499,7 @@ public:
 	virtual const bool        IsParticularMipStreamed(float fMipFactor) const = 0;
 
 	//! Get low res system memory (used for CPU voxelization).
-	virtual const ColorB* GetLowResSystemCopy(uint16& nWidth, uint16& nHeight, int** ppLowResSystemCopyAtlasId) { return 0; }
+	virtual const ColorB* GetLowResSystemCopy(uint16& width, uint16& height, int** ppUserData = nullptr, const int maxTexSize = 32) { return 0; }
 
 	virtual void UpdateData(STexDataPtr&& td, int flags) = 0;
 	// </interfuscator:shuffle>

@@ -223,7 +223,7 @@ struct MemReplayPushContextEvent
 {
 	static const int EventId = MemReplayEventIds::RE_PushContext3;
 
-	uint32           threadId;
+	uint64           threadId;
 	uint32           contextType;
 	uint32           flags;
 
@@ -231,7 +231,7 @@ struct MemReplayPushContextEvent
 	// for the structure to hold the required name.
 	char name[1];
 
-	MemReplayPushContextEvent(uint32 threadId, const char* name, EMemStatContextTypes::Type type, uint32 flags)
+	MemReplayPushContextEvent(uint64 threadId, const char* name, EMemStatContextTypes::Type type, uint32 flags)
 	{
 		// We're going to assume that there actually is enough space to store the name directly in the struct.
 
@@ -246,9 +246,9 @@ struct MemReplayPopContextEvent
 {
 	static const int EventId = MemReplayEventIds::RE_PopContext;
 
-	uint32           threadId;
+	uint64 threadId;
 
-	explicit MemReplayPopContextEvent(uint32 threadId)
+	explicit MemReplayPopContextEvent(uint64 threadId)
 	{
 		this->threadId = threadId;
 	}
@@ -300,7 +300,7 @@ struct MemReplayAllocEvent
 {
 	static const int EventId = MemReplayEventIds::RE_Alloc6;
 
-	uint32           threadId;
+	uint64           threadId;
 	UINT_PTR         id;
 	uint32           alignment;
 	uint32           sizeRequested;
@@ -313,7 +313,7 @@ struct MemReplayAllocEvent
 	uint16           callstackLength;
 	UINT_PTR         callstack[1]; // Must be last.
 
-	MemReplayAllocEvent(uint32 threadId, uint16 moduleId, uint16 allocClass, uint16 allocSubClass, UINT_PTR id, uint32 alignment, uint32 sizeReq, uint32 sizeCon, int32 sizeGlobal)
+	MemReplayAllocEvent(uint64 threadId, uint16 moduleId, uint16 allocClass, uint16 allocSubClass, UINT_PTR id, uint32 alignment, uint32 sizeReq, uint32 sizeCon, int32 sizeGlobal)
 		: threadId(threadId)
 		, id(id)
 		, alignment(alignment)
@@ -332,7 +332,7 @@ struct MemReplayFreeEvent
 {
 	static const int EventId = MemReplayEventIds::RE_Free6;
 
-	uint32           threadId;
+	uint64           threadId;
 	UINT_PTR         id;
 	int32            sizeGlobal; //  Inferred from changes in global memory status
 
@@ -343,7 +343,7 @@ struct MemReplayFreeEvent
 	uint16           callstackLength;
 	UINT_PTR         callstack[1]; // Must be last.
 
-	MemReplayFreeEvent(uint32 threadId, uint16 moduleId, uint16 allocClass, uint16 allocSubClass, UINT_PTR id, int32 sizeGlobal)
+	MemReplayFreeEvent(uint64 threadId, uint16 moduleId, uint16 allocClass, uint16 allocSubClass, UINT_PTR id, int32 sizeGlobal)
 		: threadId(threadId)
 		, id(id)
 		, sizeGlobal(sizeGlobal)
@@ -579,7 +579,7 @@ struct MemReplayReallocEvent
 {
 	static const int EventId = MemReplayEventIds::RE_Realloc3;
 
-	uint32           threadId;
+	uint64           threadId;
 	UINT_PTR         oldId;
 	UINT_PTR         newId;
 	uint32           alignment;
@@ -594,7 +594,7 @@ struct MemReplayReallocEvent
 	uint16           callstackLength;
 	UINT_PTR         callstack[1]; // Must be last.
 
-	MemReplayReallocEvent(uint32 threadId, uint16 moduleId, uint16 allocClass, uint16 allocSubClass, UINT_PTR oldId, UINT_PTR newId, uint32 alignment, uint32 newSizeReq, uint32 newSizeCon, int32 sizeGlobal)
+	MemReplayReallocEvent(uint64 threadId, uint16 moduleId, uint16 allocClass, uint16 allocSubClass, UINT_PTR oldId, UINT_PTR newId, uint32 alignment, uint32 newSizeReq, uint32 newSizeCon, int32 sizeGlobal)
 		: threadId(threadId)
 		, oldId(oldId)
 		, newId(newId)
@@ -1179,6 +1179,8 @@ public:
 private:
 	static void RecordModuleLoad(void* pSelf, const CReplayModules::ModuleLoadDesc& mld);
 	static void RecordModuleUnload(void* pSelf, const CReplayModules::ModuleUnloadDesc& mld);
+	void WriteCallstack(UINT_PTR* callstack, uint32& length);
+	void WriteCallstack(UINT_PTR* callstack, uint16& length);
 
 private:
 	CMemReplay(const CMemReplay&);
@@ -1187,7 +1189,7 @@ private:
 private:
 	void RecordAlloc(EMemReplayAllocClass::Class cls, uint16 subCls, int moduleId, UINT_PTR p, UINT_PTR alignment, UINT_PTR sizeRequested, UINT_PTR sizeConsumed, INT_PTR sizeGlobal);
 	void RecordRealloc(EMemReplayAllocClass::Class cls, uint16 subCls, int moduleId, UINT_PTR op, UINT_PTR p, UINT_PTR alignment, UINT_PTR sizeRequested, UINT_PTR sizeConsumed, INT_PTR sizeGlobal);
-	void RecordFree(EMemReplayAllocClass::Class cls, uint16 subCls, int moduleId, UINT_PTR p, INT_PTR sizeGlobal, bool captureCallstack);
+	void RecordFree(EMemReplayAllocClass::Class cls, uint16 subCls, int moduleId, UINT_PTR p, INT_PTR sizeGlobal);
 	void RecordModules();
 
 	int  GetCurrentExecutableSize();

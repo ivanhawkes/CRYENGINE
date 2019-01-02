@@ -7,7 +7,13 @@
 #include "Objects/ObjectLayerManager.h"
 #include "Particles/ParticleManager.h"
 #include "GameEngine.h"
+#include "LogFile.h"
 
+#include <ICommandManager.h>
+#include <UsedResources.h>
+#include <Util/MemoryBlock.h>
+#include <Util/FileUtil.h>
+#include <IObjectManager.h>
 #include <QT/Widgets/QWaitProgress.h>
 
 CGameResourcesExporter::Files CGameResourcesExporter::m_files;
@@ -68,9 +74,9 @@ void CGameResourcesExporter::Save(const string& outputDirectory)
 
 	int numFiles = m_files.size();
 
-	CLogFile::WriteLine("===========================================================================");
+	CryLog("===========================================================================");
 	CryLog("Exporting Level %s resources, %d files", (const char*)GetIEditorImpl()->GetGameEngine()->GetLevelName(), numFiles);
-	CLogFile::WriteLine("===========================================================================");
+	CryLog("===========================================================================");
 
 	// Needed files.
 	CWaitProgress wait("Exporting Resources");
@@ -109,7 +115,7 @@ void CGameResourcesExporter::Save(const string& outputDirectory)
 			}
 		}
 	}
-	CLogFile::WriteLine("===========================================================================");
+	CryLog("===========================================================================");
 	m_files.clear();
 }
 

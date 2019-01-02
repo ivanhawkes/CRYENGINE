@@ -6,6 +6,7 @@
 #include "MNMPathfinder.h"
 #include "../MNM/NavMeshQueryManager.h"
 #include "../MNM/NavMeshQueryProcessing.h"
+#include "SmartObjects.h"
 
 #include "Components/Navigation/NavigationComponent.h"
 
@@ -156,6 +157,8 @@ NavigationSystem::NavigationSystem(const char* configName)
 	, m_isNavigationUpdatePaused(false)
 	, m_tileGeneratorExtensionsContainer()
 	, m_pNavMeshQueryManager(new MNM::CNavMeshQueryManager())
+	, m_frameStartTime(0.0f)
+	, m_frameDeltaTime(0.0f)
 {
 	SetupTasks();
 
@@ -910,9 +913,13 @@ void NavigationSystem::SetAnnotationForMarkupTriangles(NavigationVolumeID markup
 
 void NavigationSystem::ApplyAnnotationChanges()
 {	
+	if (m_markupAnnotationChangesToApply.empty())
+		return;
+	
 	// We are assuming here that every triangle can be owned by at most one markup volume. 
 	// Otherwise we would need to use something else then std::vector to store changed triangles.
 	std::unordered_map<NavigationMeshID, std::vector<MNM::TriangleID>> changedTrianglesPerNavmeshMap;
+	std::vector<MNM::TriangleID> changedTriangles;
 	
 	for (const auto& markupAnnotationChange : m_markupAnnotationChangesToApply)
 	{
@@ -929,19 +936,13 @@ void NavigationSystem::ApplyAnnotationChanges()
 					"ApplyAnnotationChanges: Mesh with id %u wasn't found for annotation data id %u. Is the NavMesh really up to date?", meshTriangles.meshId, markupAnnotationChange.first);
 				continue;
 			}
-			
-			std::vector<MNM::TileID> affectedTiles;
+
+			changedTriangles.clear();
 			NavigationMesh& mesh = m_meshes[meshTriangles.meshId];
-			mesh.navMesh.SetTrianglesAnnotation(meshTriangles.triangleIds.data(), meshTriangles.triangleIds.size(), areaAnnotation, affectedTiles);
+			mesh.navMesh.SetTrianglesAnnotation(meshTriangles.triangleIds.data(), meshTriangles.triangleIds.size(), areaAnnotation, changedTriangles);
 
-			auto& changedTriangles = changedTrianglesPerNavmeshMap[meshTriangles.meshId];
-			changedTriangles.insert(changedTriangles.end(), meshTriangles.triangleIds.begin(), meshTriangles.triangleIds.end());
-
-			AgentType& agentType = m_agentTypes[mesh.agentTypeID - 1];
-			for (MNM::TileID tileId : affectedTiles)
-			{
-				agentType.annotationCallbacks.CallSafe(mesh.agentTypeID, meshTriangles.meshId, tileId);
-			}
+			auto& changedTrianglesInMesh = changedTrianglesPerNavmeshMap[meshTriangles.meshId];
+			changedTrianglesInMesh.insert(changedTrianglesInMesh.end(), changedTriangles.begin(), changedTriangles.end());
 		}
 	}
 	m_markupAnnotationChangesToApply.clear();
@@ -950,10 +951,23 @@ void NavigationSystem::ApplyAnnotationChanges()
 	MNM::IslandConnections& islandConnections = m_islandConnectionsManager.GetIslandConnections();
 	for (auto it = changedTrianglesPerNavmeshMap.begin(); it != changedTrianglesPerNavmeshMap.end(); ++it)
 	{
+		const NavigationMeshID meshId = it->first;
 		const auto& changedTriangles = it->second;
-		NavigationMesh& mesh = m_meshes[it->first];
+		NavigationMesh& mesh = m_meshes[meshId];
 
 		mesh.navMesh.GetIslands().UpdateIslandsForTriangles(mesh.navMesh, NavigationMeshID(it->first), changedTriangles.data(), changedTriangles.size(), islandConnections);
+
+		std::vector<MNM::TileID> affectedTiles;
+		for (const MNM::TriangleID triangleId : changedTriangles)
+		{
+			stl::push_back_unique(affectedTiles, MNM::ComputeTileID(triangleId));
+		}
+
+		AgentType& agentType = m_agentTypes[mesh.agentTypeID - 1];
+		for (const MNM::TileID tileId : affectedTiles)
+		{
+			agentType.annotationCallbacks.CallSafe(mesh.agentTypeID, meshId, tileId);
+		}
 	}
 }
 
@@ -1094,17 +1108,14 @@ void NavigationSystem::UpdateInternalNavigationSystemData(const bool blocking)
 	m_worldMonitor.FlushPendingAABBChanges();
 
 	// Prevent multiple updates per frame
-	static int lastUpdateFrameID = 0;
+	static CTimeValue lastFrameStartTime;
 
-	const int frameID = gEnv->nMainFrameID;
-	const bool doUpdate = (frameID != lastUpdateFrameID) && !(editorBackgroundThreadRunning);
+	const bool doUpdate = (lastFrameStartTime != m_frameStartTime) && !(editorBackgroundThreadRunning);
 	if (doUpdate)
 	{
-		lastUpdateFrameID = frameID;
+		lastFrameStartTime = m_frameStartTime;
 
-		const float frameTime = gEnv->pTimer->GetFrameTime();
-
-		UpdateMeshes(frameTime, blocking, gAIEnv.CVars.NavigationSystemMT != 0, false);
+		UpdateMeshes(m_frameStartTime, m_frameDeltaTime, blocking, gAIEnv.CVars.NavigationSystemMT != 0, false);
 	}
 #endif
 
@@ -1119,8 +1130,11 @@ void NavigationSystem::UpdateInternalSubsystems()
 	m_offMeshNavigationManager.ProcessQueuedRequests();
 }
 
-INavigationSystem::WorkingState NavigationSystem::Update(bool blocking)
+INavigationSystem::WorkingState NavigationSystem::Update(const CTimeValue frameStartTime, const float frameTime, bool blocking)
 {
+	m_frameStartTime = frameStartTime;
+	m_frameDeltaTime = frameTime;
+
 	// Pre update step. We need to request all our NavigationSystem users
 	// to complete all their reading jobs.
 	WaitForAllNavigationSystemUsersCompleteTheirReadingAsynchronousTasks();
@@ -1158,9 +1172,9 @@ uint32 NavigationSystem::GetWorkingQueueSize() const
 }
 
 #if NAV_MESH_REGENERATION_ENABLED
-void NavigationSystem::UpdateMeshes(const float frameTime, const bool blocking, const bool multiThreaded, const bool bBackground)
+void NavigationSystem::UpdateMeshes(const CTimeValue frameStartTime, const float frameTime, const bool blocking, const bool multiThreaded, const bool bBackground)
 {
-	m_updatesManager.Update();
+	m_updatesManager.Update(frameStartTime, frameTime);
 	
 	if (m_isNavigationUpdatePaused || frameTime == .0f)
 		return;
@@ -1329,6 +1343,17 @@ void NavigationSystem::UpdateMeshes(const float frameTime, const bool blocking, 
 		return;
 	}
 
+}
+
+// Updates Meshes using the global timer
+// Can be executed by the Sandbox Editor to regenerate the NavMesh
+// NavMesh regeneration should still work even if the AI system is disabled (edition mode)
+void NavigationSystem::UpdateMeshesFromEditor(const bool blocking, const bool multiThreaded, const bool bBackground)
+{
+	// Uses hard-coded frameDuration because this function gets executed by (ProcessQueuedMeshUpdates and NavigationSystemBackgroundUpdate)
+	// which are blocking operations. This effectively means the engine isn't updated and therefore we cannot tell what is the frame duration
+	const float frameDuration = 0.0333f;
+	UpdateMeshes(gEnv->pTimer->GetFrameStartTime(), frameDuration, blocking, multiThreaded, bBackground);
 }
 
 void NavigationSystem::SetupGenerator(
@@ -1630,7 +1655,7 @@ void NavigationSystem::ProcessQueuedMeshUpdates()
 #if NAV_MESH_REGENERATION_ENABLED
 	do
 	{
-		UpdateMeshes(0.0333f, false, gAIEnv.CVars.NavigationSystemMT != 0, false);
+		UpdateMeshesFromEditor(false, gAIEnv.CVars.NavigationSystemMT != 0, false);
 	}
 	while (m_state == INavigationSystem::Working);
 #endif
@@ -1759,7 +1784,7 @@ void NavigationSystem::ComputeMeshesAccessibility(const NavigationMeshID* pUpdat
 				connectedIslands.clear();
 
 				MNM::TriangleID triangleID;
-				if (!navMesh.SnapPosition(seedPointsAffectingMesh[seedIdx], snappingMetrics, nullptr, nullptr, &triangleID))
+				if (!navMesh.SnapPosition(seedPointsAffectingMesh[seedIdx], snappingMetrics, &MNM::DefaultQueryFilters::g_acceptAllFilterVirtual, nullptr, &triangleID))
 					continue;
 
 				MNM::Tile::STriangle triangle;
@@ -1820,7 +1845,7 @@ void NavigationSystem::AddOffMeshLinkIslandConnectionsBetweenTriangles(
 								{
 									if (nextTri.offMeshLinkID == linkID)
 									{
-										if (const MNM::OffMeshLink* pLink = m_offMeshNavigationManager.GetOffMeshLink(nextTri.offMeshLinkID))
+										if (const MNM::IOffMeshLink* pLink = m_offMeshNavigationManager.GetOffMeshLink(nextTri.offMeshLinkID))
 										{
 											bLinkIsFound = true;
 											break;
@@ -1856,7 +1881,7 @@ void NavigationSystem::AddOffMeshLinkIslandConnectionsBetweenTriangles(
 				const MNM::GlobalIslandID startingIslandID(meshID, startingTriangle.islandID);
 				const MNM::GlobalIslandID endingIslandID(meshID, endingTriangle.islandID);
 
-				const MNM::OffMeshLink* pLink = m_offMeshNavigationManager.GetOffMeshLink(linkID);
+				const MNM::IOffMeshLink* pLink = m_offMeshNavigationManager.GetOffMeshLink(linkID);
 				if (pLink)
 				{
 					MNM::IslandConnections& islandConnections = m_islandConnectionsManager.GetIslandConnections();
@@ -5793,7 +5818,7 @@ void NavigationSystemBackgroundUpdate::Thread::ThreadEntry()
 		{
 			const CTimeValue startedUpdate = gEnv->pTimer->GetAsyncTime();
 
-			m_navigationSystem.UpdateMeshes(0.0333f, false, true, true);
+			m_navigationSystem.UpdateMeshesFromEditor(false, true, true);
 
 			const CTimeValue lastUpdateTime = gEnv->pTimer->GetAsyncTime() - startedUpdate;
 

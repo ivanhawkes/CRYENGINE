@@ -14,11 +14,13 @@ struct IRenderAuxGeom;
 namespace CryAudio
 {
 class CSystem;
+class CEvent;
 class CEventManager;
 class CFileManager;
 class CEnvironment;
 class CTrigger;
 class CRequest;
+class CStandaloneFile;
 struct SRequestData;
 
 namespace Impl
@@ -108,7 +110,6 @@ public:
 
 	ERequestStatus HandleStopTrigger(CTrigger const* const pTrigger);
 	void           HandleSetTransformation(CTransformation const& transformation);
-	void           HandleSetEnvironment(CEnvironment const* const pEnvironment, float const value);
 	void           HandleSetOcclusionType(EOcclusionType const calcType);
 	void           HandleSetOcclusionRayOffset(float const offset);
 	void           HandleStopFile(char const* const szFile);
@@ -195,9 +196,7 @@ private:
 public:
 
 	void           DrawDebugInfo(IRenderAuxGeom& auxGeom);
-	void           ResetObstructionRays()        { m_propagationProcessor.ResetRayData(); }
-	float          GetMaxRadius() const          { return m_maxRadius; }
-	float          GetOcclusionRayOffset() const { return m_propagationProcessor.GetOcclusionRayOffset(); }
+	void           ResetObstructionRays() { m_propagationProcessor.ResetRayData(); }
 
 	void           ForceImplementationRefresh(bool const setTransformation);
 

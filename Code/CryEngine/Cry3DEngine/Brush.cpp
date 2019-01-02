@@ -13,6 +13,7 @@
 
 #include "StdAfx.h"
 #include "StatObj.h"
+#include "StatObjFoliage.h"
 #include "ObjMan.h"
 #include "VisAreas.h"
 #include "terrain_sector.h"
@@ -21,6 +22,7 @@
 #include "IndexedMesh.h"
 #include "Brush.h"
 #include "terrain.h"
+#include <Cry3DEngine/ISurfaceType.h>
 
 CBrush::CBrush()
 	: m_bVehicleOnlyPhysics(0)
@@ -145,10 +147,10 @@ void CBrush::Render(const struct SRendParams& _EntDrawParams, const SRenderingPa
 	rParms.pMaterial = m_pMaterial;
 	rParms.nEditorSelectionID = m_nEditorSelectionID;
 
-	rParms.dwFObjFlags |= (m_dwRndFlags & ERF_FOB_RENDER_AFTER_POSTPROCESSING) ? FOB_RENDER_AFTER_POSTPROCESSING : 0;
+	rParms.dwFObjFlags |= (m_dwRndFlags & ERF_FOB_RENDER_AFTER_POSTPROCESSING) ? FOB_RENDER_AFTER_POSTPROCESSING : FOB_NONE;
 	rParms.dwFObjFlags |= FOB_TRANS_MASK;
-	rParms.dwFObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : 0;
-	rParms.dwFObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_DECAL_BLEND) ? FOB_ALLOW_DECAL_BLEND : 0;
+	rParms.dwFObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : FOB_NONE;
+	rParms.dwFObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_DECAL_BLEND) ? FOB_ALLOW_DECAL_BLEND : FOB_NONE;
 
 	rParms.nHUDSilhouettesParams = m_nHUDSilhouettesParam;
 	rParms.nSubObjHideMask = m_nSubObjHideMask;
@@ -874,10 +876,10 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	IMaterial* pMat = pObj->m_pCurrMaterial = CBrush::GetMaterial();
 	pObj->m_ObjFlags |= FOB_INSHADOW | FOB_TRANS_MASK;
 
-	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_RENDER_AFTER_POSTPROCESSING) ? FOB_RENDER_AFTER_POSTPROCESSING : 0;
-	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_NEAREST) ? FOB_NEAREST : 0;
-	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : 0;
-	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_DECAL_BLEND) ? FOB_ALLOW_DECAL_BLEND : 0;
+	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_RENDER_AFTER_POSTPROCESSING) ? FOB_RENDER_AFTER_POSTPROCESSING : FOB_NONE;
+	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_NEAREST                    ) ? FOB_NEAREST                     : FOB_NONE;
+	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND  ) ? FOB_ALLOW_TERRAIN_LAYER_BLEND   : FOB_NONE;
+	pObj->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_DECAL_BLEND          ) ? FOB_ALLOW_DECAL_BLEND           : FOB_NONE;
 
 	if (m_dwRndFlags & ERF_NO_DECALNODE_DECALS && !(gEnv->nMainFrameID - m_lastMoveFrameId < 3))
 	{

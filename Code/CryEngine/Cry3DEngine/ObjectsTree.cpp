@@ -10,6 +10,7 @@
 #include "DecalManager.h"
 #include "VisAreas.h"
 #include <CryAnimation/ICryAnimation.h>
+#include <CryAnimation/IAttachment.h>
 #include "LightEntity.h"
 #include "WaterVolumeRenderNode.h"
 #include "DistanceCloudRenderNode.h"
@@ -2468,8 +2469,7 @@ COctreeNode::COctreeNode(const AABB& box, CVisArea* pVisArea, COctreeNode* pPare
 
 	m_vNodeCenter = box.GetCenter();
 	m_vNodeAxisRadius = box.GetSize() * 0.5f;
-	m_objectsBox.min = box.max;
-	m_objectsBox.max = box.min;
+	m_objectsBox = box;
 
 #if !defined(_RELEASE)
 	// Check if bounding box is crazy

@@ -11,8 +11,13 @@
 #include <QSearchBox.h>
 #include <QThumbnailView.h>
 
+#include <QBoxLayout>
 #include <QButtonGroup>
 #include <QHeaderView>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QToolButton>
 
 CCreateProjectPanel::CCreateProjectPanel(CSelectProjectDialog* pParent, bool runOnSandboxInit)
 	: QWidget(pParent)
@@ -174,8 +179,8 @@ void CCreateProjectPanel::CreateDialogButtons(bool runOnSandboxInit)
 
 	QHBoxLayout* pButtonsLayout = new QHBoxLayout;
 	pButtonsLayout->setAlignment(Qt::AlignRight | Qt::AlignBottom);
-	pButtonsLayout->addWidget(pQuitBtn);
 	pButtonsLayout->addWidget(m_pCreateProjectBtn);
+	pButtonsLayout->addWidget(pQuitBtn);
 
 	m_pMainLayout->addLayout(pButtonsLayout);
 }

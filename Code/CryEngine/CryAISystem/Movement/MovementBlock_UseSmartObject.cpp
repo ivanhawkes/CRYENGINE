@@ -63,7 +63,7 @@ void UseSmartObject::OnTraverseStarted(const MovementUpdateContext& context)
 
 UseExactPositioningBase::TryRequestingExactPositioningResult UseSmartObject::TryRequestingExactPositioning(const MovementUpdateContext& context)
 {
-	MNM::OffMeshLink* pOffMeshLink = gAIEnv.pNavigationSystem->GetIOffMeshNavigationManager().GetOffMeshLink(m_smartObjectMNMData.offMeshLinkID);
+	MNM::IOffMeshLink* pOffMeshLink = gAIEnv.pNavigationSystem->GetIOffMeshNavigationManager().GetOffMeshLink(m_smartObjectMNMData.offMeshLinkID);
 	OffMeshLink_SmartObject* pSOLink = pOffMeshLink ? pOffMeshLink->CastTo<OffMeshLink_SmartObject>() : NULL;
 
 	if (pSOLink)
@@ -76,7 +76,7 @@ UseExactPositioningBase::TryRequestingExactPositioningResult UseSmartObject::Try
 			// Smart object is busy so stop movement and wait for your turn
 			context.actor.GetAdapter().ClearMovementState();
 
-			m_timeSpentWaitingForSmartObjectToBecomeFree += gEnv->pTimer->GetFrameTime();
+			m_timeSpentWaitingForSmartObjectToBecomeFree += context.updateTime;
 			if (m_timeSpentWaitingForSmartObjectToBecomeFree > 10.0f)
 			{
 				const EntityId actorEntityId = context.actor.GetEntityId();
@@ -174,7 +174,7 @@ void UseSmartObject::HandleExactPositioningError(const MovementUpdateContext& co
 
 Vec3 UseSmartObject::GetSmartObjectEndPosition() const
 {
-	MNM::OffMeshLink* pOffMeshLink = gAIEnv.pNavigationSystem->GetIOffMeshNavigationManager().GetOffMeshLink(m_smartObjectMNMData.offMeshLinkID);
+	MNM::IOffMeshLink* pOffMeshLink = gAIEnv.pNavigationSystem->GetIOffMeshNavigationManager().GetOffMeshLink(m_smartObjectMNMData.offMeshLinkID);
 	OffMeshLink_SmartObject* pSOLink = pOffMeshLink ? pOffMeshLink->CastTo<OffMeshLink_SmartObject>() : NULL;
 
 	assert(pSOLink);

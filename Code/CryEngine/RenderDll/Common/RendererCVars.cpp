@@ -42,9 +42,6 @@ int CRendererCVars::CV_r_vsync;
 float CRendererCVars::CV_r_overrideRefreshRate = 0;
 int CRendererCVars::CV_r_overrideScanlineOrder = 0;
 #endif
-#if CRY_PLATFORM_WINDOWS
-int CRendererCVars::CV_r_FullscreenPreemption = 1;
-#endif
 AllocateConstIntCVar(CRendererCVars, CV_r_SyncToFrameFence);
 AllocateConstIntCVar(CRendererCVars, CV_r_GraphicsPipelineMobile);
 AllocateConstIntCVar(CRendererCVars, CV_e_DebugTexelDensity);
@@ -81,7 +78,6 @@ int CRendererCVars::CV_r_VkBatchResourceBarriers;
 int CRendererCVars::CV_r_VkHardwareComputeQueue;
 int CRendererCVars::CV_r_VkHardwareCopyQueue;
 int CRendererCVars::CV_r_ReprojectOnlyStaticObjects;
-int CRendererCVars::CV_r_ReadZBufferDirectlyFromVMEM;
 int CRendererCVars::CV_r_FlushToGPU;
 
 int CRendererCVars::CV_r_EnableDebugLayer;
@@ -295,7 +291,7 @@ int CRendererCVars::CV_r_meshinstancepoolsize;
 
 AllocateConstIntCVar(CRendererCVars, CV_r_ZPassDepthSorting);
 float CRendererCVars::CV_r_ZPrepassMaxDist;
-int CRendererCVars::CV_r_usezpass;
+int CRendererCVars::CV_r_UseZPass;
 
 AllocateConstIntCVar(CRendererCVars, CV_r_TransparentPasses);
 int CRendererCVars::CV_r_TranspDepthFixup;
@@ -1205,7 +1201,7 @@ void CRendererCVars::InitCVars()
 	               "HDR range adaption speed\n"
 	               "Usage: r_HDRRangeAdaptationSpeed [Value]");
 
-	REGISTER_CVAR3("r_HDRGrainAmount", CV_r_HDRGrainAmount, 0.0f, VF_NULL,
+	REGISTER_CVAR3("r_HDRGrainAmount", CV_r_HDRGrainAmount, 1.0f, VF_NULL,
 	               "HDR camera grain amount\n"
 	               "Usage: r_HDRGrainAmount [Value]\n"
 	               "Modulates the grain configured in FlowGraph or TimeOfDay.");
@@ -1278,12 +1274,14 @@ void CRendererCVars::InitCVars()
 	               "Set ZPrepass max dist.\n"
 	               "Usage: r_ZPrepassMaxDist (16.0f default) [distance in meters]\n");
 
-	REGISTER_CVAR3("r_UseZPass", CV_r_usezpass, 2, VF_DUMPTODISK | VF_RENDERER_CVAR,
+	REGISTER_CVAR3("r_UseZPass", CV_r_UseZPass, 2, VF_DUMPTODISK | VF_RENDERER_CVAR,
 	               "Toggles g-buffer pass.\n"
-	               "Usage: r_UseZPass [0/1/2]\n"
+	               "Usage: r_UseZPass [0/1/2/3]\n"
 	               "0: Disable Z-pass (not recommended, this disables any g-buffer rendering)\n"
 	               "1: Enable Z-pass (g-buffer only)\n"
-	               "2: Enable Z-pass (g-buffer and additional Z-prepass)");
+	               "2: Enable Z-pass (g-buffer and additional Z-prepass)\n"
+	               "3: Enable Z-pass (g-buffer and additional Z-prepass with alpha-tested/dissolved objects)\n"
+	               "4: Enable Z-pass (g-buffer and additional Z-prepass containing all objects and producing an early depth-buffer)");
 
 	DefineConstIntCVar3("r_TransparentPasses", CV_r_TransparentPasses, 1, VF_NULL,
 	                    "Toggles rendering of transparent/alpha blended objects.\n");
@@ -1361,7 +1359,16 @@ void CRendererCVars::InitCVars()
 	               "Selects TAA sampling pattern.\n"
 	               "  0: no subsamples\n"
 	               "  1: optimal pattern for selected aa mode\n"
-	               "  2: 2x\n  3: 3x\n  4: regular 4x\n  5: rotated 4x\n  6: 8x\n  7: sparse grid 8x8\n  8: random\n  9: Halton 8x\n  10: Halton 16x\n  11: Halton random");
+	               "  2: 2x\n"
+	               "  3: 3x\n"
+	               "  4: regular 4x\n"
+	               "  5: rotated 4x\n"
+	               "  6: 8x\n"
+	               "  7: sparse grid 8x8\n"
+	               "  8: random\n"
+	               "  9: Halton 8x\n"
+	               "  10: Halton 16x\n"
+	               "  11: Halton random");
 
 	REGISTER_CVAR3("r_AntialiasingModeSCull", CV_r_AntialiasingModeSCull, 1, VF_NULL,
 	               "Enables post processed based aa modes stencil culling optimization\n");
@@ -2451,7 +2458,7 @@ void CRendererCVars::InitCVars()
 	               "Usage: r_WaterCausticsDeferred [0/1/2]\n"
 	               "Default is 0 (disabled). 1 - enables. 2 - enables with stencil pre-pass");
 
-	REGISTER_CVAR3("r_WaterVolumeCaustics", CV_r_watervolumecaustics, WATERVOLCAUSTICS_DEFAULT_VAL, VF_NULL,
+	REGISTER_CVAR3("r_WaterVolumeCaustics", CV_r_watervolumecaustics, WATERVOLCAUSTICS_DEFAULT_VAL, VF_RENDERER_CVAR,
 	               "Toggles advanced water caustics for watervolumes.\n"
 	               "Usage: r_WaterVolumeCaustics [0/1]\n"
 	               "Default is 0 (disabled). 1 - enables.");
@@ -2673,10 +2680,6 @@ void CRendererCVars::InitCVars()
 	               "3=interlaced (lower field first)\n"
 	               "Usage: r_overrideScanlineOrder [0/1/2/3]");
 #endif
-#if CRY_PLATFORM_WINDOWS
-	REGISTER_CVAR3("r_FullscreenPreemption", CV_r_FullscreenPreemption, 1, VF_NULL,
-	               "While in fullscreen activities like notification pop ups of other applications won't cause a mode switch back into windowed mode.");
-#endif
 	DefineConstIntCVar3("r_UseESRAM", CV_r_useESRAM, 1, VF_REQUIRE_APP_RESTART,
 	                    "Toggles using ESRAM for render targets (Durango only)\n"
 	                    "Usage: r_UseESRAM [0/1]");
@@ -2757,7 +2760,6 @@ void CRendererCVars::InitCVars()
 #endif
 
 	REGISTER_CVAR3("r_ReprojectOnlyStaticObjects", CV_r_ReprojectOnlyStaticObjects, 1, VF_NULL, "Forces a split in the zpass, to prevent moving object from beeing reprojected");
-	REGISTER_CVAR3("r_ReadZBufferDirectlyFromVMEM", CV_r_ReadZBufferDirectlyFromVMEM, 0, VF_NULL, "Uses direct VMEM reads instead of a staging buffer on durango for the reprojection ZBuffer");
 	REGISTER_CVAR3("r_FlushToGPU", CV_r_FlushToGPU, 1, VF_NULL,
 		"Configure gpu-work flushing behaviour"
 		"0: Flush at end-frame only"
@@ -3062,6 +3064,9 @@ void CRendererCVars::InitCVars()
 	               "Prevent internal threading optimizations for D3D Device.\n");
 #endif
 
+	CV_r_ResizableWindow = REGISTER_INT("r_resizableWindow", 1, VF_NULL,
+		"Turn on resizable window borders. Changes are only applied after changing the window style once.");
+
 	CV_capture_frames = 0;
 	CV_capture_folder = 0;
 	CV_capture_file_format = 0;
@@ -3087,6 +3092,10 @@ void CRendererCVars::InitExternalCVars()
 	m_CVWindowType = iConsole->GetCVar("r_WindowType");
 	m_CVDisplayInfo = iConsole->GetCVar("r_DisplayInfo");
 	m_CVColorBits = iConsole->GetCVar("r_ColorBits");
+
+#if CRY_PLATFORM_WINDOWS
+	m_CVFullscreenNativeRes = iConsole->GetCVar("r_FullscreenNativeRes");
+#endif
 }
 
 void CRendererCVars::CacheCaptureCVars()

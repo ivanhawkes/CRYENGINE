@@ -16,7 +16,10 @@
 #include "Util/BoostPythonHelpers.h"
 #include "BaseLibraryManager.h"
 #include "CryEditDoc.h"
+#include "SelectionGroup.h"
 
+#include <AssetSystem/AssetManager.h>
+#include <AssetSystem/AssetType.h>
 #include <Controls/DynamicPopupMenu.h>
 #include <IDataBaseManager.h>
 #include <IUndoManager.h>
@@ -34,6 +37,8 @@
 
 #include <CryCore/ToolsHelpers/GuidUtil.h>
 #include <CryGame/IGameFramework.h>
+#include <CryMath/Cry_Camera.h>
+#include <CryPhysics/physinterface.h>
 #include <CrySystem/ICryLink.h>
 
 REGISTER_CLASS_DESC(CPrefabObjectClassDesc);
@@ -109,6 +114,62 @@ private:
 	CryGUID m_newGuid;
 };
 
+// Helper function for removing any references to the 'same' object in different prefab instances
+void RemoveDuplicateInstances(std::vector<CBaseObject*>& objects)
+{
+	if (objects.empty())
+		return;
+
+	CBaseObject* pLastSelectedPrefab = objects[objects.size() - 1]->GetPrefab();
+
+	for (auto iteratorObjectA = objects.begin(); iteratorObjectA != objects.end();)
+	{
+		const CBaseObject* const pObjectA = (*iteratorObjectA);
+		const CBaseObject* const pPrefabA = pObjectA->GetPrefab();
+		bool increaseIteratorA = true;
+
+		// If this object is not owned by a prefab, then continue searching
+		if (!pPrefabA)
+		{
+			++iteratorObjectA;
+			continue;
+		}
+
+		for (auto iteratorObjectB = iteratorObjectA + 1; iteratorObjectB != objects.end();)
+		{
+			const CBaseObject* const pObjectB = (*iteratorObjectB);
+			const CBaseObject* const pPrefabB = pObjectB->GetPrefab();
+
+			// Make sure we're not trying to add the same object from different instances of the same prefab type
+			if (!pPrefabB || pObjectA->GetIdInPrefab() != pObjectB->GetIdInPrefab())
+			{
+				++iteratorObjectB;
+				continue;
+			}
+
+			// If prefabA is the last selected prefab, remove the object found in prefabB from the list
+			// this is done because the last selected object's prefab will be used as the parent for the prefab
+			// we are about to create, and we want to prioritize objects in the last selected prefab since
+			// we most likely would not change it's transform
+			if (pPrefabA == pLastSelectedPrefab)
+			{
+				iteratorObjectB = objects.erase(iteratorObjectB);
+			}
+			else
+			{
+				iteratorObjectA = objects.erase(iteratorObjectA);
+				// Don't increase iterator for object A since this iterator has already been updated
+				increaseIteratorA = false;
+				// Since at this point pObjectA and pPrefabA are 'invalid' in our search; break and continue search
+				// using new iterators
+				break;
+			}
+		}
+
+		if (increaseIteratorA)
+			++iteratorObjectA;
+	}
+}
 }
 
 bool CPrefabChildGuidProvider::IsValidChildGUid(const CryGUID& id, CPrefabObject* pPrefabObject)
@@ -267,6 +328,8 @@ bool CPrefabObject::CreateFrom(std::vector<CBaseObject*>& objects)
 	CPrefabObject* pPrefabToCompareAgainst = nullptr;
 	CPrefabObject* pObjectPrefab = nullptr;
 
+	Private_PrefabObject::RemoveDuplicateInstances(objects);
+
 	for (auto pObject : objects)
 	{
 		pObjectPrefab = (CPrefabObject*)pObject->GetPrefab();
@@ -415,9 +478,30 @@ void CPrefabObject::OnContextMenu(CPopupMenuItem* menu)
 	menu->Add("Swap Prefab...", [this](void)
 	{
 		CPrefabPicker picker;
-		picker.SwapPrefab(this);
+		const CSelectionGroup* selection = GetIEditor()->GetObjectManager()->GetSelection();
+		std::vector<CPrefabObject*> prefabsInSelection;
+	
+		for (int i = 0; i < selection->GetCount(); i++)
+		{
+			if (selection->GetObject(i)->IsKindOf(RUNTIME_CLASS(CPrefabObject)))
+			{
+				prefabsInSelection.push_back(static_cast<CPrefabObject*>(selection->GetObject(i)));
+			}
+		}
+
+		picker.SwapPrefab(prefabsInSelection);
 	});
 
+	CBaseObjectsArray objects;
+	GetIEditorImpl()->GetSelection()->GetObjects(objects);
+	CPrefabManager* pPrefabManager = GetIEditor()->GetPrefabManager();
+	std::vector<CPrefabItem*> items = pPrefabManager->GetAllPrefabItems(objects);
+	//Show the menu only if we have one type of prefab in selection
+	if (items.size() == 1)
+	{
+		CPrefabItem* pItem = items[0];
+		menu->AddCommand("Select all Prefabs of Type \"" + pItem->GetName() + "\"", "prefab.select_all_instances_of_type");
+	}
 }
 
 int CPrefabObject::MouseCreateCallback(IDisplayViewport* view, EMouseEvent event, CPoint& point, int flags)
@@ -712,7 +796,7 @@ void CPrefabObject::SetPrefab(CPrefabItem* pPrefab, bool bForceReload)
 	DeleteChildrenWithoutUpdating();
 
 	SetPrefab(pPrefab);
-	
+
 	m_prefabGUID = pPrefab->GetGUID();
 	m_prefabName = pPrefab->GetFullName();
 
@@ -738,11 +822,11 @@ void CPrefabObject::SetPrefab(CPrefabItem* pPrefab, bool bForceReload)
 	CObjectArchive ar(GetObjectManager(), objectsXml, true);
 	ar.EnableProgressBar(false); // No progress bar is shown when loading objects.
 	/*
-	Here we set the guid provider to null so that it will not attempt to regenerate GUIDS in LoadObjects (specifically in the call to NewObject).
-	We need the serialized Id to stay the same as the prefab xml Id until AddMember (called in AttachLoadedChildrenToPrefab) is called
-	AddMember will "slide" the current Id to IdInPrefab (which we need for prefab instance and library update) and generate a new unique Id for the prefab instance
-	*/
-	ar.SetGuidProvider(nullptr); 
+	   Here we set the guid provider to null so that it will not attempt to regenerate GUIDS in LoadObjects (specifically in the call to NewObject).
+	   We need the serialized Id to stay the same as the prefab xml Id until AddMember (called in AttachLoadedChildrenToPrefab) is called
+	   AddMember will "slide" the current Id to IdInPrefab (which we need for prefab instance and library update) and generate a new unique Id for the prefab instance
+	 */
+	ar.SetGuidProvider(nullptr);
 	ar.EnableReconstructPrefabObject(true);
 	// new prefabs are instantiated in current layer to avoid mishaps with missing layers. Then, we just set their layer to our own below
 	ar.LoadInCurrentLayer(true);
@@ -803,7 +887,7 @@ void CPrefabObject::AttachLoadedChildrenToPrefab(CObjectArchive& ar, IObjectLaye
 		}
 		SetObjectPrefabFlagAndLayer(obj);
 	}
-	//This is necessary to avoid prefab item modify and add to be called when loading nested prefab (SetSkipPrefabUpdate will be set to false when exiting from nested SetPrefab) 
+	//This is necessary to avoid prefab item modify and add to be called when loading nested prefab (SetSkipPrefabUpdate will be set to false when exiting from nested SetPrefab)
 	//As we are loading from an archive we don't need to do any kind of update operation
 	SetModifyInProgress(true);
 	AddMembers(objects, false);
@@ -1598,15 +1682,15 @@ void CPrefabObject::SetAutoUpdatePrefab(bool autoUpdate)
 
 const char* CPrefabObjectClassDesc::GenerateObjectName(const char* szCreationParams)
 {
-	//szCreationParams is the GUID of the prefab item. 
+	//szCreationParams is the GUID of the prefab item.
 	//This item might not have been loaded yet, so we need to make sure it is
-	CPrefabItem * item = static_cast<CPrefabItem*>(GetIEditor()->GetPrefabManager()->LoadItem(CryGUID::FromString(szCreationParams)));
+	CPrefabItem* item = static_cast<CPrefabItem*>(GetIEditor()->GetPrefabManager()->LoadItem(CryGUID::FromString(szCreationParams)));
 
 	if (item)
 	{
 		return item->GetName();
 	}
-	
+
 	return ClassName();
 }
 

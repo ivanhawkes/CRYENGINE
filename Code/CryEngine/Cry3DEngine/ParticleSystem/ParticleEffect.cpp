@@ -1,7 +1,8 @@
-// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2015-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ParticleEffect.h"
+#include "ParticleEmitter.h"
 #include "ParticleSystem.h"
 #include <CrySerialization/STL.h>
 #include <CrySerialization/IArchive.h>
@@ -50,9 +51,8 @@ void CParticleEffect::Compile()
 		component->m_pEffect = this;
 		component->SetChanged();
 		component->PreCompile();
-	}
-	for (auto& component : m_components)
 		component->ResolveDependencies();
+	}
 
 	Sort();
 
@@ -62,6 +62,8 @@ void CParticleEffect::Compile()
 	for (auto& component : m_components)
 	{
 		component->m_componentId = id++;
+		if (!component->IsEnabled())
+			continue;
 		component->Compile();
 		if (component->MainPreUpdate.size())
 			MainPreUpdate.push_back(component);
@@ -69,12 +71,16 @@ void CParticleEffect::Compile()
 			RenderDeferred.push_back(component);
 	}
 
+	m_topComponents.clear();
 	m_timings = {};
 	for (auto& component : m_components)
 	{
 		component->FinalizeCompile();
 		if (!component->GetParentComponent())
 		{
+			m_topComponents.push_back(component);
+			if (!component->IsEnabled())
+				continue;
 			component->UpdateTimings();
 			const STimingParams& timings = component->ComponentParams();
 			SetMax(m_timings.m_maxParticleLife, timings.m_maxParticleLife);
@@ -87,29 +93,36 @@ void CParticleEffect::Compile()
 	m_dirty = false;
 }
 
+struct SortedComponents: TComponents
+{
+	SortedComponents(const TComponents& src)
+	{
+		for (auto pComp : src)
+		{
+			if (!pComp->GetParentComponent())
+				AddTree(pComp);
+		}
+	}
+
+	void AddTree(CParticleComponent* pComp)
+	{
+		push_back(pComp);
+		for (auto pChild : pComp->GetChildComponents())
+			AddTree(pChild);
+	}
+};
+
 void CParticleEffect::Sort()
 {
-	struct SortedComponents: TComponents
-	{
-		SortedComponents(const TComponents& src)
-		{
-			for (auto pComp : src)
-			{
-				if (!pComp->GetParentComponent())
-					AddTree(pComp);
-			}
-			assert(size() == src.size());
-		}
-
-		void AddTree(CParticleComponent* pComp)
-		{
-			push_back(pComp);
-			for (auto pChild : pComp->GetChildComponents())
-				AddTree(pChild);
-		}
-	};
-
 	SortedComponents sortedComponents(m_components);
+	assert(sortedComponents.size() == m_components.size());
+	std::swap(m_components, sortedComponents);
+}
+
+void CParticleEffect::SortFromTop()
+{
+	SortedComponents sortedComponents(m_topComponents);
+	assert(sortedComponents.size() == m_components.size());
 	std::swap(m_components, sortedComponents);
 }
 
@@ -256,7 +269,7 @@ IParticleComponent* CParticleEffect::AddComponent()
 void CParticleEffect::RemoveComponent(uint componentIdx, bool all)
 {
 	auto pComp = m_components[componentIdx];
-	pComp->SetParent(nullptr);
+	stl::find_and_erase(pComp->GetParentChildren(), pComp);
 	while (all && pComp->m_children.size())
 		pComp = pComp->m_children.back();
 	size_t endIdx = pComp->GetComponentId() + 1;

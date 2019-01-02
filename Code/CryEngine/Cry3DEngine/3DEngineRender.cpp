@@ -3129,7 +3129,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 	CSvoManager::OnDisplayInfo(fTextPosX, fTextPosY, fTextStepY, DISPLAY_INFO_SCALE);
 	#endif
 
-	if (GetCVars()->e_ProcVegetation == 2 || m_supportOfflineProceduralVegetation)
+	if ((GetCVars()->e_ProcVegetation == 2 || m_supportOfflineProceduralVegetation) && GetTerrain())
 	{
 		int objectsNum = 0, maxNodesNum = 0;
 		int nodesNum = GetTerrain()->GetActiveProcObjNodesCount(objectsNum, maxNodesNum);
@@ -3587,7 +3587,7 @@ bool C3DEngine::ScreenShotMap(CStitchedImage* pStitchedImage,
 	if (max(AngleX, AngleY) <= 0)
 		return false;
 	cam.SetFrustum(pStitchedImage->GetWidth(), pStitchedImage->GetHeight(), max(0.001f, max(AngleX, AngleY) * 2.f), Height - 8000.f, Height + 1000.f);
-	r_drawnearfov->Set(-1);
+	r_drawnearfov->Set(-1.0f);
 	ScreenShotHighRes(pStitchedImage, nRenderFlags, SRenderingPassInfo::CreateTempRenderingInfo(cam, passInfo), SliceCount, fTransitionSize);
 	r_drawnearfov->Set(drawnearfov_backup);
 

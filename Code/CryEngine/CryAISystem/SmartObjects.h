@@ -429,6 +429,7 @@ protected:
 	};
 	typedef std::map<CClassTemplateData*, CTemplateData> MapTemplates;
 	std::unique_ptr<MapTemplates> m_pMapTemplates;
+	bool m_updateTemplates;
 
 public:
 	explicit CSmartObject(EntityId entityId);
@@ -446,7 +447,10 @@ public:
 	bool operator==(const CSmartObject& other) const { return m_entityId == other.m_entityId; }
 
 	//Adds a class to the current set
-	void RegisterSmartObjectClass(CSmartObjectClass* pClass) { m_vClasses.push_back(pClass); }
+	void RegisterSmartObjectClass(CSmartObjectClass* pClass)
+	{ 
+		m_vClasses.push_back(pClass);
+	}
 
 	//Removes a class from the current set
 	void UnregisterSmartObjectClass(CSmartObjectClass* pClass)
@@ -466,6 +470,8 @@ public:
 
 	/// Measures the user size and applies value to all associated smart object classes
 	void ApplyUserSize();
+
+	void InvalidateTemplates() { m_updateTemplates = true; }
 
 	MapTemplates& GetMapTemplates();
 
@@ -879,14 +885,14 @@ public:
 	// returns the id of the inserted goal pipe if a rule was found or 0 if no rule
 	int TriggerEvent(const char* sEventName, IEntity*& pUser, IEntity*& pObject, QueryEventMap* pQueryEvents = NULL, const Vec3* pExtraPoint = NULL, bool bHighPriority = false);
 
-	/// used by heuristic to check is this link passable by current pathfind requester
-	bool  GetSmartObjectLinkCostFactorForMNM(const OffMeshLink_SmartObject* pSmartObjectLink, const IEntity* pRequesterEntity, float* fCostMultiplier) const;
+	// used by heuristic to check is this link passable by current pathfind requester
+	bool  GetSmartObjectLinkCostFactorForMNM(const OffMeshLink_SmartObject* pSmartObjectLink, const EntityId requesterEntityId, float* fCostMultiplier) const;
 
 	// used by COPTrace to use smart objects in navigation
 	int                  GetNavigationalSmartObjectActionTypeForMNM(CPipeUser* pPipeUser, CSmartObject* pSmartObject, CSmartObjectClass* pSmartObjectClass, SmartObjectHelper* pFromHelper, SmartObjectHelper* pToHelper);
 	bool                 PrepareNavigateSmartObject(CPipeUser* pPipeUser, CSmartObject* pObject, CSmartObjectClass* pObjectClass, SmartObjectHelper* pFromHelper, SmartObjectHelper* pToHelper);
 	void                 UseSmartObject(CSmartObject* pSmartObjectUser, CSmartObject* pObject, CCondition* pCondition, int eventId = 0, bool bForceHighPriority = false);
-	/// Used by COPTrace to detect busy state of SO allowing agents to wait instead of simply failing the movement request.
+	// Used by COPTrace to detect busy state of SO allowing agents to wait instead of simply failing the movement request.
 	bool                 IsSmartObjectBusy(const CSmartObject* pSmartObject) const;
 
 	void                 MapPathTypeToSoUser(const string& soUser, const string& pathType);

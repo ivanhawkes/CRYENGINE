@@ -8,6 +8,7 @@
 #include "LoaderCGA.h"
 #include "AnimationManager.h"
 #include "FacialAnimation/FaceAnimation.h"
+#include <CryRenderer/IRenderAuxGeom.h>
 #include <CryGame/IGameFramework.h>
 #include <CrySystem/File/IResourceManager.h>
 #include "ParametricSampler.h"
@@ -1673,6 +1674,7 @@ void CharacterManager::Update(bool bPaused)
 	s_bPaused = bPaused;
 	CRY_PROFILE_REGION(PROFILE_ANIMATION, "CharacterManager::Update");
 	CRYPROFILE_SCOPE_PROFILE_MARKER("CharacterManager::Update");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CharacterManager::Update");
 	ANIMATION_LIGHT_PROFILER();
 
 	CAnimationContext::Instance().Update();
@@ -3027,8 +3029,8 @@ void CharacterManager::SkelExtension(CCharInstance* pCharacter, const CharacterD
 			pCurrentSkeleton->SetKeepInMemory(true);
 			pCharacter->RuntimeInit(pExtendedSkeleton);
 		}
-		}
 	}
+}
 
 void CharacterManager::ExtendDefaultSkeletonWithSkinAttachments(ICharacterInstance* pICharacter, const char* /*unused*/, const char** szSkinAttachments, const uint32 skinsCount, const uint32 loadingFlags)
 {
@@ -3384,6 +3386,7 @@ void CharacterManager::SyncAllAnimations()
 	CRY_PROFILE_REGION(PROFILE_ANIMATION, "CharacterManager::SyncAllAnimations");
 	CRYPROFILE_SCOPE_PROFILE_MARKER("CharacterManager::SyncAllAnimations");
 	ANIMATION_LIGHT_PROFILER();
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CharacterManager::SyncAllAnimations");
 
 	m_ContextSyncQueue.ExecuteForAll(
 	  [](CharacterInstanceProcessing::SContext& ctx)
@@ -4051,8 +4054,7 @@ void CharacterManager::RenderDebugInstances(const SRenderingPassInfo& passInfo)
 		rp.AmbientColor.g = m_arrCharacterBase[i].m_AmbientColor.g;
 		rp.AmbientColor.b = m_arrCharacterBase[i].m_AmbientColor.b;
 		rp.AmbientColor.a = 1;
-		rp.dwFObjFlags = 0;
-		rp.dwFObjFlags |= FOB_TRANS_MASK;
+		rp.dwFObjFlags = FOB_TRANS_MASK;
 		rp.pMatrix = &rEntityMat;
 		rp.pPrevMatrix = &rEntityMat;
 		IMaterial* pMtl = pExampleInst->GetIMaterial();

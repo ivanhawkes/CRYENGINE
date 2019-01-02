@@ -27,7 +27,7 @@ public:
 public:
 	bool IsStageActive(EShaderRenderingFlags flags) const final
 	{
-		return RenderView()->IsGlobalFogEnabled() && CRenderer::CV_r_usezpass != 0;
+		return RenderView()->IsGlobalFogEnabled() && CRenderer::CV_r_UseZPass != 0;
 	}
 
 	void Init() final;
@@ -38,6 +38,7 @@ public:
 	void FillForwardParams(SForwardParams& forwardParams, bool enable = true) const;
 
 private:
+	void Rescale(int resolutionScale);
 	void ExecuteVolumetricFogShadow();
 	f32  GetFogCullDistance() const;
 	void ResizeResource(int resourceWidth, int resourceHeight);

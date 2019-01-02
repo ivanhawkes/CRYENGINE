@@ -10,6 +10,7 @@
 #include <CryMath/Cry_GeoIntersect.h>
 #include <CryThreading/IJobManager_JobDelegator.h>
 #include <CrySystem/Profilers/IStatoscope.h>
+#include <CryEntitySystem/IEntity.h>
 #include <CryAnimation/ICryAnimation.h>
 #include <Cry3DEngine/IIndexedMesh.h>
 #include <CryMath/QTangent.h>
@@ -2956,7 +2957,7 @@ void CMergedMeshRenderNode::RenderRenderMesh(
 	ro->SetAmbientColor(ambientColor, passInfo);
 	ro->m_fAlpha = m_rendParams.fAlpha;
 	ro->m_ObjFlags = FOB_TRANS_MASK | FOB_INSHADOW | FOB_DYNAMIC_OBJECT;
-	ro->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : 0;
+	ro->m_ObjFlags |= (m_dwRndFlags & ERF_FOB_ALLOW_TERRAIN_LAYER_BLEND) ? FOB_ALLOW_TERRAIN_LAYER_BLEND : FOB_NONE;
 
 	if (pTerrainTexInfo)
 	{

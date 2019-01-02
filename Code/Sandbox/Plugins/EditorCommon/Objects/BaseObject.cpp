@@ -1544,7 +1544,7 @@ void CBaseObject::DrawTextureIcon(SDisplayContext& dc, const Vec3& pos, float al
 	}
 
 	dc.DrawTextureLabel(GetTextureIconDrawPos(), OBJECT_TEXTURE_ICON_SIZE, OBJECT_TEXTURE_ICON_SIZE,
-		                    GetTextureIcon(), GetTextureIconFlags(), 0, 0, OBJECT_TEXTURE_ICON_SCALE, distanceSquared);
+	                    GetTextureIcon(), GetTextureIconFlags(), 0, 0, OBJECT_TEXTURE_ICON_SCALE, distanceSquared);
 }
 
 void CBaseObject::DrawWarningIcons(SDisplayContext& dc, const Vec3& pos)
@@ -1571,8 +1571,8 @@ void CBaseObject::DrawWarningIcons(SDisplayContext& dc, const Vec3& pos)
 		{
 			dc.SetColor(RGB(255, scaleWarningLevel == eScaleWarningLevel_RescaledNonUniform ? 50 : 255, 50), 1.0f);
 			dc.DrawTextureLabel(GetTextureIconDrawPos(), warningIconSize, warningIconSize,
-				                GetIEditor()->GetIconManager()->GetIconTexture(eIcon_ScaleWarning), GetTextureIconFlags(),
-				                -warningIconSize / 2, iconOffset - (warningIconSize / 2));
+			                    GetIEditor()->GetIconManager()->GetIconTexture(eIcon_ScaleWarning), GetTextureIconFlags(),
+			                    -warningIconSize / 2, iconOffset - (warningIconSize / 2));
 		}
 	}
 
@@ -1583,8 +1583,8 @@ void CBaseObject::DrawWarningIcons(SDisplayContext& dc, const Vec3& pos)
 		{
 			dc.SetColor(RGB(255, rotationWarningLevel == eRotationWarningLevel_RotatedNonRectangular ? 50 : 255, 50), 1.0f);
 			dc.DrawTextureLabel(GetTextureIconDrawPos(), warningIconSize, warningIconSize,
-				                GetIEditor()->GetIconManager()->GetIconTexture(eIcon_RotationWarning), GetTextureIconFlags(),
-				                warningIconSize / 2, iconOffset - (warningIconSize / 2));
+			                    GetIEditor()->GetIconManager()->GetIconTexture(eIcon_RotationWarning), GetTextureIconFlags(),
+			                    warningIconSize / 2, iconOffset - (warningIconSize / 2));
 		}
 	}
 }
@@ -2067,7 +2067,7 @@ void CBaseObject::Serialize(CObjectArchive& ar)
 			// If we are selected update UI Panel.
 			UpdateUIVars();
 		}
-		 
+
 		SetMinSpec(m_nMinSpec, false);
 	}
 	else
@@ -2094,10 +2094,10 @@ void CBaseObject::Serialize(CObjectArchive& ar)
 		xmlNode->setAttr("Name", GetName());
 
 		/*
-		If we are serializing in a prefab we don't want to serialize a Parent.
-		Why ? Because if we have multiple instances of the same prefab which instanced prefab is going to be the parent of this object? How can the loading code know?
-		If an object is a direct child of a prefab we serialize it without a parent. When the prefab is loaded into the level the parent of this object is resolved to be that instance	
-		*/
+		   If we are serializing in a prefab we don't want to serialize a Parent.
+		   Why ? Because if we have multiple instances of the same prefab which instanced prefab is going to be the parent of this object? How can the loading code know?
+		   If an object is a direct child of a prefab we serialize it without a parent. When the prefab is loaded into the level the parent of this object is resolved to be that instance
+		 */
 		if (m_parent)
 		{
 			CBaseObject* pPrefab = GetPrefab();
@@ -2106,7 +2106,7 @@ void CBaseObject::Serialize(CObjectArchive& ar)
 			{
 				xmlNode->setAttr("Parent", m_parent->GetId());
 			}
-			else if (pGroup && (pGroup != pPrefab)) // we have a group that is NOT a prefab (prefabs derive from groups) but is contained in a prefab 
+			else if (pGroup && (pGroup != pPrefab)) // we have a group that is NOT a prefab (prefabs derive from groups) but is contained in a prefab
 			{
 				xmlNode->setAttr("Parent", m_parent->GetId());
 			}
@@ -3338,15 +3338,10 @@ bool CBaseObject::ApplyAsset(const CAsset& asset, HitContext* pHitContext)
 	return false;
 }
 
-bool CBaseObject::CanApplyAsset(const CAsset& asset, string* pApplyTextOut) const
+bool CBaseObject::CanApplyAsset(const CAsset& asset) const
 {
 	if (!strcmp(asset.GetType()->GetTypeName(), "Material"))
 	{
-		if (pApplyTextOut != nullptr)
-		{
-			*pApplyTextOut = QtUtil::ToString(QObject::tr("Assign Material"));
-		}
-
 		return true;
 	}
 
@@ -3402,20 +3397,20 @@ void CBaseObject::OnContextMenu(CPopupMenuItem* menu)
 	}
 
 	// Group and prefab menu items
-	menu->AddCommand("Create Group", "group.create_from_selection");
-	menu->AddCommand("Create Prefab", "prefab.create_from_selection");
-	menu->AddCommand("Add to...", "group.attach_to");
+	menu->AddCommand("group.create_from_selection");
+	menu->AddCommand("prefab.create_from_selection");
+	menu->AddCommand("group.attach_to");
 
-	CPopupMenuItem& detachItem = menu->AddCommand("Detach", "group.detach");
-	CPopupMenuItem& detachToRootItem = menu->AddCommand("Detach from Hierarchy", "group.detach_from_hierarchy");
+	CPopupMenuItem& detachItem = menu->AddCommand("group.detach");
+	CPopupMenuItem& detachToRootItem = menu->AddCommand("group.detach_from_hierarchy");
 
 	// Linking menu items
 	menu->AddSeparator();
 
 	ICommandManager* pCommandManager = GetIEditor()->GetICommandManager();
 
-	menu->AddCommand("Link to...", "tools.link_to_pick");
-	CPopupMenuItem& unlinkItem = menu->AddCommand("Unlink", "tools.unlink");
+	menu->AddCommand("tools.link_to_pick");
+	CPopupMenuItem& unlinkItem = menu->AddCommand("tools.unlink");
 
 	CBaseObject* pGroup = GetGroup();
 	bool bEnableDetach = pGroup && GetIEditor()->IsGroupOpen(pGroup);
@@ -3426,7 +3421,7 @@ void CBaseObject::OnContextMenu(CPopupMenuItem* menu)
 	// Other object menu items
 	menu->AddSeparator();
 
-	menu->AddCommand("Delete", "general.delete");
+	menu->AddCommand("general.delete");
 
 	CPopupMenuItem& transformMenu = menu->Add("Transform");
 	transformMenu.Add("Clear Rotation", [=]

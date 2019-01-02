@@ -14,6 +14,8 @@ struct IUtilityRenderPass
 		NearestDepthUpsamplePass,
 		DownsamplePass,
 		StableDownsamplePass,
+		DepthLinearizationPass,
+		DepthDelinearizationPass,
 		DepthDownsamplePass,
 		GaussianBlurPass,
 		MipmapGenPass,
@@ -53,14 +55,10 @@ public:
 	void Execute(CTexture* pSrcRT, CTexture* pDestRT, const RECT *pSrcRect = NULL, const RECT *pDstRect = NULL, bool bBigDownsample = false, const ColorF& color = ColorF(1,1,1,1), const int renderStateFlags = 0);
 	bool PreparePrimitive(CRenderPrimitive& prim, CPrimitiveRenderPass& targetPass, const RECT& rcS, int renderState, const D3DViewPort& targetViewport, bool bResample, bool bBigDownsample, CTexture *pSrcRT, CTexture *pDstRT, const ColorF& color);
 
-	static CStretchRegionPass &GetPass();
-	static void Shutdown();
-
 	static EPassId GetPassId() { return EPassId::StretchRegionPass; }
 
 protected:
 	CPrimitiveRenderPass m_pass;
-
 	CRenderPrimitive m_Primitive;
 
 private:
@@ -134,10 +132,38 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+class CDepthLinearizationPass : public IUtilityRenderPass
+{
+public:
+	void Execute(CTexture* pSrcRT, CTexture* pDestRT);
+
+	static EPassId GetPassId() { return EPassId::DepthLinearizationPass; }
+
+private:
+	CFullscreenPass m_pass;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class CDepthDelinearizationPass : public IUtilityRenderPass
+{
+public:
+	void Execute(CTexture* pSrcRT, CTexture* pDestDS);
+
+	static EPassId GetPassId() { return EPassId::DepthDelinearizationPass; }
+
+private:
+	CFullscreenPass m_pass;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class CDepthDownsamplePass : public IUtilityRenderPass
 {
 public:
-	void Execute(CTexture* pSrcRT, CTexture* pDestRT, bool bLinearizeSrcDepth, bool bFromSingleChannel);
+	void Execute(CTexture* pSrcRT, CTexture* pDestRT, CTexture* pDestDS, bool bLinearizeSrcDepth, bool bFromSingleChannel);
 
 	static EPassId GetPassId() { return EPassId::DepthDownsamplePass; }
 

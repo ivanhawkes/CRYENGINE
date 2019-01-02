@@ -179,15 +179,8 @@ void CItemProperties::OnItemsDeletion()
 }
 
 CGraphView::CGraphView()
-	: CNodeGraphView()
-	, m_pMovingFeatureWidget(nullptr)
+	: m_pMovingFeatureWidget(nullptr)
 {
-
-}
-
-CGraphView::~CGraphView()
-{
-
 }
 
 void CGraphView::OnFeatureMouseEvent(QGraphicsItem* pSender, SFeatureMouseEventArgs& args)
@@ -327,7 +320,7 @@ bool CGraphView::MoveFeatureToIndex(CFeatureWidget& featureWidget, uint32 destIn
 
 void CGraphView::OnItemsChanged()
 {
-	static_cast<CParticleGraphModel*>(GetModel())->signalChanged();
+	static_cast<CParticleGraphModel*>(GetModel())->signalChanged(nullptr);
 }
 
 void CGraphView::ShowFeatureContextMenu(CFeatureWidget* pFeatureWidget, QPointF screenPos)

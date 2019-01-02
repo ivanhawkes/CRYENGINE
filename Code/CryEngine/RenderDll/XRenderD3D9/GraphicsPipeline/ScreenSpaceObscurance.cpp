@@ -2,9 +2,11 @@
 
 #include "StdAfx.h"
 #include "ScreenSpaceObscurance.h"
+
 #include "D3DPostProcess.h"
 #include "D3D_SVO.h"
-#include "HeightMapAO.h"
+#include "GraphicsPipeline/HeightMapAO.h"
+#include "GraphicsPipeline/TiledShading.h"
 
 struct ObscuranceConstants
 {
@@ -23,6 +25,10 @@ void CScreenSpaceObscuranceStage::Init()
 
 void CScreenSpaceObscuranceStage::Execute()
 {
+#if defined(DURANGO_USE_ESRAM)
+	m_passCopyFromESRAM.Execute(CRendererResources::s_ptexSceneSpecularESRAM, CRendererResources::s_ptexSceneSpecular);
+#endif
+
 	if (!CRenderer::CV_r_ssdo)
 	{
 		CClearSurfacePass::Execute(CRendererResources::s_ptexSceneNormalsBent, Clr_Median);
@@ -30,10 +36,6 @@ void CScreenSpaceObscuranceStage::Execute()
 	}
 
 	PROFILE_LABEL_SCOPE("DIRECTIONAL_OCC");
-
-#if defined(DURANGO_USE_ESRAM)
-	m_passCopyFromESRAM.Execute(CRendererResources::s_ptexSceneSpecularESRAM, CRendererResources::s_ptexSceneSpecular);
-#endif
 
 	CTexture* CRendererResources__s_ptexSceneSpecular = CRendererResources::CRendererResources::s_ptexSceneSpecularTmp;
 #if defined(DURANGO_USE_ESRAM)
@@ -53,7 +55,7 @@ void CScreenSpaceObscuranceStage::Execute()
 		uint64 rtMask = 0;
 		rtMask |= CRenderer::CV_r_ssdoHalfRes ? g_HWSR_MaskBit[HWSR_SAMPLE0] : 0;
 		rtMask |= heightMapAO->GetHeightMapFrustum() ? g_HWSR_MaskBit[HWSR_SAMPLE1] : 0;
-		rtMask |= CRenderer::CV_r_DeferredShadingTiled == 4 ? g_HWSR_MaskBit[HWSR_SAMPLE2] : 0;
+		rtMask |= CRenderer::CV_r_DeferredShadingTiled == CTiledShadingStage::eDeferredMode_Disabled ? g_HWSR_MaskBit[HWSR_SAMPLE2] : 0;
 
 		// Extreme magnification as happening with small FOVs will cause banding issues with half-res depth
 		if (CRenderer::CV_r_ssdoHalfRes == 2 && RAD2DEG(RenderView()->GetCamera(CCamera::eEye_Left).GetFov()) < 30)

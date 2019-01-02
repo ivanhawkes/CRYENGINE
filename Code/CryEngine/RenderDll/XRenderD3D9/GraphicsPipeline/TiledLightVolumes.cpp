@@ -2,6 +2,7 @@
 
 #include "StdAfx.h"
 #include "TiledLightVolumes.h"
+#include "TiledShading.h"
 
 #include "D3DPostProcess.h"
 #include "D3D_SVO.h"
@@ -305,7 +306,7 @@ void CTiledLightVolumesStage::Update()
 {
 	// Tiled Light Volumes ===============================================================
 
-	if (CRenderer::CV_r_DeferredShadingTiled >= 3)
+	if (IsSeparateVolumeListGen())
 	{
 		const ColorI nulls = { 0, 0, 0, 0 };
 
@@ -597,8 +598,8 @@ void CTiledLightVolumesStage::UploadTextures(TextureAtlas& atlas)
 
 		CTexture* pTexUpload = item.texture;
 
-		const int availableMip = pTexUpload->IsStreamed() ? std::max(0, pTexUpload->StreamGetLoadedMip       (                       )) : 0;
-		const int requestedMip = pTexUpload->IsStreamed() ? std::max(0, pTexUpload->StreamCalculateMipsSigned(item.mipFactorRequested)) : 0;
+		const int8 availableMip = pTexUpload->IsStreamed() ? pTexUpload->StreamGetLoadedMip (                       ) : 0;
+		const int8 requestedMip = pTexUpload->IsStreamed() ? pTexUpload->StreamCalculateMips(item.mipFactorRequested) : 0;
 
 		// Copy for as long as we have less data in the array than in the texture
 		if (item.lowestTransferedMip > availableMip)
@@ -606,11 +607,11 @@ void CTiledLightVolumesStage::UploadTextures(TextureAtlas& atlas)
 			item.lowestTransferedMip = availableMip;
 
 			// Update atlas
-			const uint32 numMisMips = availableMip;
-			const uint32 numSrcMips = (uint32)pTexUpload->GetNumMips();
-			const uint32 numDstMips = (uint32)atlas.texArray->GetNumMips();
-			const uint32 numSkpMips = IntegerLog2(std::max((uint32)(pTexUpload->GetWidth() >> numMisMips) / atlas.texArray->GetWidth(), 1U));
-			const uint32 numFaces = atlas.texArray->GetTexType() == eTT_CubeArray ? 6 : 1;
+			const int8 numMisMips = availableMip;
+			const int8 numSrcMips = (uint32)pTexUpload->GetNumMips();
+			const int8 numDstMips = (uint32)atlas.texArray->GetNumMips();
+			const int8 numSkpMips = IntegerLog2(std::max((uint32)(pTexUpload->GetWidth() >> numMisMips) / atlas.texArray->GetWidth(), 1U));
+			const int8 numFaces = atlas.texArray->GetTexType() == eTT_CubeArray ? 6 : 1;
 
 			CDeviceTexture* pTexInputDevTex = pTexUpload->GetDevTexture();
 			CDeviceTexture* pTexArrayDevTex = atlas.texArray->GetDevTexture();
@@ -1193,7 +1194,7 @@ void CTiledLightVolumesStage::GenerateLightList()
 			int lastUpdate = pItem ? pItem->updateFrameID : 0;
 			const char* pName = pItem && pItem->texture ? pItem->texture->GetName() : "-";
 			int streamed0 = 0; // 32x32 non-streamed full-resolution
-			int streamed1 = pItem && pItem->texture && pItem->texture->IsStreamed() ? std::max(0, pItem->texture->StreamGetLoadedMip()) : 0;
+			int streamed1 = pItem && pItem->texture && pItem->texture->IsStreamed() ? std::max<int8>(0, pItem->texture->StreamGetLoadedMip()) : 0;
 
 			Vec4 color = lightShadeInfo.color;
 
@@ -1234,40 +1235,15 @@ void CTiledLightVolumesStage::GenerateLightList()
 }
 
 
-bool CTiledLightVolumesStage::IsSeparateVolumeListGen()
-{
-	return !(CRenderer::CV_r_DeferredShadingTiled < 3 && !CRenderer::CV_r_GraphicsPipelineMobile);
-}
-
-
 void CTiledLightVolumesStage::ExecuteVolumeListGen(uint32 dispatchSizeX, uint32 dispatchSizeY)
 {
-	CD3D9Renderer* pRenderer = gcpRendD3D;
+	PROFILE_LABEL_SCOPE("TILED_VOLUMES");
+
+	GenerateLightVolumeInfo();
 
 	CTexture* pDepthRT = CRendererResources::s_ptexSceneDepthScaled[2];
 	assert(CRendererCVars::CV_r_VrProjectionType > 0 || (pDepthRT->GetWidth() == dispatchSizeX && pDepthRT->GetHeight() == dispatchSizeY));
 
-	{
-		PROFILE_LABEL_SCOPE("COPY_DEPTH_EIGHTH");
-
-		static CCryNameTSCRC techCopy("CopyToDeviceDepth");
-
-		m_passCopyDepth.SetPrimitiveFlags(CRenderPrimitive::eFlags_None);
-		m_passCopyDepth.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
-		m_passCopyDepth.SetTechnique(CShaderMan::s_shPostEffects, techCopy, 0);
-		m_passCopyDepth.SetRequirePerViewConstantBuffer(true);
-		m_passCopyDepth.SetDepthTarget(pDepthRT);
-		m_passCopyDepth.SetState(GS_DEPTHWRITE | GS_DEPTHFUNC_NOTEQUAL);
-		m_passCopyDepth.SetTexture(0, CRendererResources::s_ptexLinearDepthScaled[2]);
-		
-		m_passCopyDepth.BeginConstantUpdate();
-		m_passCopyDepth.Execute();
-	}
-
-	PROFILE_LABEL_SCOPE("TILED_VOLUMES");
-
-	GenerateLightVolumeInfo();
-	
 	SRenderViewInfo viewInfo[2];
 	size_t viewInfoCount = GetGraphicsPipeline().GenerateViewInfo(viewInfo);
 	

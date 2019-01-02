@@ -10,6 +10,7 @@
 #include <Cry3DEngine/IIndexedMesh.h>
 #include <CryCore/BitFiddling.h>                              // IntegerLog2()
 #include <Cry3DEngine/ImageExtensionHelper.h>                     // CImageExtensionHelper
+#include <CryFont/IFont.h>
 #include "Textures/Image/CImage.h"
 #include "Textures/TextureManager.h"
 #include "Textures/TextureStreamPool.h"
@@ -146,7 +147,6 @@ void CRenderer::InitRenderer()
 	m_bSystemResourcesInit = 0;
 
 	m_bSystemTargetsInit = 0;
-	m_bIsWindowActive    = true;
 
 	m_bShadowsEnabled      = true;
 	m_bCloudShadowsEnabled = true;
@@ -222,7 +222,7 @@ void CRenderer::InitRenderer()
 	}
 #endif
 
-	m_nUseZpass = CV_r_usezpass;
+	m_nUseZpass = CV_r_UseZPass;
 
 	m_nShadowPoolHeight = m_nShadowPoolWidth = 0;
 
@@ -690,7 +690,7 @@ void CRenderer::InitSystemResources(int nFlags)
 	LOADING_TIME_PROFILE_SECTION;
 	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Init System Resources");
 
-	if (!m_bSystemResourcesInit || m_bDeviceLost == 2)
+	if (!m_bSystemResourcesInit)
 	{
 		iLog->Log("*** Init system render resources ***");
 
@@ -724,9 +724,6 @@ void CRenderer::InitSystemResources(int nFlags)
 		   ForceFlushRTCommands();*/
 
 		CTexture::s_bPrecachePhase = bPrecache;
-
-		if (m_bDeviceLost == 2)
-			m_bDeviceLost = 0;
 
 		m_bSystemResourcesInit = 1;
 	}
@@ -797,9 +794,6 @@ void CRenderer::FreeSystemResources(int nFlags)
 			ExecuteRenderThreadCommand([=] {
 				gRenDev->RT_ReleaseRenderResources(nFlags);
 			}, ERenderCommandFlags::FlushAndWait);
-
-			if (!m_bDeviceLost)
-				m_bDeviceLost = 2;
 
 			m_bSystemResourcesInit = 0;
 		}
@@ -1264,7 +1258,7 @@ void CRenderer::EF_SubmitWind(const SWindGrid* pWind)
 		int nThreadID = m_pRT->m_nCurThreadProcess;
 		pDevTex->UploadFromStagingResource(0, [=](void* pData, uint32 rowPitch, uint32 slicePitch)
 		{
-			cryMemcpy(pData, pWind->m_pData, CTexture::TextureDataSize(pWind->m_nWidth, pWind->m_nHeight, 1, 1, 1, eTF_R16G16F));
+			cryMemcpy(pData, pWind->m_pData, CTexture::TextureDataSize(pWind->m_nWidth, pWind->m_nHeight, 1, 1, 1, eTF_R16G16F, eTM_None));
 			return true;
 		});
 	};
@@ -1432,6 +1426,11 @@ void CRenderer::EF_CheckLightMaterial(SRenderLight* pLight, uint16 nRenderLightI
 			const float fWaterLevel = gEnv->p3DEngine->GetWaterLevel();
 			const float fCamZ       = passInfo.GetCamera().GetPosition().z;
 			const int32 nAW         = ((fCamZ - fWaterLevel) * (pLight->m_Origin.z - fWaterLevel) > 0) ? 1 : 0;
+
+			// TODO: set bbox/center on light-render-element
+			// pRE->m_center     = pLight->m_Origin;
+			// pRE->m_WSBBox.min = pLight->m_Origin;
+			// pRE->m_WSBBox.max = pLight->m_Origin;
 
 			passInfo.GetRenderView()->AddRenderObject(pRE, pLight->m_Shader, pRO, passInfo, nList, nAW);
 		}
@@ -1785,7 +1784,7 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 
 	case EFQ_DeviceLost:
 	{
-		WriteQueryResult(pInOut0, nInOutSize0, static_cast<bool>(m_bDeviceLost != 0));
+		WriteQueryResult(pInOut0, nInOutSize0, static_cast<bool>(false));
 	}
 	break;
 
@@ -2111,12 +2110,12 @@ void CRenderer::EF_QueryImpl(ERenderQueryTypes eQuery, void* pInOut0, uint32 nIn
 						if (!pTSI)
 							continue;
 
-						int  nPersMip = tp->GetNumMips() - tp->GetNumPersistentMips();
+						int8 nPersMip = tp->GetNumMips() - tp->GetNumPersistentMips();
 						bool bStale   = CTexture::s_pTextureStreamer->StatsWouldUnload(tp);
-						int  nCurMip  = bStale ? nPersMip : tp->GetRequiredMip();
+						int8 nCurMip  = bStale ? nPersMip : tp->GetRequiredMip();
 						if (tp->IsForceStreamHighRes())
 							nCurMip = 0;
-						int nMips = tp->GetNumMips();
+						int8 nMips = tp->GetNumMips();
 						nCurMip = min(nCurMip, nPersMip);
 
 						uint32 nTexSize = tp->StreamComputeSysDataSize(nCurMip);
@@ -2369,7 +2368,7 @@ _smart_ptr<IRenderMesh> CRenderer::CreateRenderMeshInitialized(
 	pRenderMesh->m_nClientTextureBindID = nClientTextureBindID;
 
 	// Precache for static buffers
-	if (CV_r_meshprecache && pRenderMesh->_GetNumVerts() && bPrecache && !m_bDeviceLost && m_pRT->IsRenderThread())
+	if (CV_r_meshprecache && pRenderMesh->_GetNumVerts() && bPrecache && m_pRT->IsRenderThread())
 	{
 		//pRenderMesh->CheckUpdate(eVF, -1);
 	}
@@ -2846,13 +2845,18 @@ bool CRenderer::DXTDecompress(const byte* sourceData, const size_t srcFileSize, 
 		{
 			data.row = y;
 #ifdef PROCESS_TEXTURES_IN_PARALLEL
-			TDXTDecompressRow compressJob(data);
-			compressJob.RegisterJobState(&jobState);
-			compressJob.SetPriorityLevel(JobManager::eStreamPriority);
-			compressJob.Run();
-#else
-			DXTDecompressRow(data);
+			// if this is already running from a worker, we must not block it waiting for other jobs or we get a deadlock
+			// (this did happen, coming from voxel streaming)
+			if(!JobManager::IsWorkerThread())
+			{
+				TDXTDecompressRow compressJob(data);
+				compressJob.RegisterJobState(&jobState);
+				compressJob.SetPriorityLevel(JobManager::eStreamPriority);
+				compressJob.Run();
+			}
+			else
 #endif
+				DXTDecompressRow(data);
 		}
 
 #ifdef PROCESS_TEXTURES_IN_PARALLEL
@@ -3097,9 +3101,8 @@ void CRenderer::CopyTextureRegion(ITexture* pSrc, RectI srcRegion, ITexture* pDs
 {
 	_smart_ptr<ITexture> pSource = pSrc;
 	_smart_ptr<ITexture> pDestination = pDst;
-	ExecuteRenderThreadCommand(
-		[=]
-	{
+
+	ExecuteRenderThreadCommand([=]{
 		RECT src;
 		src.left = srcRegion.x;
 		src.right = srcRegion.x + srcRegion.w;
@@ -3112,10 +3115,9 @@ void CRenderer::CopyTextureRegion(ITexture* pSrc, RectI srcRegion, ITexture* pDs
 		dst.bottom = dstRegion.y + dstRegion.h;
 		dst.top = dstRegion.y;
 
-		CStretchRegionPass::GetPass().Execute(static_cast<CTexture*>(pSource.get()), static_cast<CTexture*>(pDestination.get()), &src, &dst, false, color, renderStateFlags);
-	},
-		ERenderCommandFlags::None
-		);
+		CStretchRegionPass().Execute(static_cast<CTexture*>(pSource.get()), static_cast<CTexture*>(pDestination.get()), &src, &dst, false, color, renderStateFlags);
+	}
+	, ERenderCommandFlags::None );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -3172,9 +3174,9 @@ const char* CRenderer::GetTextureFormatName(ETEX_Format eTF)
 	return CTexture::NameForTextureFormat(eTF);
 }
 
-uint32 CRenderer::GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF)
+uint32 CRenderer::GetTextureFormatDataSize(int nWidth, int nHeight, int nDepth, int nMips, ETEX_Format eTF, ETEX_TileMode mode)
 {
-	return CTexture::TextureDataSize(nWidth, nHeight, nDepth, nMips, 1, eTF);
+	return CTexture::TextureDataSize(nWidth, nHeight, nDepth, nMips, 1, eTF, mode);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4580,6 +4582,8 @@ void CRenderer::ScheduleResourceForDelete(CBaseResource* pResource)
 //////////////////////////////////////////////////////////////////////////
 void CRenderer::RT_DelayedDeleteResources(bool bAllResources)
 {
+	FUNCTION_PROFILER_RENDERER();
+
 	m_currentResourceDeleteBuffer = (m_currentResourceDeleteBuffer + 1) % RT_COMMAND_BUF_COUNT;
 	int buffer = bAllResources ? 0 : m_currentResourceDeleteBuffer;
 	const int bufferEnd = bAllResources ? RT_COMMAND_BUF_COUNT : buffer + 1;
@@ -4743,13 +4747,12 @@ CRenderObject* CRenderer::EF_DuplicateRO(CRenderObject* pSrc, const SRenderingPa
 	if (pSrc->m_bPermanent)
 	{
 		// Clone object and attach to the end of linked list of the source object
+		CPermanentRenderObject* pObjSrc = reinterpret_cast<CPermanentRenderObject*>(pSrc);
 		CPermanentRenderObject* pObjNew = reinterpret_cast<CPermanentRenderObject*>(CRenderer::EF_GetObject());
 
 		uint32 nId = pObjNew->m_Id;
-		pObjNew->CloneObject(pSrc);
+		pObjNew->CloneObject(pObjSrc);
 		pObjNew->m_Id = nId;
-
-		CPermanentRenderObject* pObjSrc = reinterpret_cast<CPermanentRenderObject*>(pSrc);
 
 		// Link duplicated object to the source object
 		{

@@ -4,6 +4,8 @@
 
 #include "SandboxAPI.h"
 #include <Controls/SandboxWindowing.h>
+#include <Util/UserDataUtil.h>
+#include <QFileInfo>
 
 class CWnd;
 class QFocusEvent;
@@ -25,7 +27,8 @@ protected:
 
 	void          closeEvent(QCloseEvent* event);
 	virtual QSize sizeHint() const        { return m_defaultSize; }
-	virtual QSize minimumSizeHint() const { return m_minimumSize; }
+	// if there is an mfc widget return stored minimum size, if not let qt handle min size hint calculation
+	virtual QSize minimumSizeHint() const { return m_MfcWnd ? m_minimumSize : QBaseTabPane::minimumSizeHint(); }
 	void focusInEvent(QFocusEvent* pEvent);
 };
 

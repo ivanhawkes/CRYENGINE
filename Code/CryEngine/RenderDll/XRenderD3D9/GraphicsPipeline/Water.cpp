@@ -8,6 +8,7 @@
 #include "GraphicsPipeline/WaterRipples.h"
 #include "GraphicsPipeline/VolumetricFog.h"
 #include "GraphicsPipeline/TiledLightVolumes.h"
+#include "GraphicsPipeline/TiledShading.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -205,6 +206,9 @@ void CWaterStage::Init()
 	CRY_ASSERT(m_pOceanCausticsTex == nullptr);
 	m_pOceanCausticsTex = CTexture::ForNamePtr("%ENGINE%/EngineAssets/Textures/caustics_sampler.dds", FT_DONT_STREAM, eTF_Unknown);
 
+	m_pVolumeCausticsRT = CTexture::GetOrCreateTextureObject("$WaterVolumeCaustics", 0, 0, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_WATERVOLUMECAUSTICSMAP);
+	m_pVolumeCausticsTempRT = CTexture::GetOrCreateTextureObject("$WaterVolumeCausticsTemp", 0, 0, 1, eTT_2D, /*FT_DONT_RELEASE |*/ FT_DONT_STREAM | FT_USAGE_RENDERTARGET, eTF_Unknown, TO_WATERVOLUMECAUSTICSMAPTEMP);
+
 	CConstantBufferPtr pCB = gcpRendD3D->m_DevBufMan.CreateConstantBuffer(sizeof(water::SPrimitiveConstants));
 	if (pCB) pCB->SetDebugName("WaterStage Deferred-OceanStencil Per-Primitive CB");
 
@@ -257,6 +261,41 @@ void CWaterStage::Init()
 
 	for (uint i = 0; i < MAX_GPU_NUM; i++)
 		m_prevViewProj[i] = IDENTITY;
+}
+
+void CWaterStage::OnCVarsChanged(const CCVarUpdateRecorder& cvarUpdater)
+{
+	bool causticsHasChanged = false;
+
+	int32 caustics = CRendererCVars::CV_r_watercaustics;
+	int32 causticsDeferred = CRendererCVars::CV_r_watercausticsdeferred;
+	int32 volumeCaustics = CRendererCVars::CV_r_watervolumecaustics;
+
+	if (auto pVar = cvarUpdater.GetCVar("r_WaterCaustics"))
+	{
+		caustics = pVar->intValue;
+		causticsHasChanged = true;
+	}
+
+	if (auto pVar = cvarUpdater.GetCVar("r_WaterCausticsDeferred"))
+	{
+		causticsDeferred = pVar->intValue;
+		causticsHasChanged = true;
+	}
+
+	if (auto pVar = cvarUpdater.GetCVar("r_WaterVolumeCaustics"))
+	{
+		volumeCaustics = pVar->intValue;
+		causticsHasChanged = true;
+	}
+
+	if (causticsHasChanged)
+	{
+		const bool hasCaustics = caustics && causticsDeferred && volumeCaustics;
+		const int renderWidth = CRendererResources::s_renderWidth;
+		const int renderHeight = CRendererResources::s_renderHeight;
+		PrepareVolumeCausticsRenderTargets(hasCaustics, renderWidth, renderHeight);
+	}
 }
 
 void CWaterStage::Update()
@@ -318,15 +357,19 @@ void CWaterStage::Update()
 		m_passWaterReflectionGen.SetRenderTargets(CRendererResources::s_ptexSceneDepthScaled[0], CRendererResources::s_ptexWaterVolumeRefl[0]);
 	}
 
-	if (CRenderer::CV_r_watervolumecaustics && CRenderer::CV_r_watercaustics && CRenderer::CV_r_watercausticsdeferred)
+	if (CTexture::IsTextureExist(m_pVolumeCausticsRT)
+		&& CTexture::IsTextureExist(m_pVolumeCausticsTempRT)
+		&& CRenderer::CV_r_watercaustics
+		&& CRenderer::CV_r_watercausticsdeferred
+		&& CRenderer::CV_r_watervolumecaustics)
 	{
-		int width  = CRendererResources::s_ptexWaterCaustics[0]->GetWidth();
-		int height = CRendererResources::s_ptexWaterCaustics[0]->GetHeight();
+		const int width  = m_pVolumeCausticsRT->GetWidth();
+		const int height = m_pVolumeCausticsRT->GetHeight();
 
 		const SRenderViewport viewportCaustics(0, 0, width, height);
 
 		m_passWaterCausticsSrcGen.SetViewport(viewportCaustics);
-		m_passWaterCausticsSrcGen.SetRenderTargets(CRendererResources::s_ptexSceneDepthScaled[0], CRendererResources::s_ptexWaterCaustics[0]);
+		m_passWaterCausticsSrcGen.SetRenderTargets(CRendererResources::s_ptexSceneDepthScaled[0], m_pVolumeCausticsRT);
 	}
 }
 
@@ -357,6 +400,9 @@ void CWaterStage::Resize(int renderWidth, int renderHeight)
 		else if (shouldApplyMaskGen && (m_pOceanMaskTex->Invalidate(renderWidth, renderHeight, eTF_R8) || !CTexture::IsTextureExist(m_pOceanMaskTex)))
 			m_pOceanMaskTex->CreateRenderTarget(eTF_R8G8B8A8, Clr_Transparent);
 	}
+
+	const bool createCaustics = (CRenderer::CV_r_watervolumecaustics && CRenderer::CV_r_watercaustics && CRenderer::CV_r_watercausticsdeferred);
+	PrepareVolumeCausticsRenderTargets(createCaustics, renderWidth, renderHeight);
 }
 
 void CWaterStage::ExecuteWaterVolumeCaustics()
@@ -431,12 +477,10 @@ void CWaterStage::ExecuteWaterVolumeCaustics()
 		}
 	}
 
-	const uint32 nBatchMask = pRenderView->GetBatchFlags(EFSLIST_WATER);
-
 	if (!isEmpty
-	    && (nBatchMask & FB_WATER_CAUSTIC)
-	    && CTexture::IsTextureExist(CRendererResources::s_ptexWaterCaustics[0])
-	    && CTexture::IsTextureExist(CRendererResources::s_ptexWaterCaustics[1])
+	    && pRenderView->HasRenderItems(EFSLIST_WATER, FB_WATER_CAUSTIC)
+	    && CTexture::IsTextureExist(m_pVolumeCausticsRT)
+	    && CTexture::IsTextureExist(m_pVolumeCausticsTempRT)
 	    && CRenderer::CV_r_watercaustics
 	    && CRenderer::CV_r_watercausticsdeferred
 	    && CRenderer::CV_r_watervolumecaustics)
@@ -456,7 +500,7 @@ void CWaterStage::ExecuteWaterVolumeCaustics()
 		if (causticInfo.m_pCausticQuadMesh)
 		{
 			// NOTE: this function is called instead in CDeferredShading::Render() when tiled deferred shading is disabled.
-			const bool bTiledDeferredShading = CRenderer::CV_r_DeferredShadingTiled >= 2;
+			const bool bTiledDeferredShading = CRenderer::CV_r_DeferredShadingTiled >= CTiledShadingStage::eDeferredMode_Enabled;
 			if (bTiledDeferredShading)
 			{
 				ExecuteDeferredWaterVolumeCaustics();
@@ -485,7 +529,7 @@ void CWaterStage::ExecuteDeferredWaterVolumeCaustics()
 
 		pass.SetTexture(0, CRendererResources::s_ptexLinearDepth);
 		pass.SetTexture(1, CRendererResources::s_ptexSceneNormalsMap);
-		pass.SetTexture(2, CRendererResources::s_ptexWaterCaustics[0]);
+		pass.SetTexture(2, m_pVolumeCausticsRT);
 
 		pass.SetSampler(0, EDefaultSamplerStates::TrilinearClamp);
 		pass.SetSampler(1, EDefaultSamplerStates::PointClamp);
@@ -883,7 +927,7 @@ bool CWaterStage::CreatePipelineState(
 			psoDesc.m_RenderState = (psoDesc.m_RenderState & ~(GS_NODEPTHTEST | GS_DEPTHWRITE | GS_DEPTHFUNC_MASK));
 			psoDesc.m_RenderState = GS_DEPTHFUNC_LEQUAL;
 
-			if (CRenderer::CV_r_DeferredShadingTiled > 0)
+			if (CRenderer::CV_r_DeferredShadingTiled > CTiledShadingStage::eDeferredMode_Off)
 				psoDesc.m_ShaderFlags_RT |= g_HWSR_MaskBit[HWSR_TILED_SHADING];
 
 			bWaterRipples = true;
@@ -900,7 +944,7 @@ bool CWaterStage::CreatePipelineState(
 			psoDesc.m_RenderState = (psoDesc.m_RenderState & ~(GS_NODEPTHTEST | GS_DEPTHWRITE | GS_DEPTHFUNC_MASK));
 			psoDesc.m_RenderState = GS_DEPTHFUNC_LEQUAL;
 
-			if (CRenderer::CV_r_DeferredShadingTiled > 0)
+			if (CRenderer::CV_r_DeferredShadingTiled > CTiledShadingStage::eDeferredMode_Off)
 				psoDesc.m_ShaderFlags_RT |= g_HWSR_MaskBit[HWSR_TILED_SHADING];
 
 			bWaterRipples = true;
@@ -1262,6 +1306,42 @@ void CWaterStage::UpdatePerPassResources(EPass passId)
 	}
 }
 
+void CWaterStage::PrepareVolumeCausticsRenderTargets(bool hasCaustics, int renderWidth, int renderHeight)
+{
+	if (hasCaustics)
+	{
+		const int width_r2 = (renderWidth + 1) / 2;
+		const int height_r2 = (renderHeight + 1) / 2;
+
+		if (!CTexture::IsTextureExist(m_pVolumeCausticsRT) ||
+			m_pVolumeCausticsRT->Invalidate(width_r2, height_r2, eTF_R8G8B8A8))
+		{
+			m_pVolumeCausticsRT->SetWidth(width_r2);
+			m_pVolumeCausticsRT->SetHeight(height_r2);
+			m_pVolumeCausticsRT->CreateRenderTarget(eTF_R8G8B8A8, Clr_Unknown);
+		}
+
+		if (!CTexture::IsTextureExist(m_pVolumeCausticsTempRT) ||
+			m_pVolumeCausticsTempRT->Invalidate(width_r2, height_r2, eTF_R8G8B8A8))
+		{
+			m_pVolumeCausticsTempRT->SetWidth(width_r2);
+			m_pVolumeCausticsTempRT->SetHeight(height_r2);
+			m_pVolumeCausticsTempRT->CreateRenderTarget(eTF_R8G8B8A8, Clr_Unknown);
+		}
+	}
+	else
+	{
+		if (CTexture::IsTextureExist(m_pVolumeCausticsRT))
+		{
+			m_pVolumeCausticsRT->ReleaseDeviceTexture(false);
+		}
+		if (CTexture::IsTextureExist(m_pVolumeCausticsTempRT))
+		{
+			m_pVolumeCausticsTempRT->ReleaseDeviceTexture(false);
+		}
+	}
+}
+
 void CWaterStage::ExecuteWaterNormalGen()
 {
 	PROFILE_LABEL_SCOPE("WATER_NORMAL_GEN");
@@ -1375,32 +1455,6 @@ void CWaterStage::ExecuteOceanMaskGen()
 	ExecuteSceneRenderPass(m_passOceanMaskGen, ePass_OceanMaskGen, FB_GENERAL, 0, EFSLIST_WATER);
 }
 
-void CWaterStage::ExecuteDepthCopy()
-{
-	CRenderView* pRenderView = RenderView();
-
-	const int32 frameID = pRenderView->GetFrameId();
-	if (m_lastDepthCopyFrameID != frameID)
-	{
-		m_lastDepthCopyFrameID = frameID;
-
-		PROFILE_LABEL_SCOPE("COPY_DEPTH_HALF");
-
-		static CCryNameTSCRC techCopy("CopyToDeviceDepth");
-
-		m_passCopyDepth.SetPrimitiveFlags(CRenderPrimitive::eFlags_None);
-		m_passCopyDepth.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
-		m_passCopyDepth.SetTechnique(CShaderMan::s_shPostEffects, techCopy, 0);
-		m_passCopyDepth.SetRequirePerViewConstantBuffer(true);
-		m_passCopyDepth.SetDepthTarget(CRendererResources::s_ptexSceneDepthScaled[0]);
-		m_passCopyDepth.SetState(GS_DEPTHWRITE | GS_DEPTHFUNC_NOTEQUAL);
-		m_passCopyDepth.SetTexture(0, CRendererResources::s_ptexLinearDepthScaled[0]);
-
-		m_passCopyDepth.BeginConstantUpdate();
-		m_passCopyDepth.Execute();
-	}
-}
-
 void CWaterStage::ExecuteWaterVolumeCausticsGen(N3DEngineCommon::SCausticInfo& causticInfo)
 {
 	CRenderView* pRenderView = RenderView();
@@ -1450,19 +1504,17 @@ void CWaterStage::ExecuteWaterVolumeCausticsGen(N3DEngineCommon::SCausticInfo& c
 	// this update must be called after updating N3DEngineCommon::SCausticInfo.
 	SetAndBuildPerPassResources(false, ePass_CausticsGen);
 
-	CClearSurfacePass::Execute(CRendererResources::s_ptexWaterCaustics[0], Clr_Transparent);
+	CClearSurfacePass::Execute(m_pVolumeCausticsRT, Clr_Transparent);
 
 	// render water volumes to caustics gen texture.
 	{
-		ExecuteDepthCopy();
-
 		CTexture* pDepthRT = CRendererResources::s_ptexSceneDepthScaled[0];
 
 		auto& pass = m_passWaterCausticsSrcGen;
 
-		// need to set render target becuase CRendererResources::s_ptexWaterCaustics[0] is recreated when cvars are changed.
+		// need to set render target becuase m_pVolumeCausticsRT is recreated when cvars are changed.
 		pass.ExchangeDepthTarget(pDepthRT);
-		pass.ExchangeRenderTarget(0, CRendererResources::s_ptexWaterCaustics[0]);
+		pass.ExchangeRenderTarget(0, m_pVolumeCausticsRT);
 
 		auto& RESTRICT_REFERENCE commandList = GetDeviceObjectFactory().GetCoreCommandList();
 		pass.PrepareRenderPassForUse(commandList);
@@ -1491,16 +1543,16 @@ void CWaterStage::ExecuteWaterVolumeCausticsGen(N3DEngineCommon::SCausticInfo& c
 			pass.SetPrimitiveFlags(CRenderPrimitive::eFlags_None);
 			pass.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
 			pass.SetTechnique(CShaderMan::s_ShaderDeferredCaustics, techName, 0);
-			pass.SetRenderTarget(0, CRendererResources::s_ptexWaterCaustics[1]);
+			pass.SetRenderTarget(0, m_pVolumeCausticsTempRT);
 			pass.SetState(GS_NODEPTHTEST);
-			pass.SetTextureSamplerPair(0, CRendererResources::s_ptexWaterCaustics[0], EDefaultSamplerStates::PointClamp);
+			pass.SetTextureSamplerPair(0, m_pVolumeCausticsRT, EDefaultSamplerStates::PointClamp);
 		}
 
 		pass.Execute();
 	}
 
 	// Super blur for alpha to mask edges of volumes.
-	m_passBlurWaterCausticsGen0.Execute(CRendererResources::s_ptexWaterCaustics[1], CRendererResources::s_ptexWaterCaustics[0], 1.0f, 10.0f, true);
+	m_passBlurWaterCausticsGen0.Execute(m_pVolumeCausticsTempRT, m_pVolumeCausticsRT, 1.0f, 10.0f, true);
 
 	////////////////////////////////////////////////
 	// Procedural caustic generation
@@ -1519,17 +1571,16 @@ void CWaterStage::ExecuteWaterVolumeCausticsGen(N3DEngineCommon::SCausticInfo& c
 
 			if (bVertexUpdated || prim.IsDirty())
 			{
-				auto* pTargetTex = CRendererResources::s_ptexWaterCaustics[0];
 				D3DViewPort viewport;
 
 				viewport.TopLeftX = 0.0f;
 				viewport.TopLeftY = 0.0f;
-				viewport.Width  = static_cast<float>(pTargetTex->GetWidth());
-				viewport.Height = static_cast<float>(pTargetTex->GetHeight());
+				viewport.Width  = static_cast<float>(m_pVolumeCausticsRT->GetWidth());
+				viewport.Height = static_cast<float>(m_pVolumeCausticsRT->GetHeight());
 				viewport.MinDepth = 0.0f;
 				viewport.MaxDepth = 1.0f;
 
-				pass.SetRenderTarget(0, pTargetTex);
+				pass.SetRenderTarget(0, m_pVolumeCausticsRT);
 				pass.SetViewport(viewport);
 				pass.BeginAddingPrimitives();
 
@@ -1551,7 +1602,7 @@ void CWaterStage::ExecuteWaterVolumeCausticsGen(N3DEngineCommon::SCausticInfo& c
 					static CCryNameTSCRC techName("WaterCausticsGen");
 					prim.SetTechnique(CShaderMan::s_ShaderDeferredCaustics, techName, 0);
 
-					prim.SetTexture(0, CRendererResources::s_ptexWaterCaustics[1], EDefaultResourceViews::Default, EShaderStage_Vertex);
+					prim.SetTexture(0, m_pVolumeCausticsTempRT, EDefaultResourceViews::Default, EShaderStage_Vertex);
 					prim.SetSampler(0, EDefaultSamplerStates::TrilinearWrap, EShaderStage_Vertex);
 
 					prim.SetInlineConstantBuffer(eConstantBufferShaderSlot_PerView, GetStdGraphicsPipeline().GetMainViewConstantBuffer(), EShaderStage_Vertex);
@@ -1565,11 +1616,11 @@ void CWaterStage::ExecuteWaterVolumeCausticsGen(N3DEngineCommon::SCausticInfo& c
 		}
 
 		// NOTE: this is needed to avoid a broken consistency of the cached state in SSharedState,
-		//       because d3d11 runtime removes SRV (s_ptexWaterCaustics[0]) from pixel shader slot 0 but it still remains in the cached state.
+		//       because d3d11 runtime removes SRV (m_pVolumeCausticsRT) from pixel shader slot 0 but it still remains in the cached state.
 		GetDeviceObjectFactory().GetCoreCommandList().Reset();
 
 		// Smooth out any inconsistencies in the caustic map (pixels, etc).
-		m_passBlurWaterCausticsGen1.Execute(CRendererResources::s_ptexWaterCaustics[0], CRendererResources::s_ptexWaterCaustics[1], 1.0f, 1.0f);
+		m_passBlurWaterCausticsGen1.Execute(m_pVolumeCausticsRT, m_pVolumeCausticsTempRT, 1.0f, 1.0f);
 	}
 }
 
@@ -1577,14 +1628,8 @@ void CWaterStage::ExecuteReflection()
 {
 	CRenderView* pRenderView = RenderView();
 
-	const auto renderList = EFSLIST_WATER;
-	const uint32 batchMask = pRenderView->GetBatchFlags(renderList);
-
-	if ((batchMask & FB_WATER_REFL)
-		&& CTexture::IsTextureExist(CRendererResources::s_ptexWaterVolumeRefl[0]))
+	if (pRenderView->HasRenderItems(EFSLIST_WATER, FB_WATER_REFL))
 	{
-		ExecuteDepthCopy();
-
 		CTexture* pDepthRT = CRendererResources::s_ptexSceneDepthScaled[0];
 
 		PROFILE_LABEL_SCOPE("WATER_VOLUME_REFLECTION_GEN");
@@ -1627,7 +1672,7 @@ void CWaterStage::ExecuteSceneRenderPass(CSceneRenderPass& pass, uint32 stagePas
 {
 	CRenderView* pRenderView = RenderView();
 
-	if (pRenderView->GetRenderItems(renderList).size())
+	if (pRenderView->HasRenderItems(renderList, includeFilter))
 	{
 		auto& RESTRICT_REFERENCE commandList = GetDeviceObjectFactory().GetCoreCommandList();
 		pass.PrepareRenderPassForUse(commandList);

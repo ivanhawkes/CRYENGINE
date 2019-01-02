@@ -20,7 +20,7 @@
 #include "Particles/ParticleManager.h"
 #include "Prefabs/PrefabEvents.h"
 #include "Prefabs/PrefabManager.h"
-#include "ProjectManagement/UI/SelectProjectDialog.h"
+#include "ProjectManagement/Utils.h"
 #include "Terrain/Heightmap.h"
 #include "Terrain/SurfaceType.h"
 #include "Terrain/TerrainGrid.h"
@@ -30,6 +30,7 @@
 #include "CryEditDoc.h"
 #include "GameExporter.h"
 #include "IEditorImpl.h"
+#include "LogFile.h"
 #include "Mission.h"
 #include "SplashScreen.h"
 #include "ViewManager.h"
@@ -209,9 +210,11 @@ class CGameToEditorInterface : public IGameToEditorInterface
 
 CGameEngine::CGameEngine()
 	: m_bIgnoreUpdates(false)
-	, m_pEditorGame(0)
+	, m_pEditorGame(nullptr)
+	, m_pSystemUserCallback(nullptr)
 	, m_ePendingGameMode(ePGM_NotPending)
 	, m_listeners(0)
+	, m_keepEditorActive(0)
 {
 	m_pISystem = nullptr;
 	m_pNavigation = nullptr;
@@ -354,21 +357,29 @@ bool CGameEngine::Init(bool bPreviewMode, bool bTestMode, bool bShaderCacheGen, 
 
 	if (strstr(sInCmdLine, "-project") == 0)
 	{
-		CSelectProjectDialog dlg(true);
-		if (dlg.exec() != QDialog::Accepted)
+		const string engineFolder = FindCryEngineRootFolder();
+		if (IsProjectSpecifiedInSystemConfig(engineFolder))
 		{
-			return false;
+			//1. it is responsibility of a user to check correctness of system.cfg file
+			//2. It is engine responsibility to run itself with this information (it will parse and use system.cfg as game_launcher)
 		}
-
-		const string projPath = dlg.GetPathToProject();
-		if (projPath.empty())
+		else
 		{
-			CRY_ASSERT_MESSAGE(false, "Expected non-empty path to a project");
-			return false;
-		}
+			string projPath = FindProjectInFolder(engineFolder);
+			if (projPath.empty())
+			{
+				projPath = AskUserToSpecifyProject(SplashScreen::GetSplashScreen(), true);
+			}
 
-		cry_strcat(startupParams.szSystemCmdLine, " -project ");
-		cry_strcat(startupParams.szSystemCmdLine, projPath);
+			if (projPath.empty())
+			{
+				// Exit Sandbox
+				return false;
+			}
+
+			cry_strcat(startupParams.szSystemCmdLine, " -project ");
+			cry_strcat(startupParams.szSystemCmdLine, projPath);
+		}
 	}
 
 	if (!CryInitializeEngine(startupParams, true))
@@ -414,7 +425,7 @@ bool CGameEngine::Init(bool bPreviewMode, bool bTestMode, bool bShaderCacheGen, 
 	CLogFile::AboutSystem();
 	REGISTER_CVAR(ed_killmemory_size, -1, VF_DUMPTODISK, "Sets the testing allocation size. -1 for random");
 	REGISTER_CVAR(ed_indexfiles, 1, VF_DUMPTODISK, "Index game resource files, 0 - inactive, 1 - active");
-	REGISTER_CVAR2_CB("ed_keepEditorActive", &keepEditorActive, 0, VF_NULL, "Keep the editor active, even if no focus is set", KeepEditorActiveChanged);
+	REGISTER_CVAR2_CB("ed_keepEditorActive", &m_keepEditorActive, 0, VF_NULL, "Keep the editor active, even if no focus is set", KeepEditorActiveChanged);
 	REGISTER_INT("ed_useDevManager", 1, VF_INVISIBLE, "Use DevManager with sandbox editor");
 	REGISTER_INT("ed_exportLevelXmlBinary", 0, VF_NULL, "Select xml files format for the level.pak export. 0 - textual, 1 - binary");
 	REGISTER_COMMAND("ed_killmemory", KillMemory, VF_NULL, "");
@@ -1463,7 +1474,7 @@ void CGameEngine::Update()
 			pRenderViewport->Update();
 		}
 
-		GetIEditorImpl()->GetAI()->Update(0);
+		UpdateAIManagerFromEditor(0);
 	}
 	else
 	{
@@ -1515,7 +1526,7 @@ void CGameEngine::Update()
 		pPluginManager->UpdateAfterRender();
 		pPluginManager->UpdateAfterRenderSubmit();
 
-		GetIEditorImpl()->GetAI()->Update(updateFlags.UnderlyingValue());
+		UpdateAIManagerFromEditor(updateFlags.UnderlyingValue());
 
 		for (CListenerSet<IGameEngineListener*>::Notifier notifier(m_listeners); notifier.IsValid(); notifier.Next())
 		{
@@ -1745,6 +1756,27 @@ void CGameEngine::ToggleGameInputSuspended()
 bool CGameEngine::IsGameInputSuspended()
 {
 	return m_bGameModeSuspended;
+}
+
+// Updates the AI Manager using the global timer
+// Can be executed by the Sandbox Editor to force an Update on some AI subsystems
+// Even if the AI system is disabled (ie: NavMeshUpdates should still work in Sandbox)
+void CGameEngine::UpdateAIManagerFromEditor(const uint32 updateFlags)
+{
+	CEditorImpl* pEditorImpl = GetIEditorImpl();
+	if (!pEditorImpl)
+	{
+		CRY_ASSERT(pEditorImpl);
+		return;
+	}
+	CAIManager* pAiManager = pEditorImpl->GetAI();
+	if (!pAiManager)
+	{
+		CRY_ASSERT(pAiManager);
+		return;
+	}
+
+	pAiManager->Update(gEnv->pTimer->GetFrameStartTime(), gEnv->pTimer->GetFrameTime(), updateFlags);
 }
 
 namespace Private_EditorCommands

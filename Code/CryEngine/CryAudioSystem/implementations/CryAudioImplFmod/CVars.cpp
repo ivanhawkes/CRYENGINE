@@ -19,7 +19,6 @@ void CCVars::RegisterVariables()
 	#if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
 	#endif // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
 #elif CRY_PLATFORM_DURANGO
-	m_secondaryMemoryPoolSize = 32 << 10; // 32 MiB
 	m_maxChannels = 512;
 	m_velocityTrackingThreshold = 0.1f;
 	#if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
@@ -68,11 +67,6 @@ void CCVars::RegisterVariables()
 	               "Usage: s_FmodMaxChannels [0/...]\n"
 	               "Default PC: 512, XboxOne: 512, PS4: 512, Mac: 512, Linux: 512, iOS: 512, Android: 512\n");
 
-	REGISTER_CVAR2("s_FmodEnableLiveUpdate", &m_enableLiveUpdate, m_enableLiveUpdate, VF_REQUIRE_APP_RESTART,
-	               "Enables Fmod Studio to run with LiveUpdate enabled. Needs implementation restart.\n"
-	               "Usage: s_FmodEnableLiveUpdate [0/1]\n"
-	               "Default PC: 0, XboxOne: 0, PS4: 0, Mac: 0, Linux: 0, iOS: 0, Android: 0\n");
-
 	REGISTER_CVAR2("s_FmodEnableSynchronousUpdate", &m_enableSynchronousUpdate, m_enableSynchronousUpdate, VF_REQUIRE_APP_RESTART,
 	               "Enable synchronous processing and perform all processing on the calling thread instead.\n"
 	               "Usage: s_FmodEnableSynchronousUpdate [0/1]\n"
@@ -111,14 +105,11 @@ void CCVars::RegisterVariables()
 	               "Usage: s_FmodRolloffScale [0/...]\n"
 	               "Default PC: 1, XboxOne: 1, PS4: 1, Mac: 1, Linux: 1, iOS: 1, Android: 1\n");
 
-#if CRY_PLATFORM_DURANGO
-	REGISTER_CVAR2("s_FmodSecondaryPoolSize", &m_secondaryMemoryPoolSize, m_secondaryMemoryPoolSize, VF_REQUIRE_APP_RESTART,
-	               "Specifies the size (in KiB) of the memory pool to be used by the Fmod audio system implementation.\n"
-	               "Usage: s_FmodSecondaryPoolSize [0/...]\n"
-	               "Default PC: 0, XboxOne: 32768 (32 MiB), PS4: 0, Mac: 0, Linux: 0, iOS: 0, Android: 0\n");
-#endif  // CRY_PLATFORM_DURANGO
-
 #if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
+	REGISTER_CVAR2("s_FmodEnableLiveUpdate", &m_enableLiveUpdate, m_enableLiveUpdate, VF_REQUIRE_APP_RESTART,
+	               "Enables Fmod Studio to run with LiveUpdate enabled. Needs implementation restart.\n"
+	               "Usage: s_FmodEnableLiveUpdate [0/1]\n"
+	               "Default PC: 0, XboxOne: 0, PS4: 0, Mac: 0, Linux: 0, iOS: 0, Android: 0\n");
 #endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
 }
 
@@ -132,18 +123,14 @@ void CCVars::UnregisterVariables()
 		pConsole->UnregisterVariable("s_FmodVelocityTrackingThreshold");
 		pConsole->UnregisterVariable("s_FmodPositionUpdateThresholdMultiplier");
 		pConsole->UnregisterVariable("s_FmodMaxChannels");
-		pConsole->UnregisterVariable("s_FmodEnableLiveUpdate");
 		pConsole->UnregisterVariable("s_FmodEnableSynchronousUpdate");
 		pConsole->UnregisterVariable("s_FmodLowpassMinCutoffFrequency");
 		pConsole->UnregisterVariable("s_FmodDistanceFactor");
 		pConsole->UnregisterVariable("s_FmodDopplerScale");
 		pConsole->UnregisterVariable("s_FmodRolloffScale");
 
-#if CRY_PLATFORM_DURANGO
-		pConsole->UnregisterVariable("s_FmodSecondaryPoolSize");
-#endif    // CRY_PLATFORM_DURANGO
-
 #if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
+		pConsole->UnregisterVariable("s_FmodEnableLiveUpdate");
 #endif    // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
 	}
 }

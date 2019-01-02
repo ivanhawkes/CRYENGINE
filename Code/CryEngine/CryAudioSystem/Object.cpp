@@ -27,6 +27,7 @@
 #include "Common/Logger.h"
 #include "Common/IImpl.h"
 #include "Common/IObject.h"
+#include "Common/IStandaloneFileConnection.h"
 #include <CryString/HashedString.h>
 #include <CryEntitySystem/IEntitySystem.h>
 #include <CryMath/Cry_Camera.h>
@@ -212,19 +213,6 @@ ERequestStatus CObject::HandleStopTrigger(CTrigger const* const pTrigger)
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CObject::HandleSetEnvironment(CEnvironment const* const pEnvironment, float const value)
-{
-	for (auto const pEnvImpl : pEnvironment->m_connections)
-	{
-		m_pImplData->SetEnvironment(pEnvImpl, value);
-	}
-
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-	StoreEnvironmentValue(pEnvironment->GetId(), value);
-#endif   // INCLUDE_AUDIO_PRODUCTION_CODE
-}
-
-///////////////////////////////////////////////////////////////////////////
 void CObject::StopAllTriggers()
 {
 	m_pImplData->StopAllTriggers();
@@ -369,7 +357,7 @@ void CObject::HandleStopFile(char const* const szFile)
 			}
 #endif  // INCLUDE_AUDIO_PRODUCTION_CODE
 
-			ERequestStatus const status = m_pImplData->StopFile(pFile->m_pImplData);
+			ERequestStatus const status = pFile->m_pImplData->Stop(m_pImplData);
 
 			if (status != ERequestStatus::Pending)
 			{
@@ -713,42 +701,43 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom)
 				{
 					for (auto const& environmentPair : m_environments)
 					{
-						CEnvironment const* const pEnvironment = stl::find_in_map(g_environments, environmentPair.first, nullptr);
-
-						if (pEnvironment != nullptr)
+						if (environmentPair.second > 0.0f)
 						{
-							char const* const szEnvironmentName = pEnvironment->GetName();
+							CEnvironment const* const pEnvironment = stl::find_in_map(g_environments, environmentPair.first, nullptr);
 
-							if (!isTextFilterDisabled)
+							if (pEnvironment != nullptr)
 							{
-								CryFixedStringT<MaxControlNameLength> lowerCaseEnvironmentName(szEnvironmentName);
-								lowerCaseEnvironmentName.MakeLower();
+								char const* const szEnvironmentName = pEnvironment->GetName();
 
-								if (lowerCaseEnvironmentName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos)
+								if (!isTextFilterDisabled)
 								{
-									doesEnvironmentMatchFilter = true;
-								}
-							}
+									CryFixedStringT<MaxControlNameLength> lowerCaseEnvironmentName(szEnvironmentName);
+									lowerCaseEnvironmentName.MakeLower();
 
-							environmentInfo.emplace(szEnvironmentName, environmentPair.second);
+									if (lowerCaseEnvironmentName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos)
+									{
+										doesEnvironmentMatchFilter = true;
+									}
+								}
+
+								environmentInfo.emplace(szEnvironmentName, environmentPair.second);
+							}
 						}
 					}
 				}
 
 				// Check if object name matches text filter.
-				auto const pObject = const_cast<CObject*>(this);
-				char const* const szObjectName = pObject->m_name.c_str();
 				bool doesObjectNameMatchFilter = false;
 
 				if (!isTextFilterDisabled && (drawLabel || filterAllObjectInfo))
 				{
-					CryFixedStringT<MaxControlNameLength> lowerCaseObjectName(szObjectName);
+					CryFixedStringT<MaxControlNameLength> lowerCaseObjectName(m_name.c_str());
 					lowerCaseObjectName.MakeLower();
 					doesObjectNameMatchFilter = (lowerCaseObjectName.find(lowerCaseSearchString) != CryFixedStringT<MaxControlNameLength>::npos);
 				}
 
-				bool const hasActiveData = pObject->IsActive();
-				bool const isVirtual = (pObject->GetFlags() & EObjectFlags::Virtual) != 0;
+				bool const hasActiveData = IsActive();
+				bool const isVirtual = (m_flags& EObjectFlags::Virtual) != 0;
 				bool const canDraw = (g_cvars.m_hideInactiveObjects == 0) || ((g_cvars.m_hideInactiveObjects != 0) && hasActiveData && !isVirtual);
 
 				if (canDraw)
@@ -769,7 +758,7 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom)
 							Debug::g_objectFontSize,
 							isVirtual ? Debug::g_globalColorVirtual.data() : (hasActiveData ? Debug::g_objectColorActive.data() : Debug::g_globalColorInactive.data()),
 							false,
-							szObjectName);
+							m_name.c_str());
 
 						screenPos.y += Debug::g_objectLineHeight;
 					}
@@ -869,13 +858,11 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom)
 
 					if (drawDistance)
 					{
-
 						CryFixedStringT<MaxMiscStringLength> debugText;
-						float const maxRadius = pObject->GetMaxRadius();
 
-						if (maxRadius > 0.0f)
+						if (m_maxRadius > 0.0f)
 						{
-							debugText.Format("Dist: %4.1fm / Max: %.1fm", distance, maxRadius);
+							debugText.Format("Dist: %4.1fm / Max: %.1fm", distance, m_maxRadius);
 						}
 						else
 						{
@@ -936,7 +923,7 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom)
 
 					if (drawOcclusionRayOffset && !isVirtual)
 					{
-						float const occlusionRayOffset = pObject->GetOcclusionRayOffset();
+						float const occlusionRayOffset = m_propagationProcessor.GetOcclusionRayOffset();
 
 						if (occlusionRayOffset > 0.0f)
 						{
@@ -1014,7 +1001,7 @@ void CObject::ForceImplementationRefresh(bool const setTransformation)
 
 		if (pEnvironment != nullptr)
 		{
-			HandleSetEnvironment(pEnvironment, environmentPair.second);
+			pEnvironment->Set(*this, environmentPair.second);
 		}
 	}
 
@@ -1188,8 +1175,10 @@ void CObject::StopFile(char const* const szFile, SRequestUserData const& userDat
 //////////////////////////////////////////////////////////////////////////
 void CObject::SetName(char const* const szName, SRequestUserData const& userData /* = SAudioRequestUserData::GetEmptyObject() */)
 {
+#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 	SObjectRequestData<EObjectRequestType::SetName> requestData(this, szName);
 	PushRequest(requestData, userData);
+#endif // INCLUDE_AUDIO_PRODUCTION_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////

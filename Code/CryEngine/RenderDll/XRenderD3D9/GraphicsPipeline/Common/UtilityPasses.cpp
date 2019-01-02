@@ -97,21 +97,6 @@ void CStretchRectPass::Execute(CTexture* pSrcRT, CTexture* pDestRT)
 // CStretchRegionPass
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-CStretchRegionPass *CStretchRegionPass::s_pPass = nullptr;
-
-CStretchRegionPass &CStretchRegionPass::GetPass()
-{
-	if (!s_pPass)
-		s_pPass = new CStretchRegionPass;
-	return *s_pPass;
-}
-void CStretchRegionPass::Shutdown()
-{
-	if (s_pPass)
-		delete s_pPass;
-	s_pPass = NULL;
-}
-
 void CStretchRegionPass::Execute(CTexture* pSrcRT, CTexture* pDestRT, const RECT *pSrcRect, const RECT *pDstRect, bool bBigDownsample, const ColorF& color, const int renderStateFlags)
 {
 	CD3D9Renderer* const __restrict rd = gcpRendD3D;
@@ -462,17 +447,86 @@ void CStableDownsamplePass::Execute(CTexture* pSrcRT, CTexture* pDestRT, bool bK
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// CDepthLinearizationPass
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void CDepthLinearizationPass::Execute(CTexture* pSrcRT, CTexture* pDestRT)
+{
+	PROFILE_LABEL_SCOPE("LINEARIZE_DEPTH");
+
+	if (m_pass.IsDirty(pSrcRT->GetTextureID(), pDestRT->GetTextureID()))
+	{
+		static CCryNameTSCRC techLinearizeDepth("LinearizeDepth");
+
+		m_pass.SetPrimitiveFlags(CRenderPrimitive::eFlags_ReflectShaderConstants_PS);
+		m_pass.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
+		m_pass.SetTechnique(CShaderMan::s_shPostEffects, techLinearizeDepth, 0);
+		m_pass.SetRenderTarget(0, pDestRT);
+		m_pass.SetState(GS_NODEPTHTEST);
+		m_pass.SetRequirePerViewConstantBuffer(true);
+		m_pass.SetFlags(CPrimitiveRenderPass::ePassFlags_RequireVrProjectionConstants);
+
+		m_pass.SetTexture(0, pSrcRT);
+	}
+
+	static CCryNameR paramName("NearProjection");
+
+	m_pass.BeginConstantUpdate();
+
+	float zn = DRAW_NEAREST_MIN;
+	float zf = CRenderer::CV_r_DrawNearFarPlane;
+	float nearZRange = CRenderer::CV_r_DrawNearZRange;
+	float camScale = (zf / gEnv->p3DEngine->GetMaxViewDistance());
+
+	const bool bReverseDepth = true;
+
+	Vec4 nearProjParams;
+	nearProjParams.x = bReverseDepth ? 1.0f - zf / (zf - zn) * nearZRange : zf / (zf - zn) * nearZRange;
+	nearProjParams.y = bReverseDepth ? zn / (zf - zn) * nearZRange * camScale : zn / (zn - zf) * nearZRange * camScale;
+	nearProjParams.z = bReverseDepth ? 1.0f - (nearZRange - 0.001f) : nearZRange - 0.001f;
+	nearProjParams.w = 1.0f - nearZRange;
+	m_pass.SetConstant(paramName, nearProjParams, eHWSC_Pixel);
+
+	m_pass.Execute();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// CDepthDelinearizationPass
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void CDepthDelinearizationPass::Execute(CTexture* pSrcRT, CTexture* pDestDS)
+{
+	PROFILE_LABEL_SCOPE("DELINEARIZE_DEPTH");
+
+	if (m_pass.IsDirty(pSrcRT->GetTextureID(), pDestDS->GetTextureID()))
+	{
+		static CCryNameTSCRC techCopy("CopyToDeviceDepth");
+
+		m_pass.SetPrimitiveFlags(CRenderPrimitive::eFlags_None);
+		m_pass.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
+		m_pass.SetTechnique(CShaderMan::s_shPostEffects, techCopy, 0);
+		m_pass.SetRequirePerViewConstantBuffer(true);
+		m_pass.SetDepthTarget(pDestDS);
+		m_pass.SetState(GS_NODEPTHTEST | GS_DEPTHWRITE);
+		m_pass.SetTexture(0, pSrcRT);
+	}
+
+	m_pass.BeginConstantUpdate();
+	m_pass.Execute();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // CDepthDownsamplePass
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void CDepthDownsamplePass::Execute(CTexture* pSrcRT, CTexture* pDestRT, bool bLinearizeSrcDepth, bool bFromSingleChannel)
+void CDepthDownsamplePass::Execute(CTexture* pSrcRT, CTexture* pDestRT, CTexture* pDestDS, bool bLinearizeSrcDepth, bool bFromSingleChannel)
 {
 	PROFILE_LABEL_SCOPE("DOWNSAMPLE_DEPTH");
 
 	if (!pSrcRT || !pDestRT)
 		return;
 
-	if (!m_pass.IsDirty(pSrcRT->GetTextureID(), pDestRT->GetTextureID(), bLinearizeSrcDepth, bFromSingleChannel))
+	if (!m_pass.IsDirty(pSrcRT->GetTextureID(), pDestRT->GetTextureID(), pDestDS ? pDestDS->GetTextureID() : 0, bLinearizeSrcDepth, bFromSingleChannel))
 	{
 		m_pass.Execute();
 		return;
@@ -483,12 +537,14 @@ void CDepthDownsamplePass::Execute(CTexture* pSrcRT, CTexture* pDestRT, bool bLi
 	uint64 rtMask = 0;
 	rtMask |= bLinearizeSrcDepth ? g_HWSR_MaskBit[HWSR_SAMPLE0] : 0;
 	rtMask |= bFromSingleChannel ? g_HWSR_MaskBit[HWSR_SAMPLE1] : 0;
+	rtMask |= pDestDS            ? g_HWSR_MaskBit[HWSR_SAMPLE2] : 0;
 
 	m_pass.SetPrimitiveFlags(CRenderPrimitive::eFlags_ReflectShaderConstants_PS);
 	m_pass.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
 	m_pass.SetRenderTarget(0, pDestRT);
+	m_pass.SetDepthTarget(pDestDS);
 	m_pass.SetTechnique(CShaderMan::s_shPostEffects, techName, rtMask);
-	m_pass.SetState(GS_NODEPTHTEST);
+	m_pass.SetState(GS_NODEPTHTEST | (pDestDS ? GS_DEPTHWRITE : 0));
 	m_pass.SetRequirePerViewConstantBuffer(true);
 	m_pass.SetTextureSamplerPair(0, pSrcRT, EDefaultSamplerStates::PointClamp);
 

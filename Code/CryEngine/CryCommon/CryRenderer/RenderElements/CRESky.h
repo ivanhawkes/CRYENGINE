@@ -1,9 +1,8 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#ifndef __CRESKY_H__
-#define __CRESKY_H__
-
+#pragma once
 #include <CryRenderer/VertexFormats.h>
+#include "RendElement.h"
 
 struct SSkyLightRenderParams;
 
@@ -36,7 +35,7 @@ public:
 	virtual InputLayoutHandle GetVertexFormat() const override;
 	virtual bool          GetGeometryInfo(SGeometryInfo& streams, bool bSupportTessellation = false) override;
 
-	virtual bool          Compile(CRenderObject* pObj, uint64 objFlags, uint16 elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly) override;
+	virtual bool          Compile(CRenderObject* pObj, uint64 objFlags, ERenderElementFlags elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly) override;
 	virtual void          DrawToCommandList(CRenderObject* pObj, const struct SGraphicsPipelinePassContext& ctx, CDeviceCommandList* commandList) override;
 
 	virtual void          GetMemoryUsage(ICrySizer* pSizer) const override
@@ -68,7 +67,7 @@ public:
 	virtual InputLayoutHandle GetVertexFormat() const override;
 	virtual bool          GetGeometryInfo(SGeometryInfo& streams, bool bSupportTessellation = false) override;
 
-	virtual bool          Compile(CRenderObject* pObj, uint64 objFlags, uint16 elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly) override;
+	virtual bool          Compile(CRenderObject* pObj, uint64 objFlags, ERenderElementFlags elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly) override;
 	virtual void          DrawToCommandList(CRenderObject* pObj, const struct SGraphicsPipelinePassContext& ctx, CDeviceCommandList* commandList) override;
 
 	virtual void          GetMemoryUsage(ICrySizer* pSizer) const override
@@ -94,5 +93,3 @@ private:
 	int           m_frameReset;
 	class CStars* m_pStars;
 };
-
-#endif  // __CRESKY_H__

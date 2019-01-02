@@ -10,6 +10,7 @@
 #include <CryPhysics/IDeferredCollisionEvent.h>
 #include <CrySystem/IProcess.h>
 #include <Cry3DEngine/IStatObj.h>
+#include <Cry3DEngine/ISurfaceType.h>
 #include <Cry3DEngine/IGeomCache.h>
 #include <Cry3DEngine/I3DEngine.h>
 #include <CryParticleSystem/IParticles.h>
@@ -68,6 +69,7 @@
 %include "../../../../CryEngine/CryCommon/CryParticleSystem/IParticles.h"
 %csconstvalue("1 << EStreamIDs.VSF_GENERAL") VSM_GENERAL;
 %csconstvalue("((1 << EStreamIDs.VSF_TANGENTS)|(1 << EStreamIDs.VSF_QTANGENTS))") VSM_TANGENTS;
+%csconstvalue("1 << EStreamIDs.VSF_QTANGENTS") VSM_QTANGENTS;
 %csconstvalue("1 << EStreamIDs.VSF_HWSKIN_INFO") VSM_HWSKIN;
 %csconstvalue("1 << EStreamIDs.VSF_VERTEX_VELOCITY") VSM_VERTEX_VELOCITY;
 %csconstvalue("1 << EStreamIDs.VSF_NORMALS") VSM_NORMALS;

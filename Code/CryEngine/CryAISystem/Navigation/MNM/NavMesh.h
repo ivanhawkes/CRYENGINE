@@ -22,6 +22,7 @@ class OffMeshNavigationManager;
 namespace MNM
 {
 struct OffMeshNavigation;
+struct IOffMeshLink;
 class CTileConnectivityData;
 
 struct SWayQueryWorkingSet;
@@ -95,11 +96,12 @@ public:
 
 		virtual ~SWayQueryRequest() {}
 
-		virtual bool                    CanUseOffMeshLink(const OffMeshLinkID linkID, float* costMultiplier) const;
+		virtual bool                    CanUseOffMeshLink(const IOffMeshLink* pOffmeshLink, float* costMultiplier) const;
 		bool                            IsPointValidForAgent(const Vec3& pos, uint32 flags) const { return true; }
 
 		ILINE const TriangleID          From() const { return m_from; }
 		ILINE const TriangleID          To() const { return m_to; }
+		ILINE const IOffMeshLink*        GetOffMeshLinkAndAnnotation(const OffMeshLinkID linkId, MNM::AreaAnnotation& annotation) const;
 		ILINE const OffMeshNavigation&  GetOffMeshNavigation() const { return m_offMeshNavigation; }
 		ILINE const DangerousAreasList& GetDangersInfos() { return m_dangerousAreas; }
 		ILINE const vector3_t&          GetFromLocation() const { return m_fromLocation; };
@@ -341,7 +343,7 @@ public:
 	TileID GetNeighbourTileID(size_t x, size_t y, size_t z, size_t side) const;
 	TileID GetNeighbourTileID(const TileID tileId, size_t side) const;
 
-	void SetTrianglesAnnotation(const MNM::TriangleID* pTrianglesArray, const size_t trianglesCount, const MNM::AreaAnnotation areaAnnotation, std::vector<TileID>& affectedTiles);
+	void SetTrianglesAnnotation(const MNM::TriangleID* pTrianglesArray, const size_t trianglesCount, const MNM::AreaAnnotation areaAnnotation, std::vector<MNM::TriangleID>& changedTriangles);
 	bool SnapPosition(const vector3_t& localPosition, const SOrderedSnappingMetrics& snappingMetrics, const INavMeshQueryFilter* pFilter, vector3_t* pSnappedLocalPosition, MNM::TriangleID* pTriangleId) const;
 	bool SnapPosition(const vector3_t& localPosition, const MNM::SSnappingMetric& snappingMetric, const INavMeshQueryFilter* pFilter, vector3_t* pSnappedLocalPosition, MNM::TriangleID* pTriangleId) const;
 

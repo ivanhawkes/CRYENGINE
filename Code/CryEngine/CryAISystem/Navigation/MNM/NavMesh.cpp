@@ -30,20 +30,26 @@
 namespace MNM
 {
 
-bool CNavMesh::SWayQueryRequest::CanUseOffMeshLink(const OffMeshLinkID linkID, float* costMultiplier) const
+//////////////////////////////////////////////////////////////////////////
+
+bool CNavMesh::SWayQueryRequest::CanUseOffMeshLink(const IOffMeshLink* pOffMeshLink, float* costMultiplier) const
 {
 	if (m_requesterEntityId)
 	{
-		if (IEntity* pEntity = gEnv->pEntitySystem->GetEntity(m_requesterEntityId))
+		if (pOffMeshLink)
 		{
-			if (const OffMeshLink* pOffMeshLink = m_offMeshNavigationManager.GetOffMeshLink(linkID))
-			{
-				return pOffMeshLink->CanUse(pEntity, costMultiplier);
-			}
+			return pOffMeshLink->CanUse(m_requesterEntityId, costMultiplier);
 		}
 	}
 	return true;    // Always allow by default
 }
+
+const IOffMeshLink* CNavMesh::SWayQueryRequest::GetOffMeshLinkAndAnnotation(const OffMeshLinkID linkId, MNM::AreaAnnotation& annotation) const
+{
+	return m_offMeshNavigationManager.GetLinkAndAnnotation(linkId, annotation);
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 CNavMesh::TileContainerArray::TileContainerArray()
 	: m_tiles(NULL)
@@ -412,7 +418,7 @@ const AreaAnnotation* CNavMesh::GetTriangleAnnotation(TriangleID triangleID) con
 	return nullptr;
 }
 
-void CNavMesh::SetTrianglesAnnotation(const TriangleID* pTrianglesArray, const size_t trianglesCount, const MNM::AreaAnnotation areaAnnotation, std::vector<TileID>& affectedTiles)
+void CNavMesh::SetTrianglesAnnotation(const TriangleID* pTrianglesArray, const size_t trianglesCount, const MNM::AreaAnnotation areaAnnotation, std::vector<TriangleID>& changedTriangles)
 {
 	for (size_t i = 0; i < trianglesCount; ++i)
 	{
@@ -426,7 +432,7 @@ void CNavMesh::SetTrianglesAnnotation(const TriangleID* pTrianglesArray, const s
 
 			triangle.areaAnnotation = areaAnnotation;
 
-			stl::push_back_unique(affectedTiles, MNM::ComputeTileID(triangleId));
+			changedTriangles.push_back(triangleId);
 		}
 	}
 }
@@ -783,14 +789,21 @@ CNavMesh::EWayQueryResult CNavMesh::FindWayInternal(SWayQueryRequest& inputReque
 						}
 						else if (link.side == Tile::SLink::OffMesh)
 						{
-							//TODO: apply filter also to offmesh links
 							OffMeshNavigation::QueryLinksResult links = inputRequest.GetOffMeshNavigation().GetLinksForTriangle(bestNodeID.triangleID, link.triangle);
 							while (nextTri = links.GetNextTriangle())
 							{
-								if (inputRequest.CanUseOffMeshLink(nextTri.offMeshLinkID, &nextTri.costMultiplier))
+								AreaAnnotation linkAnnotation;
+								if (const IOffMeshLink* pLink = inputRequest.GetOffMeshLinkAndAnnotation(nextTri.offMeshLinkID, linkAnnotation))
 								{
-									workingSet.nextLinkedTriangles.push_back(nextTri);
-									nextTri.incidentEdge = (unsigned int)MNM::Constants::InvalidEdgeIndex;
+									if (filter.PassFilter(linkAnnotation))
+									{
+										nextTri.costMultiplier = filter.GetCostMultiplier(linkAnnotation);
+										if (inputRequest.CanUseOffMeshLink(pLink, &nextTri.costMultiplier))
+										{
+											workingSet.nextLinkedTriangles.push_back(nextTri);
+											nextTri.incidentEdge = (unsigned int)MNM::Constants::InvalidEdgeIndex;
+										}
+									}
 								}
 							}
 							continue;
@@ -2753,22 +2766,15 @@ bool CNavMesh::FindNextIntersectingTriangleEdge(const vector3_t& rayStartPos3D, 
 	return isEndingInside;
 }
 
-uint16 GetNearestTriangleVertexIndex(const STile& tile, const vector3_t& tileOffset, const Tile::STriangle& triangle, const vector3_t& position)
+uint16 GetNearestTriangleVertexIndex(const STile& tile, const vector3_t& tileOffset, const Tile::STriangle& triangle, const vector3_t& position, const uint16 edgeIndex)
 {
-	uint16 vertexIndex = 0;
-	real_t nearestSq = real_t::max();
 	const vector3_t targetPositionOffset = position - tileOffset;
-	for (uint16 vertexIdx = 0; vertexIdx < 3; ++vertexIdx)
-	{
-		const vector3_t& vertex = tile.GetVertices()[triangle.vertex[vertexIdx]];
-		const real_t distSq = vector2_t(vertex - targetPositionOffset).lenSq();
-		if (distSq < nearestSq)
-		{
-			nearestSq = distSq;
-			vertexIndex = vertexIdx;
-		}
-	}
-	return vertexIndex;
+	const uint16 vertexIdx1 = edgeIndex;
+	const uint16 vertexIdx2 = inc_mod3[edgeIndex];
+	const vector3_t& vertex1 = tile.GetVertices()[triangle.vertex[vertexIdx1]];
+	const vector3_t& vertex2 = tile.GetVertices()[triangle.vertex[vertexIdx2]];
+
+	return vector2_t(vertex1 - targetPositionOffset).lenSq() <= vector2_t(vertex2 - targetPositionOffset).lenSq() ? vertexIdx1 : vertexIdx2;
 }
 
 bool CNavMesh::IsPointInsideNeighbouringTriangleWhichSharesEdge(const TriangleID sourceTriangleID, const uint16 sourceEdgeIndex, const vector3_t& targetPosition, const TriangleID targetTriangleID) const
@@ -2780,11 +2786,13 @@ bool CNavMesh::IsPointInsideNeighbouringTriangleWhichSharesEdge(const TriangleID
 	const uint16 sourceTriangleIndex = ComputeTriangleIndex(sourceTriangleID);
 	const Tile::STriangle& sourceTriangle = sourceTile.triangles[sourceTriangleIndex];
 
-	// Find the nearest vertex that should be common for all triangles
-	uint16 currentVertexIndex = GetNearestTriangleVertexIndex(sourceTile, GetTileOrigin(sourceContainer.x, sourceContainer.y, sourceContainer.z), sourceTriangle, targetPosition);
-	uint16 vertexIndexInTile = sourceTriangle.vertex[currentVertexIndex];
 	TriangleID currentTriangleID = sourceTriangleID;
 	uint16 currentEdgeIndex = sourceEdgeIndex;
+	
+	// Find the nearest vertex that should be common for all triangles
+	uint16 currentVertexIndex = GetNearestTriangleVertexIndex(sourceTile, GetTileOrigin(sourceContainer.x, sourceContainer.y, sourceContainer.z), sourceTriangle, targetPosition, currentEdgeIndex);
+	uint16 vertexIndexInTile = sourceTriangle.vertex[currentVertexIndex];
+	const vector3_t vertexPosition = sourceTile.vertices[vertexIndexInTile];
 
 	const int32 clockwiseEdgeIndices[] = { 0, 1, 2 };
 	const int32* counterClockwiseEdgeIndices = dec_mod3;
@@ -2856,11 +2864,28 @@ bool CNavMesh::IsPointInsideNeighbouringTriangleWhichSharesEdge(const TriangleID
 				const TileContainer& neighbourContainer = m_tiles[neighbourTileID - 1];
 				const STile& neighbourTile = neighbourContainer.tile;
 				const Tile::STriangle& neighbourTriangle = neighbourTile.triangles[link.triangle];
+
+				bool edgeIsFound = false;
+				for (size_t reciprocalLinkIndex = 0; reciprocalLinkIndex < neighbourTriangle.linkCount; ++reciprocalLinkIndex)
 				{
-					currentVertexIndex = GetNearestTriangleVertexIndex(neighbourTile, GetTileOrigin(neighbourContainer.x, neighbourContainer.y, neighbourContainer.z), neighbourTriangle, targetPosition);
-					vertexIndexInTile = neighbourTriangle.vertex[currentVertexIndex];
-					currentEdgeIndex = vertexToEdgeIdx[currentVertexIndex];
+					const Tile::SLink& reciprocalLink = neighbourTile.links[neighbourTriangle.firstLink + reciprocalLinkIndex];
+					if (reciprocalLink.side == Tile::SLink::Internal || reciprocalLink.side == Tile::SLink::OffMesh)
+						continue;
+
+					const TileID backTileID = GetNeighbourTileID(neighbourContainer.x, neighbourContainer.y, neighbourContainer.z, reciprocalLink.side);
+					const TriangleID backTriangleID = ComputeTriangleID(backTileID, reciprocalLink.triangle);
+
+					if (backTriangleID == currentTriangleID)
+					{
+						currentVertexIndex = GetNearestTriangleVertexIndex(neighbourTile, GetTileOrigin(neighbourContainer.x, neighbourContainer.y, neighbourContainer.z), neighbourTriangle, vertexPosition, reciprocalLink.edge);
+						vertexIndexInTile = neighbourTriangle.vertex[currentVertexIndex];
+						currentEdgeIndex = vertexToEdgeIdx[currentVertexIndex];
+
+						edgeIsFound = true;
+						break;
+					}
 				}
+				CRY_ASSERT(edgeIsFound);
 			}
 			currentTriangleID = neighbourTriangleID;
 			break;
@@ -2875,7 +2900,7 @@ bool CNavMesh::IsPointInsideNeighbouringTriangleWhichSharesEdge(const TriangleID
 			vertexToEdgeIdx = clockwiseEdgeIndices == vertexToEdgeIdx ? counterClockwiseEdgeIndices : clockwiseEdgeIndices;
 			currentEdgeIndex = vertexToEdgeIdx[sourceEdgeIndex];
 			currentTriangleID = sourceTriangleID;
-			currentVertexIndex = GetNearestTriangleVertexIndex(sourceTile, GetTileOrigin(sourceContainer.x, sourceContainer.y, sourceContainer.z), sourceTriangle, targetPosition);
+			currentVertexIndex = GetNearestTriangleVertexIndex(sourceTile, GetTileOrigin(sourceContainer.x, sourceContainer.y, sourceContainer.z), sourceTriangle, targetPosition, currentEdgeIndex);
 			vertexIndexInTile = sourceTriangle.vertex[currentVertexIndex];
 
 			alreadySwitchedSide = true;

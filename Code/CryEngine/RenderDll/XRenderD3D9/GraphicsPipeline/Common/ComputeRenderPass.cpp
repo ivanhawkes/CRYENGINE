@@ -80,7 +80,7 @@ CComputeRenderPass::EDirtyFlags CComputeRenderPass::Compile()
 		if (dirtyMask & (eDirty_Technique | eDirty_ResourceLayout))
 		{
 			// Pipeline state
-			CDeviceComputePSODesc psoDesc(m_pResourceLayout, m_pShader, m_techniqueName, m_rtMask, 0, 0);
+			CDeviceComputePSODesc psoDesc(m_pResourceLayout, m_pShader, m_techniqueName, m_rtMask, 0);
 			m_pPipelineState = GetDeviceObjectFactory().CreateComputePSO(psoDesc);
 
 			if (!m_pPipelineState || !m_pPipelineState->IsValid())
@@ -106,8 +106,13 @@ void CComputeRenderPass::BeginConstantUpdate()
 	{
 		Compile();
 
+		// Shader reflection might not be initialized if a compile failed
+		if (m_bCompiled)
+		{
+			m_constantManager.BeginNamedConstantUpdate();
+		}
+
 		m_bPendingConstantUpdate = true;
-		m_constantManager.BeginNamedConstantUpdate();
 	}
 }
 
@@ -117,13 +122,15 @@ void CComputeRenderPass::PrepareResourcesForUse(CDeviceCommandListRef RESTRICT_R
 
 	if (m_bPendingConstantUpdate)
 	{
+		// Shader reflection might not be initialized if a compile failed
 		if (m_bCompiled)
 		{
+			// Unmap constant buffers and mark as bound
+			m_constantManager.EndNamedConstantUpdate(nullptr);
+
 			CRY_ASSERT(!IsDirty()); // compute pass modified AFTER call to BeginConstantUpdate
 		}
 
-		// Unmap constant buffers and mark as bound
-		m_constantManager.EndNamedConstantUpdate(nullptr);
 		m_bPendingConstantUpdate = false;
 	}
 	else

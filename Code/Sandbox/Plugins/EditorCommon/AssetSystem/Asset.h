@@ -14,6 +14,7 @@ class CAssetType;
 class CAssetEditor;
 class CEditableAsset;
 struct IEditableAsset;
+struct INewAsset;
 
 //! Values that can be passed to CAsset::signalChanged and CAssetManager::signalAssetChanged
 enum AssetChangeFlags
@@ -56,6 +57,11 @@ struct EDITOR_COMMON_API IAssetEditingSession
 
 	//! The implementation must unconditionally give up all asset changes, if any.
 	virtual void DiscardChanges(IEditableAsset& asset) = 0;
+
+	// The implementation should save asset data files and update the asset by the INewAsset interface.
+	//! \sa INewAsset
+	//! \sa CAssetType::OnCopy
+	virtual bool OnCopyAsset(INewAsset& asset) = 0;
 };
 
 //! Assets are the "unit of work" of CRYENGINE Asset Sytem and represent one or several files on disk, as well as a *.cryasset metadata file to carry extra information relevant to this asset.
@@ -97,6 +103,9 @@ public:
 	//! Returns path relative to the assets root directory. Can be empty.
 	//! The asset and the source file must be in the same folder. Therefore all the assets that use the same source file must be in one directory.
 	const string& GetSourceFile() const { return m_sourceFile; }
+
+	//! Returns paths to the work files (DCC files). The paths are relative to the assets root directory.
+	const std::vector<string>& GetWorkFiles() const { return m_workFiles; }
 
 	//! Opens the source file in a separate process
 	void OpenSourceFile() const;
@@ -199,6 +208,8 @@ private:
 	void SetSourceFile(const char* szFilepath);
 	void AddFile(const string& filePath);
 	void SetFiles(const std::vector<string>& filenames);
+	void AddWorkFile(const string& filePath);
+	void SetWorkFiles(const std::vector<string>& filenames);
 	void SetDetail(const string& name, const string& value);
 	void SetDependencies(const std::vector<SAssetDependencyInfo>& dependencies);
 
@@ -217,6 +228,7 @@ private:
 	const CryGUID       m_guid;
 	uint64              m_lastModifiedTime = 0;
 	std::vector<string> m_files;
+	std::vector<string> m_workFiles;
 	string				m_sourceFile;
 	string				m_metadataFile; //!< Unix path.
 	std::vector<std::pair<string, string>> m_details;

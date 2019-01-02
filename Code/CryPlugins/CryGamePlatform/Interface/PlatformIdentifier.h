@@ -1,6 +1,8 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
+#include <CryExtension/CryGUID.h>
+#include <tuple>
 
 namespace Cry
 {
@@ -39,13 +41,25 @@ namespace Cry
 
 			bool GetAsUint64(uint64& out) const
 			{
-				return Traits::AsUint64(m_value, out);
+				const bool success = Traits::AsUint64(m_value, out);
+				if (!success)
+				{
+					CryWarning(VALIDATOR_MODULE_SYSTEM, VALIDATOR_COMMENT, "[GamePlatform] %s: Unable to convert '%s'.", __func__, ToDebugString());
+				}
+
+				return success;
 			}
 
 			template<class StrType>
 			bool GetAsString(StrType& out) const
 			{
-				return Traits::AsString(m_value, out);
+				const bool success = Traits::AsString(m_value, out);
+				if (!success)
+				{
+					CryWarning(VALIDATOR_MODULE_SYSTEM, VALIDATOR_COMMENT, "[GamePlatform] %s: Unable to convert '%s'.", __func__, ToDebugString());
+				}
+
+				return success;
 			}
 
 			const char* ToDebugString() const

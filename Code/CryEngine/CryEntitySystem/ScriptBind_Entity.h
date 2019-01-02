@@ -3,12 +3,16 @@
 #pragma once
 
 #include <CryScriptSystem/IScriptSystem.h>
-
-struct IEntity;
-struct ISystem;
-
 #include <CryPhysics/IPhysics.h>
 #include <CryParticleSystem/ParticleParams.h>
+#include <CryEntitySystem/IEntity.h>
+
+struct IFunctionHandler;
+struct ISystem;
+struct SEntityPhysicalizeParams;
+struct SFogVolumeProperties;
+
+class CEntity;
 
 #define ENTITYPROP_CASTSHADOWS   0x00000001
 #define ENTITYPROP_DONOTCHECKVIS 0x00000002
@@ -399,9 +403,9 @@ protected:
 	//!          PE_STATIC           Static physical entity.
 	//!          PE_LIVING           Live physical entity (Players,Monsters).
 	//!          PE_RIGID            Rigid body physical entity.
-	//!          PE_WHEELEDVEHICLE   Physical vechicle with wheels.
+	//!          PE_WHEELEDVEHICLE   Physical vehicle with wheels.
 	//!          PE_PARTICLE         Particle physical entity, it only have mass and radius.
-	//!          PE_ARTICULATED      Ragdolls or other articulated physical enttiies.
+	//!          PE_ARTICULATED      Ragdolls or other articulated physical entities.
 	//!          PE_ROPE             Physical representation of the rope.
 	//!          PE_SOFT             Soft body physics, cloth simulation.
 	//!          PE_AREA             Physical Area (Sphere,Box,Geometry or Shape).

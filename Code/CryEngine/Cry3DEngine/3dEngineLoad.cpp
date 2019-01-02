@@ -29,7 +29,9 @@
 #include "BreezeGenerator.h"
 #include <CryAnimation/ICryAnimation.h>
 #include <CryAction/IMaterialEffects.h>
+#include <CryEntitySystem/IEntitySystem.h>
 #include "ClipVolumeManager.h"
+#include "StatObjFoliage.h"
 
 #if defined(FEATURE_SVO_GI)
 	#include "SVO/SceneTreeManager.h"
@@ -562,20 +564,13 @@ void C3DEngine::UnloadLevel()
 
 	if (!gEnv->IsDedicated())
 	{
-		SAFE_RELEASE_FORCE(m_ptexIconLowMemoryUsage);
-		SAFE_RELEASE_FORCE(m_ptexIconAverageMemoryUsage);
-		SAFE_RELEASE_FORCE(m_ptexIconHighMemoryUsage);
-		SAFE_RELEASE_FORCE(m_ptexIconEditorConnectedToConsole);
-
 		//////////////////////////////////////////////////////////////////////////
 		// Releases loaded default loaded textures.
 		//////////////////////////////////////////////////////////////////////////
-		{
-			SAFE_RELEASE(m_ptexIconAverageMemoryUsage);
-			SAFE_RELEASE(m_ptexIconLowMemoryUsage);
-			SAFE_RELEASE(m_ptexIconHighMemoryUsage);
-			SAFE_RELEASE(m_ptexIconEditorConnectedToConsole);
-		}
+		SAFE_RELEASE(m_ptexIconAverageMemoryUsage);
+		SAFE_RELEASE(m_ptexIconLowMemoryUsage);
+		SAFE_RELEASE(m_ptexIconHighMemoryUsage);
+		SAFE_RELEASE(m_ptexIconEditorConnectedToConsole);
 	}
 	else
 	{
@@ -877,9 +872,6 @@ I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 		// preload level cgfs
 		if (ShouldPreloadLevelObjects())
 		{
-			if (m_owner.GetCVars()->e_StatObjPreload == 2)
-				m_owner.GetSystem()->OutputLoadingTimeStats();
-
 			m_owner.m_pObjManager->StartPreloadLevelObjects();
 		}
 	}
@@ -900,11 +892,6 @@ I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 				// do nothing and continue with next step
 				break;
 			}
-
-			if (m_owner.GetCVars()->e_StatObjPreload == 2)
-			{
-				m_owner.GetSystem()->OutputLoadingTimeStats();
-			}
 		}
 	}
 
@@ -917,15 +904,7 @@ I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 		// preload level cgfs
 		if (m_owner.GetCVars()->e_StatObjPreload && !gEnv->IsEditor())
 		{
-			if (m_owner.GetCVars()->e_StatObjPreload == 2)
-				m_owner.GetSystem()->OutputLoadingTimeStats();
-
 			m_owner.m_pObjManager->PreloadLevelObjects();
-
-			if (m_owner.GetCVars()->e_StatObjPreload == 2)
-			{
-				m_owner.GetSystem()->OutputLoadingTimeStats();
-			}
 		}
 	}
 

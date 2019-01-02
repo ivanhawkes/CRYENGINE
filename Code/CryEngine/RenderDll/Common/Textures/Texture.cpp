@@ -42,7 +42,8 @@ CTextureStreamPoolMgr* CTexture::s_pPoolMgr;
 std::set<string> CTexture::s_vTexReloadRequests;
 CryCriticalSection CTexture::s_xTexReloadLock;
 #ifdef TEXTURE_GET_SYSTEM_COPY_SUPPORT
-CTexture::LowResSystemCopyType CTexture::s_LowResSystemCopy;
+CTexture::LowResSystemCopyType CTexture::s_LowResSystemCopy[TEX_SYS_COPY_MAX_SLOTS];
+CryReadModifyLock CTexture::s_LowResSystemCopyLock;
 #endif
 
 #if defined(TEXSTRM_DEFERRED_UPLOAD)
@@ -280,7 +281,12 @@ CTexture::~CTexture()
 #endif
 
 #ifdef TEXTURE_GET_SYSTEM_COPY_SUPPORT
-	s_LowResSystemCopy.erase(this);
+	{
+		AUTO_MODIFYLOCK(s_LowResSystemCopyLock);
+
+		for (int slot = 0; slot < TEX_SYS_COPY_MAX_SLOTS; slot++)
+			s_LowResSystemCopy[slot].erase(this);
+	}
 #endif
 }
 
@@ -428,9 +434,16 @@ void CTexture::GetMemoryUsage(ICrySizer* pSizer) const
 	pSizer->AddObject(m_SrcName);
 
 #ifdef TEXTURE_GET_SYSTEM_COPY_SUPPORT
-	const LowResSystemCopyType::iterator& it = s_LowResSystemCopy.find(this);
-	if (it != CTexture::s_LowResSystemCopy.end())
-		pSizer->AddObject((*it).second.m_lowResSystemCopy);
+	{
+		AUTO_MODIFYLOCK(s_LowResSystemCopyLock);
+
+		for (int slot = 0; slot < TEX_SYS_COPY_MAX_SLOTS; slot++)
+		{
+			const LowResSystemCopyType::iterator& it = s_LowResSystemCopy[slot].find(this);
+			if (it != CTexture::s_LowResSystemCopy[slot].end())
+				pSizer->AddObject((*it).second.m_lowResSystemCopy);
+		}
+	}
 #endif
 
 	if (m_pFileTexMips)
@@ -509,7 +522,10 @@ void CTexture::CreateShaderResource(STexDataPtr&& td)
 
 #if defined(TEXTURE_GET_SYSTEM_COPY_SUPPORT)
 	if (m_eFlags & FT_KEEP_LOWRES_SYSCOPY)
-		PrepareLowResSystemCopy(td->m_pData[0], true);
+	{
+		uint16 width, height;
+		ITexture::GetLowResSystemCopy(width, height);
+	}
 #endif
 
 	assert(m_nWidth && m_nHeight && m_nMips);
@@ -550,6 +566,8 @@ void CTexture::Create2DTexture(int nWidth, int nHeight, int nMips, int nFlags, c
 	td->m_nDepth = 1;
 	td->m_nMips = nMips;
 	td->m_pData[0] = pSrcData;
+	if (nFlags & FT_TAKEOVER_DATA_POINTER)
+		td->SetReallocated(0);
 
 	CreateShaderResource(std::move(td));
 	PostCreate();
@@ -572,6 +590,8 @@ void CTexture::Create3DTexture(int nWidth, int nHeight, int nDepth, int nMips, i
 	td->m_nDepth = nDepth;
 	td->m_nMips = nMips;
 	td->m_pData[0] = pSrcData;
+	if (nFlags & FT_TAKEOVER_DATA_POINTER)
+		td->SetReallocated(0);
 
 	CreateShaderResource(std::move(td));
 	PostCreate();
@@ -846,9 +866,6 @@ void CTexture::Precache(const bool isBlocking)
 
 void CTexture::RT_Precache(const bool isFinalPrecache)
 {
-	if (gRenDev->CheckDeviceLost())
-		return;
-
 	CRY_PROFILE_REGION(PROFILE_RENDERER, "CTexture::RT_Precache");
 	LOADING_TIME_PROFILE_SECTION(iSystem);
 
@@ -1217,8 +1234,8 @@ STexDataPtr CTexture::FormatFixup(STexDataPtr&& td)
 	if (td->m_eTileMode == eTM_None)
 	{
 		// Try and expand
-		uint32 nSourceSize = CTexture::TextureDataSize(td->m_nWidth, td->m_nHeight, td->m_nDepth, td->m_nMips, 1, eSrcFormat);
-		uint32 nTargetSize = CTexture::TextureDataSize(td->m_nWidth, td->m_nHeight, td->m_nDepth, td->m_nMips, 1, eDstFormat);
+		uint32 nSourceSize = CTexture::TextureDataSize(td->m_nWidth, td->m_nHeight, td->m_nDepth, td->m_nMips, 1, eSrcFormat, eTM_None);
+		uint32 nTargetSize = CTexture::TextureDataSize(td->m_nWidth, td->m_nHeight, td->m_nDepth, td->m_nMips, 1, eDstFormat, eTM_None);
 
 		for (int nImage = 0; nImage < sizeof(td->m_pData) / sizeof(td->m_pData[0]); ++nImage)
 		{
@@ -1300,9 +1317,9 @@ STexDataPtr CTexture::ImagePreprocessing(STexDataPtr&& td, ETEX_Format eDstForma
 	return td;
 }
 
-int CTexture::CalcNumMips(int nWidth, int nHeight)
+int8 CTexture::CalcNumMips(int nWidth, int nHeight)
 {
-	int nMips = 0;
+	int8 nMips = 0;
 	while (nWidth || nHeight)
 	{
 		if (!nWidth)   nWidth = 1;
@@ -1314,7 +1331,7 @@ int CTexture::CalcNumMips(int nWidth, int nHeight)
 	return nMips;
 }
 
-uint32 CTexture::TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, uint32 nMips, uint32 nSlices, const ETEX_Format eTF, ETEX_TileMode eTM)
+uint32 CTexture::TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, int8 nMips, uint32 nSlices, const ETEX_Format eTF, ETEX_TileMode eTM)
 {
 	FUNCTION_PROFILER_RENDERER();
 
@@ -1325,9 +1342,9 @@ uint32 CTexture::TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, u
 		return 0;
 
 	const bool bIsBlockCompressed = IsBlockCompressed(eTF);
-	nWidth = max(1U, nWidth);
+	nWidth  = max(1U, nWidth);
 	nHeight = max(1U, nHeight);
-	nDepth = max(1U, nDepth);
+	nDepth  = max(1U, nDepth);
 
 	if (eTM != eTM_None)
 	{
@@ -1339,7 +1356,7 @@ uint32 CTexture::TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, u
 #if CRY_PLATFORM_ORBIS
 		if (bIsBlockCompressed)
 		{
-			nWidth = ((nWidth + 3) & (-4));
+			nWidth  = ((nWidth  + 3) & (-4));
 			nHeight = ((nHeight + 3) & (-4));
 		}
 #endif
@@ -1347,20 +1364,17 @@ uint32 CTexture::TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, u
 #if CRY_PLATFORM_CONSOLE
 		return CDeviceTexture::TextureDataSize(nWidth, nHeight, nDepth, nMips, nSlices, eTF, eTM, CDeviceObjectFactory::BIND_SHADER_RESOURCE);
 #endif
-
-		__debugbreak();
-		return 0;
 	}
-	else
+
 	{
 		const uint32 nBytesPerElement = bIsBlockCompressed ? BytesPerBlock(eTF) : BytesPerPixel(eTF);
 
 		uint32 nSize = 0;
 		while ((nWidth || nHeight || nDepth) && nMips)
 		{
-			nWidth = max(1U, nWidth);
+			nWidth  = max(1U, nWidth);
 			nHeight = max(1U, nHeight);
-			nDepth = max(1U, nDepth);
+			nDepth  = max(1U, nDepth);
 
 			uint32 nU = nWidth;
 			uint32 nV = nHeight;
@@ -1369,15 +1383,15 @@ uint32 CTexture::TextureDataSize(uint32 nWidth, uint32 nHeight, uint32 nDepth, u
 			if (bIsBlockCompressed)
 			{
 				// depth is not 4x4x4 compressed, but 4x4x1
-				nU = ((nWidth + 3) / (4));
+				nU = ((nWidth  + 3) / (4));
 				nV = ((nHeight + 3) / (4));
 			}
 
 			nSize += nU * nV * nW * nBytesPerElement;
 
-			nWidth >>= 1;
+			nWidth  >>= 1;
 			nHeight >>= 1;
-			nDepth >>= 1;
+			nDepth  >>= 1;
 
 			--nMips;
 		}
@@ -3399,7 +3413,7 @@ void CRenderer::EF_AddRTStat(CTexture* pTex, int nFlags, int nW, int nH)
 			nW = CRendererResources::s_renderWidth;
 		if (nH < 0)
 			nH = CRendererResources::s_renderHeight;
-		nSize = CTexture::TextureDataSize(nW, nH, 1, 1, 1, eTF);
+		nSize = CTexture::TextureDataSize(nW, nH, 1, 1, 1, eTF, eTM_Optimal);
 		TS.m_Name = "Back buffer";
 	}
 	else
@@ -3409,7 +3423,7 @@ void CRenderer::EF_AddRTStat(CTexture* pTex, int nFlags, int nW, int nH)
 			nW = pTex->GetWidth();
 		if (nH < 0)
 			nH = pTex->GetHeight();
-		nSize = CTexture::TextureDataSize(nW, nH, 1, pTex->GetNumMips(), 1, eTF);
+		nSize = CTexture::TextureDataSize(nW, nH, 1, pTex->GetNumMips(), 1, eTF, eTM_Optimal);
 		const char* szName = pTex->GetName();
 		if (szName && szName[0] == '$')
 			TS.m_Name = string("@") + string(&szName[1]);
@@ -3531,73 +3545,94 @@ const int CTexture::GetTextureID() const
 
 #ifdef TEXTURE_GET_SYSTEM_COPY_SUPPORT
 
-const ColorB* CTexture::GetLowResSystemCopy(uint16& nWidth, uint16& nHeight, int** ppLowResSystemCopyAtlasId)
+const ColorB* CTexture::GetLowResSystemCopy(uint16& width, uint16& height, int** ppUserData, int maxTexSize)
 {
-	const LowResSystemCopyType::iterator& it = s_LowResSystemCopy.find(this);
-	if (it != CTexture::s_LowResSystemCopy.end())
+	AUTO_READLOCK(s_LowResSystemCopyLock);
+
+	// find slot based on requested texture size, snap texture size to power of 2
+	int slot = CLAMP((int)log2(maxTexSize) - 4, 0, TEX_SYS_COPY_MAX_SLOTS - 1);
+	maxTexSize = (int)exp2(slot + 4);
+
+	LowResSystemCopyType::iterator it = s_LowResSystemCopy[slot].find(this);
+
+	// load if not ready yet
+	if (it == CTexture::s_LowResSystemCopy[slot].end())
 	{
-		nWidth = (*it).second.m_nLowResCopyWidth;
-		nHeight = (*it).second.m_nLowResCopyHeight;
-		*ppLowResSystemCopyAtlasId = &(*it).second.m_nLowResSystemCopyAtlasId;
+		if (m_eTT != eTT_2D || (m_nMips <= 1 && (m_nWidth > maxTexSize || m_nHeight > maxTexSize)) || m_eDstFormat < eTF_BC1 || m_eDstFormat > eTF_BC7)
+			return nullptr;
+
+		// to switch to modify we need to unlock first
+		s_LowResSystemCopyLock.UnlockRead();
+		{ // to reduce contention, we want to hold the modify lock as shortly as possible
+			AUTO_MODIFYLOCK(s_LowResSystemCopyLock);
+			s_LowResSystemCopy[slot][this]; // make a map entry for this
+		}
+		
+		// 'restore' AUTO_READLOCK
+		s_LowResSystemCopyLock.LockRead();
+		it = s_LowResSystemCopy[slot].find(this);
+		SLowResSystemCopy& rCopy = it->second;
+		PrepareLowResSystemCopy(maxTexSize, rCopy.m_lowResSystemCopy, rCopy.m_nLowResCopyWidth, rCopy.m_nLowResCopyHeight);
+	}
+
+	if (it != CTexture::s_LowResSystemCopy[slot].end())
+	{
+		width = (*it).second.m_nLowResCopyWidth;
+		height = (*it).second.m_nLowResCopyHeight;
+		if (ppUserData)
+			*ppUserData = &(*it).second.m_nLowResSystemCopyAtlasId;
 		return (*it).second.m_lowResSystemCopy.GetElements();
 	}
+
+	assert(!"CTexture::GetLowResSystemCopy failed");
 
 	return NULL;
 }
 
-/*#ifndef eTF_BC3
-   #define eTF_BC1 eTF_DXT1
-   #define eTF_BC2 eTF_DXT3
-   #define eTF_BC3 eTF_DXT5
- #endif*/
-
-void CTexture::PrepareLowResSystemCopy(const byte* pTexData, bool bTexDataHasAllMips)
+bool CTexture::PrepareLowResSystemCopy(const uint16 maxTexSize, PodArray<ColorB>& textureData, uint16& width, uint16& height)
 {
-	if (m_eTT != eTT_2D || (m_nMips <= 1 && (m_nWidth > 16 || m_nHeight > 16)))
-		return;
+	_smart_ptr<IImageFile> imageData = gEnv->pRenderer->EF_LoadImage(GetName(), 0);
 
-	// this function handles only compressed textures for now
-	if (m_eDstFormat != eTF_BC3 && m_eDstFormat != eTF_BC1 && m_eDstFormat != eTF_BC2 && m_eDstFormat != eTF_BC7)
-		return;
-
-	// make sure we skip non diffuse textures
-	if (strstr(GetName(), "_ddn")
-	    || strstr(GetName(), "_ddna")
-	    || strstr(GetName(), "_mask")
-	    || strstr(GetName(), "_spec.")
-	    || strstr(GetName(), "_gloss")
-	    || strstr(GetName(), "_displ")
-	    || strstr(GetName(), "characters")
-	    || strstr(GetName(), "$")
-	    )
-		return;
-
-	if (pTexData)
+	if (imageData)
 	{
-		SLowResSystemCopy& rSysCopy = s_LowResSystemCopy[this];
+		width = imageData->mfGet_width();
+		height = imageData->mfGet_height();
+		byte* pSrcData = imageData->mfGet_image(0);
+		ETEX_Format texFormat = imageData->mfGetFormat();
 
-		rSysCopy.m_nLowResCopyWidth = m_nWidth;
-		rSysCopy.m_nLowResCopyHeight = m_nHeight;
+		int mipLevel = 0;
 
-		size_t nSrcOffset = 0;
-		int nMipId = 0;
-
-		while ((rSysCopy.m_nLowResCopyWidth > 16 || rSysCopy.m_nLowResCopyHeight > 16 || nMipId < 2) && (rSysCopy.m_nLowResCopyWidth >= 8 && rSysCopy.m_nLowResCopyHeight >= 8))
+		while (width > maxTexSize || height > maxTexSize)
 		{
-			nSrcOffset += TextureDataSize(rSysCopy.m_nLowResCopyWidth, rSysCopy.m_nLowResCopyHeight, 1, 1, 1, m_eDstFormat);
-			rSysCopy.m_nLowResCopyWidth /= 2;
-			rSysCopy.m_nLowResCopyHeight /= 2;
-			nMipId++;
+			int sizeDxtMip = gRenDev->GetTextureFormatDataSize(width, height, 1, 1, texFormat, eTM_None);
+			pSrcData += sizeDxtMip;
+
+			width /= 2;
+			height /= 2;
+			mipLevel++;
 		}
 
-		uint32 nSizeDxtMip  = TextureDataSize(rSysCopy.m_nLowResCopyWidth, rSysCopy.m_nLowResCopyHeight, 1, 1, 1, m_eDstFormat);
-		uint32 nSizeRgbaMip = TextureDataSize(rSysCopy.m_nLowResCopyWidth, rSysCopy.m_nLowResCopyHeight, 1, 1, 1, eTF_R8G8B8A8);
+		assert(texFormat >= eTF_BC1 && texFormat <= eTF_BC7);
 
-		rSysCopy.m_lowResSystemCopy.CheckAllocated(nSizeRgbaMip / sizeof(ColorB));
+		int nSizeDxtMip0 = gRenDev->GetTextureFormatDataSize(width, height, 1, 1, texFormat, eTM_None);
+		int nSizeMip0 = gRenDev->GetTextureFormatDataSize(width, height, 1, 1, eTF_R8G8B8A8, eTM_None);
 
-		gRenDev->DXTDecompress(pTexData + (bTexDataHasAllMips ? nSrcOffset : 0), nSizeDxtMip,
-		                       (byte*)rSysCopy.m_lowResSystemCopy.GetElements(), rSysCopy.m_nLowResCopyWidth, rSysCopy.m_nLowResCopyHeight, 1, m_eDstFormat, false, 4);
+		textureData.PreAllocate(nSizeMip0 / sizeof(ColorB), nSizeMip0 / sizeof(ColorB));
+
+		gRenDev->DXTDecompress(pSrcData, nSizeDxtMip0, (byte*)textureData.GetElements(), width, height, 1, texFormat, false, 4);
+
+		if (m_bIsSRGB)
+		{
+			for (int i = 0; i < textureData.Count(); i++)
+			{
+				ColorF colF = textureData[i];
+				colF.srgb2rgb();
+				textureData[i] = colF;
+			}
+		}
 	}
+
+	return !textureData.IsEmpty();
 }
 
 #endif // TEXTURE_GET_SYSTEM_COPY_SUPPORT

@@ -4,6 +4,7 @@
 #include "FeatureCommon.h"
 #include "FeatureCollision.h"
 #include "FeatureMotion.h"
+#include <Cry3DEngine/ISurfaceType.h>
 
 namespace pfx2
 {
@@ -45,7 +46,7 @@ public:
 		IFStream normAges = parentContainer.GetIFStream(EPDT_NormalAge);
 		IFStream lifeTimes = parentContainer.GetIFStream(EPDT_LifeTime);
 
-		instances.reserve(parentContainer.GetNumParticles());
+		instances.reserve(parentContainer.GetNumSpawnedParticles());
 		for (auto particleId : parentContainer.GetSpawnedRange())
 		{
 			const float delay = runtime.DeltaTime() - normAges.Load(particleId) * lifeTimes.Load(particleId);

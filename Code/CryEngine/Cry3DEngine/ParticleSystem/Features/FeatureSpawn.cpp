@@ -1,8 +1,7 @@
 // Copyright 2015-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include "ParticleSystem/ParticleSystem.h"
-#include "ParticleSystem/ParticleComponentRuntime.h"
+#include "FeatureCommon.h"
 #include "ParamMod.h"
 
 namespace pfx2
@@ -139,13 +138,11 @@ protected:
 	// Convert amounts to spawn counts for frame
 	virtual void GetSpawnCounts(CParticleComponentRuntime& runtime, TVarArray<float> amounts) const = 0;
 	
-	virtual void SpawnParticles(CParticleComponentRuntime& runtime, TDynArray<SSpawnEntry>& spawnEntries) override
+	virtual void SpawnParticles(CParticleComponentRuntime& runtime) override
 	{
 		CRY_PFX2_PROFILE_DETAIL;
 
 		const uint numInstances = runtime.GetNumInstances();
-		if (numInstances == 0)
-			return;
 
 		const bool isIndependent = runtime.GetEmitter()->IsIndependent() && !runtime.IsChild();
 		if (isIndependent)
@@ -194,6 +191,8 @@ protected:
 
 		GetSpawnCounts(runtime, amounts);
 
+		TDynArray<SSpawnEntry> spawnEntries;
+
 		for (uint i = 0; i < numInstances; ++i)
 		{
 			SSpawnData& spawnData = runtime.GetInstanceData(i, m_offsetSpawnData);
@@ -233,6 +232,8 @@ protected:
 
 			spawnData.m_timer += dT;
 		}
+
+		runtime.AddParticles(spawnEntries);
 	}
 
 	void StartInstances(CParticleComponentRuntime& runtime, SUpdateRange instanceRange, TConstArray<uint> instanceIndices)

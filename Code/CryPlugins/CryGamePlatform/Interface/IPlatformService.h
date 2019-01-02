@@ -48,6 +48,8 @@ namespace Cry
 				virtual void OnPersonaStateChanged(const IAccount& account, CEnumFlags<EPersonaChangeFlags> changeFlags) = 0;
 				//! Called when a steam auth ticket request received a response
 				virtual void OnGetSteamAuthTicketResponse(bool success, uint32 authTicket) = 0;
+				//! Called when a token request received a response
+				virtual void OnAuthTokenReceived(bool success, const char* szToken) = 0;
 			};
 
 			virtual ~IService() {}
@@ -72,7 +74,7 @@ namespace Cry
 
 			//! Gets the platform-specific identifier for the running application
 			virtual ApplicationIdentifier GetApplicationIdentifier() const = 0;
-			
+
 			//! Gets an IAccount representation of the local user, useful for getting local information such as user name
 			virtual IAccount* GetLocalAccount() const = 0;
 			//! Gets local user's friend accounts
@@ -86,13 +88,9 @@ namespace Cry
 			virtual EFriendRelationship GetFriendRelationship(const AccountIdentifier& otherAccountId) const = 0;
 			//! Opens a known dialog targeted at a specific user id via the platform's overlay
 			virtual bool OpenDialogWithTargetUser(EUserTargetedDialog dialog, const AccountIdentifier& otherAccountId) const = 0;
-			//! Opens a known dialog by platform-specific string and targeted at a specific user id via the platform's overlay
-			virtual bool OpenDialogWithTargetUser(const char* szPage, const AccountIdentifier& otherAccountId) const = 0;
 
 			//! Opens a known dialog via the platforms's overlay
 			virtual bool OpenDialog(EDialog dialog) const = 0;
-			//! Opens a known dialog by platform-specific string via the platform's overlay
-			virtual bool OpenDialog(const char* szPage) const = 0;
 			//! Opens a browser window via the platform's overlay
 			virtual bool OpenBrowser(const char* szURL) const = 0;
 			//! Checks whether we are able to open the overlay used for purchasing assets

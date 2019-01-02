@@ -10,8 +10,14 @@
 #include "Objects/BaseObject.h"
 #include "PathUtils.h"
 #include "QT/Widgets/QWaitProgress.h"
+#include "ObjectManager.h"
 #include "Util/BoostPythonHelpers.h"
+#include <Util/FileUtil.h>
+#include <Util/XmlArchive.h>
 #include <CryMath/Random.h>
+#include <Cry3DEngine/I3DEngine.h>
+#include <Cry3DEngine/IRenderNode.h>
+#include <Cry3DEngine/IStatObj.h>
 
 #define MAX_OBJECTS_PHYS_SIMULATION_TIME (5)
 
@@ -856,7 +862,7 @@ void CObjectPhysicsManager::SerializeCollisionClasses(CXmlArchive& xmlAr)
 	if (!xmlAr.bLoading)
 	{
 		// Storing
-		CLogFile::WriteLine("Storing Collision Classes ...");
+		CryLog("Storing Collision Classes ...");
 
 		XmlNodeRef root = xmlAr.root->newChild("CollisionClasses");
 		int count = m_collisionClasses.size();
