@@ -13,7 +13,6 @@
 	#undef DrawText
 #endif //DrawText
 
-// forward declaration
 struct SNodeInfo;
 struct SRNInfo;
 class C3DEngineLevelLoadTimeslicer;
@@ -342,7 +341,7 @@ public:
 	virtual void      PreWorldStreamUpdate(const CCamera& cam);
 	virtual void      WorldStreamUpdate();
 	virtual void      ShutDown();
-	virtual void      Release() { CryAlignedDelete(this); };
+	virtual void      Release() { CryAlignedDelete(this); }
 	virtual void      SetLevelPath(const char* szFolderName);
 	virtual bool      LoadLevel(const char* szFolderName, XmlNodeRef missionXml);
 	virtual bool      StartLoadLevel(const char* szFolderName, XmlNodeRef missionXml);
@@ -440,7 +439,11 @@ public:
 		//passInfo.GetIRenderView()->AddLight(eDLT_DeferredLight,light);
 		GetRenderer()->EF_AddDeferredLight(light, fMult, passInfo);
 		Get3DEngine()->m_LightVolumesMgr.RegisterLight(light, nLightID, passInfo);
-		m_nDeferredLightsNum++;
+
+		if (light.m_Flags & DLF_DEFERRED_CUBEMAPS)
+			m_nDeferredProbesNum++;
+		else
+			m_nDeferredLightsNum++;
 	}
 
 	virtual void                 ApplyForceToEnvironment(Vec3 vPos, float fRadius, float fAmountOfForce);
@@ -514,7 +517,8 @@ public:
 	void                                   FinishWindGridJob();
 	void                                   UpdateWindGridJobEntry(Vec3 vPos);
 	void                                   UpdateWindGridArea(SWindGrid& rWindGrid, const SOptimizedOutdoorWindArea& windArea, const AABB& windBox);
-	void                                   RasterWindAreas(std::vector<SOptimizedOutdoorWindArea>* pWindAreas, const Vec3& vGlobalWind);
+	void                                   RasterWindAreas(std::vector<SOptimizedOutdoorWindArea>* pWindAreas, float fElapsedTime);
+	void                                   RasterGlobalWind(const Vec3& vGlobalWind, float fElapsedTime, bool bReset);
 
 	virtual Vec3                           GetGlobalWind(bool bIndoors) const;
 	virtual bool                           SampleWind(Vec3* pSamples, int nSamples, const AABB& volume, bool bIndoors) const;
@@ -915,6 +919,7 @@ public:
 	CREHDRSky* m_pREHDRSky;
 
 	int        m_nDeferredLightsNum;
+	int        m_nDeferredProbesNum;
 
 private:
 	// not sorted
@@ -1191,7 +1196,7 @@ private:
 	int   m_nZoomMode;                                  // the zoom level of the camera (0-4) 0: no zoom, 4: full zoom
 
 	// cameras used by 3DEngine
-	CCamera                m_RenderingCamera;           // Camera used for Rendering on 3DEngine Side, normaly equal to the viewcamera, except if frozen with e_camerafreeze
+	CCamera                m_RenderingCamera;           // Camera used for Rendering on 3DEngine Side, normally equal to the viewcamera, except if frozen with e_camerafreeze
 
 	PodArray<IRenderNode*> m_deferredRenderProxyStreamingPriorityUpdates;     // deferred streaming priority updates for newly seen CRenderProxies
 
@@ -1285,6 +1290,10 @@ private:
 
 	CVisibleRenderNodesManager             m_visibleNodesManager;
 
+	float                                  m_fLastWindProcessedTime = 0.0f;
+	Vec3                                   m_vProcessedGlobalWind = Vec3(0, 0, 0);
+	int                                    m_nProcessedWindAreas = -1;
+	int                                    m_nFrameWindAreas = 0;
 	int                                    m_nCurrentWindAreaList;
 	std::vector<SOptimizedOutdoorWindArea> m_outdoorWindAreas[2];
 	std::vector<SOptimizedOutdoorWindArea> m_indoorWindAreas[2];

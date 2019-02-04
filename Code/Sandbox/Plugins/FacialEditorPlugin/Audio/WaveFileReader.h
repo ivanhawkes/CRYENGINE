@@ -1,8 +1,5 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#ifndef __WAVEFILEREADER_H__
-#define __WAVEFILEREADER_H__
-
 #pragma once
 
 #include <CrySystem/IStreamEngine.h>
@@ -13,7 +10,7 @@ class CWaveFileReader
 public:
 
 	CWaveFileReader();
-	~CWaveFileReader(void);
+	~CWaveFileReader();
 
 	bool  LoadFile(const char* sFileName);
 	int32 GetSample(uint32 nPos);
@@ -40,5 +37,3 @@ protected:
 	//SSoundBufferInfo	m_pSoundbufferInfo;
 	uint32       m_nVolume;
 };
-
-#endif

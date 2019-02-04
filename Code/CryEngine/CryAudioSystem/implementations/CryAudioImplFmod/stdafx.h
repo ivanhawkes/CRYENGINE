@@ -9,7 +9,3 @@
 #include <CryCore/Project/ProjectDefines.h>
 #include <CrySystem/ISystem.h>
 #include <fmod_studio.hpp>
-
-#if !defined(_RELEASE)
-	#define INCLUDE_FMOD_IMPL_PRODUCTION_CODE
-#endif // _RELEASE

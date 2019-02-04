@@ -9,12 +9,13 @@
 #include <IImpl.h>
 #include <CryString/HashedString.h>
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	#include "Managers.h"
 	#include "ListenerManager.h"
 	#include "Debug.h"
+	#include "Common/DebugStyle.h"
 	#include <CryRenderer/IRenderAuxGeom.h>
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -54,9 +55,9 @@ CStandaloneFile* CFileManager::ConstructStandaloneFile(char const* const szFile,
 	pStandaloneFile->m_pImplData = g_pIImpl->ConstructStandaloneFileConnection(*pStandaloneFile, szFile, isLocalized, pITriggerConnection);
 	pStandaloneFile->m_hashedFilename = CHashedString(szFile);
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	pStandaloneFile->m_isLocalized = isLocalized;
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 	m_constructedStandaloneFiles.push_back(pStandaloneFile);
 	return pStandaloneFile;
@@ -73,12 +74,12 @@ void CFileManager::ReleaseStandaloneFile(CStandaloneFile* const pStandaloneFile)
 	}
 }
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float posX, float posY) const
 {
-	auxGeom.Draw2dLabel(posX, posY, Debug::g_managerHeaderFontSize, Debug::g_globalColorHeader.data(), false, "Standalone Files [%" PRISIZE_T "]", m_constructedStandaloneFiles.size());
-	posY += Debug::g_managerHeaderLineHeight;
+	auxGeom.Draw2dLabel(posX, posY, Debug::g_listHeaderFontSize, Debug::s_globalColorHeader, false, "Standalone Files [%" PRISIZE_T "]", m_constructedStandaloneFiles.size());
+	posY += Debug::g_listHeaderLineHeight;
 
 	CryFixedStringT<MaxControlNameLength> lowerCaseSearchString(g_cvars.m_pDebugFilter->GetString());
 	lowerCaseSearchString.MakeLower();
@@ -95,7 +96,7 @@ void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float posX, float posY
 			char const* const szStandaloneFileName = pStandaloneFile->m_hashedFilename.GetText().c_str();
 			CryFixedStringT<MaxControlNameLength> lowerCaseStandaloneFileName(szStandaloneFileName);
 			lowerCaseStandaloneFileName.MakeLower();
-			char const* const szObjectName = pStandaloneFile->m_pObject->m_name.c_str();
+			char const* const szObjectName = pStandaloneFile->m_pObject->GetName();
 			CryFixedStringT<MaxControlNameLength> lowerCaseObjectName(szObjectName);
 			lowerCaseObjectName.MakeLower();
 
@@ -105,35 +106,43 @@ void CFileManager::DrawDebugInfo(IRenderAuxGeom& auxGeom, float posX, float posY
 
 			if (draw)
 			{
-				float const* pColor = Debug::g_globalColorInactive.data();
+				ColorF color = Debug::s_globalColorInactive;
 
 				switch (pStandaloneFile->m_state)
 				{
 				case EStandaloneFileState::Playing:
-					pColor = Debug::g_managerColorItemActive.data();
-					break;
+					{
+						color = Debug::s_listColorItemActive;
+						break;
+					}
 				case EStandaloneFileState::Loading:
-					pColor = Debug::g_managerColorItemLoading.data();
-					break;
+					{
+						color = Debug::s_listColorItemLoading;
+						break;
+					}
 				case EStandaloneFileState::Stopping:
-					pColor = Debug::g_managerColorItemStopping.data();
-					break;
+					{
+						color = Debug::s_listColorItemStopping;
+						break;
+					}
 				default:
-					CRY_ASSERT_MESSAGE(false, "Standalone file is in an unknown state during %s", __FUNCTION__);
-					break;
+					{
+						CRY_ASSERT_MESSAGE(false, "Standalone file is in an unknown state during %s", __FUNCTION__);
+						break;
+					}
 				}
 
-				auxGeom.Draw2dLabel(posX, posY, Debug::g_managerFontSize,
-				                    pColor,
+				auxGeom.Draw2dLabel(posX, posY, Debug::g_listFontSize,
+				                    color,
 				                    false,
 				                    "%s on %s",
 				                    szStandaloneFileName,
 				                    szObjectName);
 
-				posY += Debug::g_managerLineHeight;
+				posY += Debug::g_listLineHeight;
 			}
 		}
 	}
 }
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 }      // namespace CryAudio

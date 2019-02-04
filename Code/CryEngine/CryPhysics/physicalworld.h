@@ -149,7 +149,7 @@ const int IDBITS = 24;
 struct SEntityIdList {
 	CPhysicalPlaceholder **data = nullptr;
 	~SEntityIdList() { reset(); }
-	void reset() { delete[] data; size=0; maxid=-1; idx0=((INT_PTR)1<<IDBITS*2)-1<<ISFREE|1; }
+	void reset() { delete[] data; data=nullptr; size=0; maxid=-1; idx0=((INT_PTR)1<<IDBITS*2)-1<<ISFREE|1; }
 	struct SFreeIndex {
 		SFreeIndex(INT_PTR *pidx) : next({*pidx}), prev({*pidx}) {}
 		bitfield<INT_PTR,ISFREE,IDBITS> next; // next_free_id = this_id+1+next
@@ -168,6 +168,7 @@ struct SEntityIdList {
 		ReallocateList(data,szold,size=max(id+32767 & ~32767,size+32768),true);
 		freeIdx(size-1).next = freeIdx(-1).next-size;	// [last_new_id].next_free = prev_first_free
 		freeIdx(szold).prev = szold; // [first_new_id].prev_free = -1
+		freeIdx(size-1).setFree(); freeIdx(szold).setFree();
 		if (freeIdx(-1).next<0)
 			freeIdx(-1).prev = -1-size;	// last_free = last_new_id
 		freeIdx(-1).next = szold;	// first_free = first_new_id
@@ -495,7 +496,7 @@ public:
 	virtual int CollideEntityWithPrimitive(IPhysicalEntity *_pent, int itype, primitive *pprim, Vec3 dir, ray_hit *phit, intersection_params* pip=0);
 
 	virtual float PrimitiveWorldIntersection(const SPWIParams &pp, WriteLockCond *pLockContacts=0, const char *pNameTag="PrimitiveWorldIntersection");
-	virtual void RasterizeEntities(const grid3d& grid, uchar *rbuf, int objtypes, float massThreshold, const Vec3& offsBBox, const Vec3& sizeBBox, int flags);
+	virtual void RasterizeEntities(const grid3d& grid, uchar *rbuf, int objtypes, float massThreshold, const Vec3& offsBBox, const Vec3& sizeBBox, int flags, IPhysicalEntity *pentOnlyThis=nullptr);
 
 	virtual int GetEntitiesInBox(Vec3 ptmin,Vec3 ptmax, IPhysicalEntity **&pList, int objtypes, int szListPrealloc) {
 		int iCaller;

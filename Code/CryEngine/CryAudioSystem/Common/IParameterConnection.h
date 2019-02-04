@@ -21,11 +21,18 @@ struct IParameterConnection
 
 	/**
 	 * Set the parameter to the specified value on the provided object.
-	 * @param pIObject - implementation-specific object to set the parameter on
+	 * @param pIObject - implementation-specific object to set the parameter on. The audio system guarantees that this is never a null pointer.
 	 * @param value - the value to set the parameter to
 	 * @return void
 	 */
 	virtual void Set(IObject* const pIObject, float const value) = 0;
+
+	/**
+	 * Set the parameter to the specified value globally.
+	 * @param value - the value to set the parameter to
+	 * @return void
+	 */
+	virtual void SetGlobally(float const value) = 0;
 };
 } // namespace Impl
 } // namespace CryAudio

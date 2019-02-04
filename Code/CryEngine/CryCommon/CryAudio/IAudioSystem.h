@@ -30,12 +30,12 @@ namespace CryAudio
 // Forward declarations.
 struct IObject;
 struct IListener;
-class CEvent;
 class CStandaloneFile;
 
 namespace Impl
 {
 struct IImpl;
+struct IObject;
 struct ITriggerInfo;
 } // namespace Impl
 
@@ -129,18 +129,16 @@ struct SRequestInfo
 		void* const pUserDataOwner_,
 		ESystemEvents const systemEvent_,
 		ControlId const audioControlId_,
-		IObject* const pIObject_,
-		CStandaloneFile* pStandaloneFile_,
-		CEvent* pEvent_)
+		EntityId const entityId_,
+		CStandaloneFile* pStandaloneFile_)
 		: requestResult(requestResult_)
 		, pOwner(pOwner_)
 		, pUserData(pUserData_)
 		, pUserDataOwner(pUserDataOwner_)
 		, systemEvent(systemEvent_)
 		, audioControlId(audioControlId_)
-		, pIObject(pIObject_)
+		, entityId(entityId_)
 		, pStandaloneFile(pStandaloneFile_)
-		, pEvent(pEvent_)
 	{}
 
 	SRequestInfo(SRequestInfo const&) = delete;
@@ -154,9 +152,8 @@ struct SRequestInfo
 	void* const          pUserDataOwner;
 	ESystemEvents const  systemEvent;
 	ControlId const      audioControlId;
-	IObject* const       pIObject;
+	EntityId const       entityId;
 	CStandaloneFile*     pStandaloneFile;
-	CEvent*              pEvent;
 };
 
 struct SCreateObjectData
@@ -236,24 +233,6 @@ struct IAudioSystem
 	 * @return void
 	 */
 	virtual void SetImpl(Impl::IImpl* const pIImpl, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
-
-	/**
-	 * Loads a trigger's data. This can be used in "loading on demand" situations to prepare the data referenced by a trigger.
-	 * @param triggerId - ID of the trigger in question.
-	 * @param userData - optional struct used to pass additional data to the internal request.
-	 * @return void
-	 * @see UnloadTrigger
-	 */
-	virtual void LoadTrigger(ControlId const triggerId, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
-
-	/**
-	 * Unloads a trigger's data. This can be used in "unloading on demand" situations to free the data referenced by a trigger.
-	 * @param triggerId - ID of the trigger in question.
-	 * @param userData - optional struct used to pass additional data to the internal request.
-	 * @return void
-	 * @see LoadTrigger
-	 */
-	virtual void UnloadTrigger(ControlId const triggerId, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
 	 * Performs the actions passed in the "triggerData" parameter. This is used for 3D type events exclusively. For 2D type events refer to ExecuteTrigger.
@@ -357,45 +336,45 @@ struct IAudioSystem
 	virtual void ReportStoppedFile(CStandaloneFile& standaloneFile, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
-	 * Used by audio middleware implementations to inform the AudioSystem that an event finished producing sound.
-	 * @param event - reference to the instance of the event that finished producing sound.
-	 * @param bSuccess - boolean indicating whether the event finished successfully or not.
+	 * Used by audio middleware implementations to inform the AudioSystem that an instance of a trigger connection has started.
+	 * @param triggerInstanceId - id of the the instance of the trigger connection that started.
+	 * @param result - trigger result of the trigger connection instance when is started.
 	 * @param userData - optional struct used to pass additional data to the internal request.
 	 * @return void
 	 */
-	virtual void ReportFinishedEvent(CEvent& event, bool const bSuccess, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+	virtual void ReportStartedTriggerConnectionInstance(TriggerInstanceId const triggerInstanceId, ETriggerResult const result, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
-	 * Used by audio middleware implementations to inform the AudioSystem that an event was virtualized.
-	 * @param event - reference to the instance of the event that was virtualized.
+	 * Used by audio middleware implementations to inform the AudioSystem that an instance of a trigger connection finished producing sound.
+	 * @param triggerInstanceId - id of the the instance of the trigger connection that finished producing sound.
+	 * @param result - trigger result of the trigger connection instance that finished producing sound.
 	 * @param userData - optional struct used to pass additional data to the internal request.
 	 * @return void
 	 */
-	virtual void ReportVirtualizedEvent(CEvent& event, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+	virtual void ReportFinishedTriggerConnectionInstance(TriggerInstanceId const triggerInstanceId, ETriggerResult const result, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
-	 * Used by audio middleware implementations to inform the AudioSystem that an event was physicalized.
-	 * @param event - reference to the instance of the event that was physicalized.
+	 * Used by audio middleware implementations to inform the AudioSystem that an object got physical.
+	 * @param pIObject - middleware implementation specific object that got physicalized.
 	 * @param userData - optional struct used to pass additional data to the internal request.
 	 * @return void
 	 */
+	virtual void ReportPhysicalizedObject(Impl::IObject* const pIObject, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
-	virtual void ReportPhysicalizedEvent(CEvent& event, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+	/**
+	 * Used by audio middleware implementations to inform the AudioSystem that an object got virtual.
+	 * @param pIObject - middleware implementation specific object that got virtual.
+	 * @param userData - optional struct used to pass additional data to the internal request.
+	 * @return void
+	 */
+	virtual void ReportVirtualizedObject(Impl::IObject* const pIObject, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
+
 	/**
 	 * Used to instruct the AudioSystem that it should stop all playing sounds.
 	 * @param userData - optional struct used to pass additional data to the internal request.
 	 * @return void
 	 */
 	virtual void StopAllSounds(SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
-
-	/**
-	 * Used to reload the registered audio middleware.
-	 * This is useful when for instance an audio project changed while the application was running.
-	 * @param szLevelName - name of the currently loaded level so that level specific data gets reloaded as well.
-	 * @param userData - optional struct used to pass additional data to the internal request.
-	 * @return void
-	 */
-	virtual void Refresh(char const* const szLevelName, SRequestUserData const& userData = SRequestUserData::GetEmptyObject()) = 0;
 
 	/**
 	 * Loads all of the data referenced by the given preload request.

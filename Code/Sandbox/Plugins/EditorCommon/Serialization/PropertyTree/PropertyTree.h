@@ -270,7 +270,8 @@ protected:
 	virtual void onChanged() = 0;
 	virtual void onContinuousChange() = 0;
 	virtual void onSelected() = 0;
-	virtual void onPushUndo() = 0;
+	virtual void onBeginUndo() = 0;
+	virtual void onEndUndo(bool undoAccepted) = 0;
 
 	virtual void copyRow(PropertyRow* row) = 0;
 	virtual void pasteRow(PropertyRow* row) = 0;
@@ -298,7 +299,7 @@ protected:
 	// points here are specified in root-row space
 	bool         onRowLMBDown(PropertyRow* row, const Rect& rowRect, Point point, bool controlPressed, bool shiftPressed);
 	void         onRowLMBUp(PropertyRow* row, const Rect& rowRect, Point point);
-	void         onRowRMBDown(PropertyRow* row, const Rect& rowRect, Point point);
+	void         ShowContexMenu(PropertyRow* row, const Rect& rowRect, Point point);
 	void         onRowMouseMove(PropertyRow* row, const Rect& rowRect, Point point, property_tree::Modifier modifiers);
 	void         onMouseStill();
 
@@ -307,7 +308,8 @@ protected:
 	void         updateAttachedPropertyTree(bool revert);
 
 	void         onModelUpdated(const PropertyRows& rows, bool needApply);
-	void         onModelPushUndo(PropertyTreeOperator* op, bool* handled);
+	void         onModelBeginUndo(PropertyTreeOperator* op, bool* handled);
+	void         onModelEndUndo(bool undoAccepted);
 
 private:
 	PropertyTree(const PropertyTree&) = delete;

@@ -28,11 +28,11 @@ SET(SHIBOKEN_ARGS
 	"--use-isnull-as-nb_nonzero"
 	"--avoid-protected-hack"
 	"${CMAKE_CURRENT_SOURCE_DIR}/global.h"
-	"--include-paths=${PARENT_SOURCE_DIRECTORY}\;${PYSIDE_INCLUDE_PATH}\;${QT_INCLUDE_PATH}"
+	"--include-paths=${PARENT_SOURCE_DIRECTORY}\;${PYSIDE_INCLUDE_PATH}\;${QT_INCLUDE_PATH}\;${QT_INCLUDE_PATH}QtCore\;${QT_INCLUDE_PATH}QtGui\;${QT_INCLUDE_PATH}QtWidgets\;"
 	"--typesystem-paths=${TYPESYSTEM_PATHS}"
 	"--output-directory=${WRAPPER_OUTPUT_DIR}"
 	"${CMAKE_CURRENT_SOURCE_DIR}/typesystem_cryqt.xml"
-	"--api-version=5.6")
+	"--api-version=5.12")
 
 message( STATUS "Running PySide Shiboken ${SHIBOKEN_EXE}")
 execute_process ( COMMAND "${SHIBOKEN_EXE}" ${SHIBOKEN_ARGS} WORKING_DIRECTORY "${QT_DIR}/bin" OUTPUT_VARIABLE shiboken_output ERROR_VARIABLE shiboken_error)
@@ -80,11 +80,11 @@ set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS_PROFILE " 
 set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS_RELEASE " ${LIBPATH_FLAG}\"${PYSIDE_DIR}\"")
 
 if (NOT DEFINED PYSIDE_LIB)
-	set(PYSIDE_LIB pyside2-python2.7$<$<CONFIG:Debug>:-dbg>)
+	set(PYSIDE_LIB pyside2-python2.7)
 endif()
 
 if (NOT DEFINED SHIBOKEN_LIB)
-	set(SHIBOKEN_LIB shiboken2-python2.7$<$<CONFIG:Debug>:-dbg>)
+	set(SHIBOKEN_LIB shiboken2-python2.7)
 endif()
 
 target_link_libraries(${THIS_PROJECT} PRIVATE "${PYSIDE_LIB}" "${SHIBOKEN_LIB}")

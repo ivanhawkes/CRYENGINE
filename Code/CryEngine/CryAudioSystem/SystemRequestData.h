@@ -16,7 +16,6 @@ enum class ESystemRequestType : EnumFlagsType
 	None,
 	SetImpl,
 	ReleaseImpl,
-	RefreshSystem,
 	StopAllSounds,
 	ParseControlsData,
 	ParsePreloadsData,
@@ -28,8 +27,6 @@ enum class ESystemRequestType : EnumFlagsType
 	SetGlobalParameter,
 	SetSwitchState,
 	SetGlobalSwitchState,
-	LoadTrigger,
-	UnloadTrigger,
 	PlayFile,
 	StopFile,
 	AutoLoadSetting,
@@ -51,7 +48,8 @@ enum class ESystemRequestType : EnumFlagsType
 	ExecuteDefaultTrigger,
 	StopTrigger,
 	StopAllTriggers,
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+	RefreshSystem,
 	ReloadControlsData,
 	RetriggerControls,
 	DrawDebugInfo,
@@ -59,7 +57,7 @@ enum class ESystemRequestType : EnumFlagsType
 	ExecutePreviewTriggerEx,
 	StopPreviewTrigger,
 	ResetRequestCount,
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -372,44 +370,6 @@ struct SSystemRequestData<ESystemRequestType::SetGlobalSwitchState> final : publ
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SSystemRequestData<ESystemRequestType::LoadTrigger> final : public SSystemRequestDataBase
-{
-	explicit SSystemRequestData(ControlId const triggerId_)
-		: SSystemRequestDataBase(ESystemRequestType::LoadTrigger)
-		, triggerId(triggerId_)
-	{}
-
-	explicit SSystemRequestData(SSystemRequestData<ESystemRequestType::LoadTrigger> const* const pASRData)
-		: SSystemRequestDataBase(ESystemRequestType::LoadTrigger)
-		, triggerId(pASRData->triggerId)
-	{}
-
-	virtual ~SSystemRequestData() override = default;
-
-	ControlId const triggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SSystemRequestData<ESystemRequestType::UnloadTrigger> final : public SSystemRequestDataBase
-{
-	explicit SSystemRequestData(ControlId const triggerId_)
-		: SSystemRequestDataBase(ESystemRequestType::UnloadTrigger)
-		, triggerId(triggerId_)
-	{}
-
-	explicit SSystemRequestData(SSystemRequestData<ESystemRequestType::UnloadTrigger> const* const pASRData)
-		: SSystemRequestDataBase(ESystemRequestType::UnloadTrigger)
-		, triggerId(pASRData->triggerId)
-	{}
-
-	virtual ~SSystemRequestData() override = default;
-
-	ControlId const triggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
 struct SSystemRequestData<ESystemRequestType::PlayFile> final : public SSystemRequestDataBase
 {
 	explicit SSystemRequestData(
@@ -529,25 +489,6 @@ struct SSystemRequestData<ESystemRequestType::UnloadAFCMDataByScope> final : pub
 	virtual ~SSystemRequestData() override = default;
 
 	EDataScope const dataScope;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SSystemRequestData<ESystemRequestType::RefreshSystem> final : public SSystemRequestDataBase
-{
-	explicit SSystemRequestData(char const* const szLevelName)
-		: SSystemRequestDataBase(ESystemRequestType::RefreshSystem)
-		, levelName(szLevelName)
-	{}
-
-	explicit SSystemRequestData(SSystemRequestData<ESystemRequestType::RefreshSystem> const* const pAMRData)
-		: SSystemRequestDataBase(ESystemRequestType::RefreshSystem)
-		, levelName(pAMRData->levelName)
-	{}
-
-	virtual ~SSystemRequestData() override = default;
-
-	CryFixedStringT<MaxFileNameLength> const levelName;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -778,7 +719,26 @@ struct SSystemRequestData<ESystemRequestType::StopTrigger> final : public SSyste
 	ControlId const triggerId;
 };
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SSystemRequestData<ESystemRequestType::RefreshSystem> final : public SSystemRequestDataBase
+{
+	explicit SSystemRequestData(char const* const szLevelName)
+		: SSystemRequestDataBase(ESystemRequestType::RefreshSystem)
+		, levelName(szLevelName)
+	{}
+
+	explicit SSystemRequestData(SSystemRequestData<ESystemRequestType::RefreshSystem> const* const pAMRData)
+		: SSystemRequestDataBase(ESystemRequestType::RefreshSystem)
+		, levelName(pAMRData->levelName)
+	{}
+
+	virtual ~SSystemRequestData() override = default;
+
+	CryFixedStringT<MaxFileNameLength> const levelName;
+};
+
 //////////////////////////////////////////////////////////////////////////
 template<>
 struct SSystemRequestData<ESystemRequestType::ReloadControlsData> final : public SSystemRequestDataBase
@@ -838,5 +798,5 @@ struct SSystemRequestData<ESystemRequestType::ExecutePreviewTriggerEx> final : p
 
 	Impl::ITriggerInfo const& triggerInfo;
 };
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 }      // namespace CryAudio

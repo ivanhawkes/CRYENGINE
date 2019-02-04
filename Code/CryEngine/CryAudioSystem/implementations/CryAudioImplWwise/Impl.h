@@ -12,6 +12,10 @@ namespace Impl
 {
 namespace Wwise
 {
+class CBaseObject;
+class CEvent;
+class CEventInstance;
+
 class CImpl final : public IImpl
 {
 public:
@@ -25,7 +29,7 @@ public:
 
 	// CryAudio::Impl::IImpl
 	virtual void                       Update() override;
-	virtual ERequestStatus             Init(uint16 const objectPoolSize, uint16 const eventPoolSize) override;
+	virtual ERequestStatus             Init(uint16 const objectPoolSize) override;
 	virtual void                       ShutDown() override;
 	virtual void                       OnBeforeRelease() override;
 	virtual void                       Release() override;
@@ -39,14 +43,12 @@ public:
 	virtual void                       PauseAll() override;
 	virtual void                       ResumeAll() override;
 	virtual ERequestStatus             StopAllSounds() override;
-	virtual void                       SetGlobalParameter(IParameterConnection* const pIParameterConnection, float const value) override;
-	virtual void                       SetGlobalSwitchState(ISwitchStateConnection* const pISwitchStateConnection) override;
 	virtual void                       GamepadConnected(DeviceId const deviceUniqueID) override;
 	virtual void                       GamepadDisconnected(DeviceId const deviceUniqueID) override;
 	virtual void                       OnRefresh() override;
 	virtual void                       SetLanguage(char const* const szLanguage) override;
-	virtual ERequestStatus             RegisterInMemoryFile(SFileInfo* const pFileInfo) override;
-	virtual ERequestStatus             UnregisterInMemoryFile(SFileInfo* const pFileInfo) override;
+	virtual void                       RegisterInMemoryFile(SFileInfo* const pFileInfo) override;
+	virtual void                       UnregisterInMemoryFile(SFileInfo* const pFileInfo) override;
 	virtual ERequestStatus             ConstructFile(XmlNodeRef const pRootNode, SFileInfo* const pFileInfo) override;
 	virtual void                       DestructFile(IFile* const pIFile) override;
 	virtual char const* const          GetFileLocation(SFileInfo* const pFileInfo) override;
@@ -67,15 +69,22 @@ public:
 	virtual void                       DestructObject(IObject const* const pIObject) override;
 	virtual IListener*                 ConstructListener(CTransformation const& transformation, char const* const szName = nullptr) override;
 	virtual void                       DestructListener(IListener* const pIListener) override;
-	virtual IEvent*                    ConstructEvent(CryAudio::CEvent& event) override;
-	virtual void                       DestructEvent(IEvent const* const pIEvent) override;
 	virtual IStandaloneFileConnection* ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection = nullptr) override;
 	virtual void                       DestructStandaloneFileConnection(IStandaloneFileConnection const* const pIStandaloneFileConnection) override;
 
-	// Below data is only used when INCLUDE_WWISE_IMPL_PRODUCTION_CODE is defined!
+	// Below data is only used when CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE is defined!
 	virtual void GetFileData(char const* const szName, SFileData& fileData) const override;
-	virtual void DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float& posY, bool const showDetailedInfo) override;
+	virtual void DrawDebugMemoryInfo(IRenderAuxGeom& auxGeom, float const posX, float& posY, bool const showDetailedInfo) override;
+	virtual void DrawDebugInfoList(IRenderAuxGeom& auxGeom, float& posX, float posY, float const debugDistance, char const* const szTextFilter) const override;
 	// ~CryAudio::Impl::IImpl
+
+	CEventInstance* ConstructEventInstance(
+		TriggerInstanceId const triggerInstanceId,
+		AkUniqueID const eventId,
+		float const maxAttenuation,
+		CBaseObject const* const pBaseObject = nullptr,
+		CEvent const* const pEvent = nullptr);
+	void DestructEventInstance(CEventInstance const* const pEventInstance);
 
 	void SetPanningRule(int const panningRule);
 	bool IsToBeReleased() const { return m_toBeReleased; }
@@ -104,13 +113,13 @@ private:
 	using AudioInputDevices = std::map<DeviceId, SInputDeviceInfo>;
 	AudioInputDevices m_mapInputDevices;
 
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
 	void GetInitBankSize();
 
 	bool   m_bCommSystemInitialized;
 	CryFixedStringT<MaxInfoStringLength> m_name;
 	size_t m_initBankSize = 0;
-#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
 
 #if defined(WWISE_USE_OCULUS)
 	void* m_pOculusSpatializerLibrary;

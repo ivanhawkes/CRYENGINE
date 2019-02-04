@@ -11,9 +11,7 @@ add_sources("CryAudioSystem_uber_0.cpp"
 		"CVars.h"
 		"Debug.h"
 		"Entity.h"
-		"Event.h"
 		"EventListenerManager.h"
-		"EventManager.h"
 		"FileCacheManager.h"
 		"FileEntry.h"
 		"FileManager.h"
@@ -24,7 +22,6 @@ add_sources("CryAudioSystem_uber_0.cpp"
 		"MainThread.h"
 		"Managers.h"
 		"Object.h"
-		"ObjectManager.h"
 		"ObjectRequestData.h"
 		"PropagationProcessor.h"
 		"RayInfo.h"
@@ -56,10 +53,7 @@ add_sources("CryAudioSystem_uber_0.cpp"
 		"Common.cpp"
 		"CryAudioSystem.cpp"
 		"CVars.cpp"
-		"Debug.cpp"
-		"Event.cpp"
 		"EventListenerManager.cpp"
-		"EventManager.cpp"
 		"FileCacheManager.cpp"
 		"FileManager.cpp"
 		"Impl.cpp"
@@ -68,7 +62,6 @@ add_sources("CryAudioSystem_uber_0.cpp"
 		"MainThread.cpp"
 		"Managers.cpp"
 		"Object.cpp"
-		"ObjectManager.cpp"
 		"PropagationProcessor.cpp"
 		"RequestData.cpp"
 		"System.cpp"
@@ -147,7 +140,11 @@ MACRO(setup_cryaudio)
 		)
     endif()
 
-		target_compile_definitions(${THIS_PROJECT} PRIVATE $<$<NOT:$<CONFIG:Release>>:INCLUDE_AUDIO_PRODUCTION_CODE> $<$<NOT:$<CONFIG:Release>>:ENABLE_AUDIO_LOGGING>)
+		target_compile_definitions(${THIS_PROJECT} PRIVATE $<$<NOT:$<CONFIG:Release>>:CRY_AUDIO_USE_PRODUCTION_CODE>)
+
+		IF(AUDIO_USE_OCCLUSION)
+			target_compile_definitions(${THIS_PROJECT} PRIVATE -DCRY_AUDIO_USE_OCCLUSION)
+		ENDIF()
 ENDMACRO()
 
 CryEngineModule(CryAudioSystem PCH "stdafx.cpp" SOLUTION_FOLDER "CryEngine/Audio")

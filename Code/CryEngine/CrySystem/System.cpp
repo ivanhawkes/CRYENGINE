@@ -242,6 +242,7 @@ CSystem::CSystem(const SSystemInitParams& startupParams)
 	m_env.bServer = false;
 	m_env.bMultiplayer = false;
 	m_env.bHostMigrating = false;
+	m_env.bFrameProfilerActive = 0;
 	m_env.bDeepProfiling = 0;
 	m_env.bBootProfilerEnabledFrames = false;
 	m_env.callbackStartSection = 0;
@@ -427,7 +428,6 @@ CSystem::CSystem(const SSystemInitParams& startupParams)
 	m_env.pJobManager = GetJobManagerInterface();
 
 	m_UpdateTimesIdx = 0U;
-	m_bNeedDoWorkDuringOcclusionChecks = false;
 
 	m_PlatformOSCreateFlags = 0;
 
@@ -1659,11 +1659,6 @@ bool CSystem::DoFrame(const SDisplayContextKey& displayContextKey, CEnumFlags<ES
 
 		m_env.p3DEngine->SyncProcessStreamingUpdate();
 
-		if (NeedDoWorkDuringOcclusionChecks())
-		{
-			DoWorkDuringOcclusionChecks();
-		}
-
 		m_env.pFrameProfileSystem->EndFrame();
 	}
 
@@ -2242,13 +2237,9 @@ bool CSystem::Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode)
 
 	//////////////////////////////////////////////////////////////////////
 	//update sound system part 2
-	if (!g_cvars.sys_deferAudioUpdateOptim && !bNoUpdate)
+	if (!bNoUpdate)
 	{
 		UpdateAudioSystems();
-	}
-	else
-	{
-		m_bNeedDoWorkDuringOcclusionChecks = true;
 	}
 
 	//////////////////////////////////////////////////////////////////////
@@ -2365,15 +2356,6 @@ bool CSystem::UpdateLoadtime()
 	 */
 
 	return !m_bQuit;
-}
-
-void CSystem::DoWorkDuringOcclusionChecks()
-{
-	if (g_cvars.sys_deferAudioUpdateOptim && !m_bNoUpdate)
-	{
-		UpdateAudioSystems();
-		m_bNeedDoWorkDuringOcclusionChecks = false;
-	}
 }
 
 void CSystem::UpdateAudioSystems()
@@ -2933,11 +2915,6 @@ void CSystem::ExecuteCommandLine()
 	}
 
 	//gEnv->pConsole->ExecuteString("sys_RestoreSpec test*"); // to get useful debugging information about current spec settings to the log file
-}
-
-void CSystem::DumpMemoryCoverage()
-{
-	m_MemoryFragmentationProfiler.DumpMemoryCoverage();
 }
 
 ITextModeConsole* CSystem::GetITextModeConsole()

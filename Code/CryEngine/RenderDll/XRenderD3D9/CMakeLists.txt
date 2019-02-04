@@ -968,7 +968,6 @@ add_sources("CryRenderer_uber_3.cpp"
 		"../Common/RenderItemDrawer.h"
 		"../Common/LockFreeAddVector.h"
 	SOURCE_GROUP "Header Files"
-		"ShadowTextureGroupManager.h"
 		"DeviceManager/D3D11/DeviceSubmissionQueue_D3D11.inl"
 		"../Common/Textures/ITextureStreamer.h"
 		"../Common/Shaders/ShaderAllocator.h"
@@ -1384,6 +1383,7 @@ endif()
 
 if (EXISTS "${SCE_ORBIS_SDK_DIR}" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/GNM")
 	if (RENDERER_GNM)
+		list(APPEND extra_defines -DGNM_FEATURE_VALIDATION=$<AND:$<NOT:$<CONFIG:Release>>,$<BOOL:RENDERER_GNM>>)
 		CryEngineModule(CryRenderGNM PCH "../StdAfx.cpp" SOLUTION_FOLDER "CryEngine")
 		target_include_directories(${THIS_PROJECT} PRIVATE ..)
 		target_compile_definitions(${THIS_PROJECT} PRIVATE -D_RENDERER -DDO_RENDERSTATS -DCRY_RENDERER_GNM=40 ${extra_defines})

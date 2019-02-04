@@ -8,42 +8,36 @@ add_sources("CryAudioImpl_uber_0.cpp"
 	SOURCE_GROUP "Header Files"
 		"Common.h"
 		"CVars.h"
-		"Debug.h"
-		"Environment.h"
 		"Event.h"
-		"File.h"
+		"EventInstance.h"
 		"GlobalData.h"
 		"Impl.h"
 		"Listener.h"
 		"Object.h"
-		"Parameter.h"
 		"resource.h"
-		"Setting.h"
 		"SoundEngine.h"
 		"StandaloneFile.h"
-		"stdafx.h"
-		"SwitchState.h"
-		"Trigger.h"
+		"VolumeParameter.h"
+		"VolumeState.h"
 	SOURCE_GROUP "Source Files"
 		"Common.cpp"
 		"CryAudioImpl.cpp"
 		"CVars.cpp"
-		"Debug.cpp"
 		"Event.cpp"
+		"EventInstance.cpp"
 		"Impl.cpp"
 		"Listener.cpp"
 		"Object.cpp"
-		"Parameter.cpp"
-		"Setting.cpp"
 		"SoundEngine.cpp"
 		"StandaloneFile.cpp"
-		"SwitchState.cpp"
-		"Trigger.cpp"
+		"VolumeParameter.cpp"
+		"VolumeState.cpp"
 )
 
 add_sources("NoUberFile"
 	SOURCE_GROUP "Root"
 		"stdafx.cpp"
+		"stdafx.h"
 )
 
 end_sources()
@@ -67,6 +61,7 @@ if(AUDIO_SDL_MIXER)
 		target_link_libraries(${THIS_PROJECT} PRIVATE libmodplug_static)
 	endif()
 
+	target_compile_definitions(${THIS_PROJECT} PRIVATE $<$<NOT:$<CONFIG:Release>>:CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE>)
 	target_include_directories(${THIS_PROJECT} PRIVATE ../../Common)
 else()
 	CryFileContainer(CryAudioImplSDLMixer SOLUTION_FOLDER "CryEngine/Audio/Implementations")

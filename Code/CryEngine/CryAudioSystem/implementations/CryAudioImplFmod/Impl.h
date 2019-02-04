@@ -10,6 +10,10 @@ namespace Impl
 {
 namespace Fmod
 {
+class CEventInstance;
+class CEvent;
+class CBaseObject;
+
 class CImpl final : public IImpl
 {
 public:
@@ -22,7 +26,7 @@ public:
 
 	// CryAudio::Impl::IImpl
 	virtual void                       Update() override;
-	virtual ERequestStatus             Init(uint16 const objectPoolSize, uint16 const eventPoolSize) override;
+	virtual ERequestStatus             Init(uint16 const objectPoolSize) override;
 	virtual void                       ShutDown() override;
 	virtual void                       OnBeforeRelease() override {}
 	virtual void                       Release() override;
@@ -36,10 +40,8 @@ public:
 	virtual void                       PauseAll() override;
 	virtual void                       ResumeAll() override;
 	virtual ERequestStatus             StopAllSounds() override;
-	virtual void                       SetGlobalParameter(IParameterConnection* const pIParameterConnection, float const value) override;
-	virtual void                       SetGlobalSwitchState(ISwitchStateConnection* const pISwitchStateConnection) override;
-	virtual ERequestStatus             RegisterInMemoryFile(SFileInfo* const pFileInfo) override;
-	virtual ERequestStatus             UnregisterInMemoryFile(SFileInfo* const pFileInfo) override;
+	virtual void                       RegisterInMemoryFile(SFileInfo* const pFileInfo) override;
+	virtual void                       UnregisterInMemoryFile(SFileInfo* const pFileInfo) override;
 	virtual ERequestStatus             ConstructFile(XmlNodeRef const pRootNode, SFileInfo* const pFileInfo) override;
 	virtual void                       DestructFile(IFile* const pIFile) override;
 	virtual char const* const          GetFileLocation(SFileInfo* const pFileInfo) override;
@@ -60,8 +62,6 @@ public:
 	virtual void                       DestructObject(IObject const* const pIObject) override;
 	virtual IListener*                 ConstructListener(CTransformation const& transformation, char const* const szName = nullptr) override;
 	virtual void                       DestructListener(IListener* const pIListener) override;
-	virtual IEvent*                    ConstructEvent(CryAudio::CEvent& event) override;
-	virtual void                       DestructEvent(IEvent const* const pIEvent) override;
 	virtual IStandaloneFileConnection* ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection = nullptr) override;
 	virtual void                       DestructStandaloneFileConnection(IStandaloneFileConnection const* const pIStandaloneFileConnection) override;
 	virtual void                       GamepadConnected(DeviceId const deviceUniqueID) override;
@@ -69,17 +69,20 @@ public:
 	virtual void                       OnRefresh() override;
 	virtual void                       SetLanguage(char const* const szLanguage) override;
 
-	// Below data is only used when INCLUDE_FMOD_IMPL_PRODUCTION_CODE is defined!
+	// Below data is only used when CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE is defined!
 	virtual void GetFileData(char const* const szName, SFileData& fileData) const override;
-	virtual void DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float& posY, bool const showDetailedInfo) override;
+	virtual void DrawDebugMemoryInfo(IRenderAuxGeom& auxGeom, float const posX, float& posY, bool const showDetailedInfo) override;
+	virtual void DrawDebugInfoList(IRenderAuxGeom& auxGeom, float& posX, float posY, float const debugDistance, char const* const szTextFilter) const override;
 	// ~CryAudio::Impl::IImpl
 
-private:
+	CEventInstance* ConstructEventInstance(
+		TriggerInstanceId const triggerInstanceId,
+		uint32 const eventId,
+		CEvent const* const pEvent,
+		CBaseObject const* const pBaseObject = nullptr);
+	void DestructEventInstance(CEventInstance const* const pEventInstance);
 
-	static char const* const s_szEventPrefix;
-	static char const* const s_szSnapshotPrefix;
-	static char const* const s_szBusPrefix;
-	static char const* const s_szVcaPrefix;
+private:
 
 	void        CreateVersionString(CryFixedStringT<MaxInfoStringLength>& stringOut) const;
 	void        LoadMasterBanks();
@@ -105,12 +108,12 @@ private:
 	FMOD::Studio::Bank*                   m_pMasterStringsBank;
 	CryFixedStringT<MaxControlNameLength> m_language;
 
-#if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 	CryFixedStringT<MaxInfoStringLength> m_name;
 	size_t                               m_masterBankSize = 0;
 	size_t                               m_masterAssetsBankSize = 0;
 	size_t                               m_masterStringsBankSize = 0;
-#endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 };
 } // namespace Fmod
 } // namespace Impl

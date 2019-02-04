@@ -14,16 +14,16 @@ class CRayInfo;
 enum class EObjectRequestType : EnumFlagsType
 {
 	None,
-	LoadTrigger,
-	UnloadTrigger,
 	PlayFile,
 	StopFile,
 	ExecuteTrigger,
 	StopTrigger,
 	StopAllTriggers,
 	SetTransformation,
+#if defined(CRY_AUDIO_USE_OCCLUSION)
 	SetOcclusionType,
 	SetOcclusionRayOffset,
+#endif // CRY_AUDIO_USE_OCCLUSION
 	SetParameter,
 	SetSwitchState,
 	SetCurrentEnvironments,
@@ -31,9 +31,9 @@ enum class EObjectRequestType : EnumFlagsType
 	ProcessPhysicsRay,
 	ToggleAbsoluteVelocityTracking,
 	ToggleRelativeVelocityTracking,
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	SetName,
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -64,44 +64,6 @@ struct SObjectRequestData final : public SObjectRequestDataBase
 	{}
 
 	virtual ~SObjectRequestData() override = default;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SObjectRequestData<EObjectRequestType::LoadTrigger> final : public SObjectRequestDataBase
-{
-	explicit SObjectRequestData(CObject* const pObject_, ControlId const triggerId_)
-		: SObjectRequestDataBase(EObjectRequestType::LoadTrigger, pObject_)
-		, triggerId(triggerId_)
-	{}
-
-	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::LoadTrigger> const* const pORData)
-		: SObjectRequestDataBase(EObjectRequestType::LoadTrigger, pORData->pObject)
-		, triggerId(pORData->triggerId)
-	{}
-
-	virtual ~SObjectRequestData() override = default;
-
-	ControlId const triggerId;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SObjectRequestData<EObjectRequestType::UnloadTrigger> final : public SObjectRequestDataBase
-{
-	explicit SObjectRequestData(CObject* const pObject_, ControlId const triggerId_)
-		: SObjectRequestDataBase(EObjectRequestType::UnloadTrigger, pObject_)
-		, triggerId(triggerId_)
-	{}
-
-	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::UnloadTrigger> const* const pORData)
-		: SObjectRequestDataBase(EObjectRequestType::UnloadTrigger, pORData->pObject)
-		, triggerId(pORData->triggerId)
-	{}
-
-	virtual ~SObjectRequestData() override = default;
-
-	ControlId const triggerId;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -209,6 +171,7 @@ struct SObjectRequestData<EObjectRequestType::SetTransformation> final : public 
 	CTransformation const transformation;
 };
 
+#if defined(CRY_AUDIO_USE_OCCLUSION)
 //////////////////////////////////////////////////////////////////////////
 template<>
 struct SObjectRequestData<EObjectRequestType::SetOcclusionType> final : public SObjectRequestDataBase
@@ -246,6 +209,7 @@ struct SObjectRequestData<EObjectRequestType::SetOcclusionRayOffset> final : pub
 
 	float const occlusionRayOffset;
 };
+#endif // CRY_AUDIO_USE_OCCLUSION
 
 //////////////////////////////////////////////////////////////////////////
 template<>
@@ -336,19 +300,19 @@ struct SObjectRequestData<EObjectRequestType::SetEnvironment> final : public SOb
 template<>
 struct SObjectRequestData<EObjectRequestType::ProcessPhysicsRay> final : public SObjectRequestDataBase, public CPoolObject<SObjectRequestData<EObjectRequestType::ProcessPhysicsRay>, stl::PSyncMultiThread>
 {
-	explicit SObjectRequestData(CObject* const pObject_, CRayInfo* const pRayInfo_)
+	explicit SObjectRequestData(CObject* const pObject_, CRayInfo& rayInfo_)
 		: SObjectRequestDataBase(EObjectRequestType::ProcessPhysicsRay, pObject_)
-		, pRayInfo(pRayInfo_)
+		, rayInfo(rayInfo_)
 	{}
 
 	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::ProcessPhysicsRay> const* const pORData)
 		: SObjectRequestDataBase(EObjectRequestType::ProcessPhysicsRay, pORData->pObject)
-		, pRayInfo(pORData->pRayInfo)
+		, rayInfo(pORData->rayInfo)
 	{}
 
 	virtual ~SObjectRequestData() override = default;
 
-	CRayInfo* const pRayInfo;
+	CRayInfo& rayInfo;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -389,7 +353,7 @@ struct SObjectRequestData<EObjectRequestType::ToggleRelativeVelocityTracking> fi
 	bool const isEnabled;
 };
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 template<>
 struct SObjectRequestData<EObjectRequestType::SetName> final : public SObjectRequestDataBase
@@ -408,5 +372,5 @@ struct SObjectRequestData<EObjectRequestType::SetName> final : public SObjectReq
 
 	CryFixedStringT<MaxObjectNameLength> const name;
 };
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 }      // namespace CryAudio

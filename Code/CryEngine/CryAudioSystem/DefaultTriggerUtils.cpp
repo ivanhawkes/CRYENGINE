@@ -2,15 +2,14 @@
 
 #include "stdafx.h"
 #include "DefaultTriggerUtils.h"
-#include "Managers.h"
-#include "EventManager.h"
 #include "Object.h"
-#include "Event.h"
-#include "Common/IEvent.h"
 #include "Common/IImpl.h"
 #include "Common/IObject.h"
 #include "Common/ITriggerConnection.h"
-#include "Common/Logger.h"
+
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+	#include "Common/Logger.h"
+#endif  // CRY_AUDIO_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -20,58 +19,55 @@ void ExecuteDefaultTriggerConnections(Control const* const pControl, TriggerConn
 	STriggerInstanceState triggerInstanceState;
 	triggerInstanceState.triggerId = pControl->GetId();
 
-	for (auto const pConnection : connections)
+	Impl::IObject* const pIObject = g_object.GetImplDataPtr();
+
+	if (pIObject != nullptr)
 	{
-		CEvent* const pEvent = g_eventManager.ConstructEvent();
-		ERequestStatus const activateResult = pConnection->Execute(g_pObject->GetImplDataPtr(), pEvent->m_pImplData);
-
-		if ((activateResult == ERequestStatus::Success) || (activateResult == ERequestStatus::SuccessVirtual) || (activateResult == ERequestStatus::Pending))
+		for (auto const pConnection : connections)
 		{
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			pEvent->SetTriggerName(pControl->GetName());
-			CRY_ASSERT_MESSAGE(pControl->GetDataScope() == EDataScope::Global, "Default controls must always have global data scope! (%s) during %s", pControl->GetName(), __FUNCTION__);
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
+			ETriggerResult const result = pConnection->Execute(pIObject, g_triggerInstanceIdCounter);
 
-			pEvent->m_pObject = g_pObject;
-			pEvent->SetTriggerId(pControl->GetId());
-			pEvent->m_triggerInstanceId = g_triggerInstanceIdCounter;
-
-			if ((activateResult == ERequestStatus::Success) || (activateResult == ERequestStatus::SuccessVirtual))
+			if ((result == ETriggerResult::Playing) || (result == ETriggerResult::Virtual) || (result == ETriggerResult::Pending))
 			{
-				pEvent->m_state = EEventState::Playing;
-				++(triggerInstanceState.numPlayingEvents);
-			}
-			else if (activateResult == ERequestStatus::Pending)
-			{
-				pEvent->m_state = EEventState::Loading;
-				++(triggerInstanceState.numLoadingEvents);
-			}
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+				CRY_ASSERT_MESSAGE(pControl->GetDataScope() == EDataScope::Global, "Default controls must always have global data scope! (%s) during %s", pControl->GetName(), __FUNCTION__);
+#endif    // CRY_AUDIO_USE_PRODUCTION_CODE
 
-			g_pObject->AddEvent(pEvent);
-		}
-		else
-		{
-			g_eventManager.DestructEvent(pEvent);
-
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-			if (activateResult != ERequestStatus::SuccessDoNotTrack)
-			{
-				// No TriggerImpl generated an active event.
-				Cry::Audio::Log(ELogType::Warning, R"(Trigger "%s" failed on object "%s")", pControl->GetName(), g_pObject->m_name.c_str());
+				if (result != ETriggerResult::Pending)
+				{
+					++(triggerInstanceState.numPlayingInstances);
+				}
+				else
+				{
+					++(triggerInstanceState.numPendingInstances);
+				}
 			}
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+			else if (result != ETriggerResult::DoNotTrack)
+			{
+				Cry::Audio::Log(ELogType::Warning, R"(Trigger "%s" failed on object "%s" during %s)", pControl->GetName(), g_object.GetName(), __FUNCTION__);
+			}
+#endif  // CRY_AUDIO_USE_PRODUCTION_CODE
 		}
 	}
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+	else
+	{
+		Cry::Audio::Log(ELogType::Error, "Invalid impl object during %s", __FUNCTION__);
+	}
+#endif  // CRY_AUDIO_USE_PRODUCTION_CODE
 
-	if (triggerInstanceState.numPlayingEvents > 0 || triggerInstanceState.numLoadingEvents > 0)
+	if ((triggerInstanceState.numPlayingInstances > 0) || (triggerInstanceState.numPendingInstances > 0))
 	{
 		triggerInstanceState.flags |= ETriggerStatus::Playing;
-		g_pObject->AddTriggerState(g_triggerInstanceIdCounter++, triggerInstanceState);
+		g_triggerInstanceIdToObject[g_triggerInstanceIdCounter] = &g_object;
+		g_object.AddTriggerState(g_triggerInstanceIdCounter, triggerInstanceState);
+		IncrementTriggerInstanceIdCounter();
 	}
 	else
 	{
 		// All of the events have either finished before we got here or never started, immediately inform the user that the trigger has finished.
-		g_pObject->SendFinishedTriggerInstanceRequest(triggerInstanceState);
+		g_object.SendFinishedTriggerInstanceRequest(triggerInstanceState);
 	}
 }
 } // namespace CryAudio

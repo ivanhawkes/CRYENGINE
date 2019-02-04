@@ -3,7 +3,6 @@
 #include "StdAfx.h"
 #include "MainWindow.h"
 
-#include "Common.h"
 #include "AudioControlsEditorPlugin.h"
 #include "ImplementationManager.h"
 #include "PreferencesDialog.h"
@@ -421,7 +420,7 @@ void CMainWindow::Save()
 //////////////////////////////////////////////////////////////////////////
 void CMainWindow::UpdateAudioSystemData()
 {
-	string levelPath = CryAudio::s_szLevelsFolderName;
+	string levelPath = CryAudio::g_szLevelsFolderName;
 	levelPath += "/";
 	levelPath += GetIEditor()->GetLevelName();
 	gEnv->pAudioSystem->ReloadControlsData(gEnv->pAudioSystem->GetConfigPath(), levelPath.c_str());
@@ -439,8 +438,7 @@ void CMainWindow::RefreshAudioSystem()
 		szLevelName = nullptr;
 	}
 
-	CryAudio::SRequestUserData const data(CryAudio::ERequestFlags::ExecuteBlocking);
-	gEnv->pAudioSystem->Refresh(szLevelName, data);
+	GetISystem()->GetISystemEventDispatcher()->OnSystemEvent(ESYSTEM_EVENT_AUDIO_REFRESH, reinterpret_cast<UINT_PTR>(szLevelName), 0);
 	QGuiApplication::restoreOverrideCursor();
 }
 

@@ -603,7 +603,11 @@ void CVars::Init()
 	              "Sets maximum amount of dynamic light sources");
 
 	DefineConstIntCVar(e_DynamicLights, 1, VF_CHEAT,
-	                   "Activates dynamic light sources");
+	                   "Activates dynamic light sources\n"
+		               "  0 - Disable dynamic lights\n"
+		               "  1 - Enable dynamic lights\n"
+		               "  2 - Show entity debug info on regular lights\n"
+		               "  3 - Show entity debug info on environment probes");
 	DefineConstIntCVar(e_DynamicLightsForceDeferred, 1, VF_CHEAT,
 	                   "Convert all lights to deferred (except sun)");
 	REGISTER_CVAR(e_DynamicLightsFrameIdVisTest, 1, VF_NULL,
@@ -616,8 +620,8 @@ void CVars::Init()
 
 	DefineConstIntCVar(e_Portals, 1, VF_CHEAT,
 	                   "Activates drawing of visareas content (indoors), values 2,3,4 used for debugging");
-	DefineConstIntCVar(e_PortalsBigEntitiesFix, 1, VF_CHEAT,
-	                   "Enables special processing of big entities like vehicles intersecting portals");
+	DefineConstIntCVar(e_PortalsBigEntitiesFix, 0, VF_CHEAT,
+	                   "Enables special processing of big entities like 1p vehicles intersecting portals");
 	DefineConstIntCVar(e_PortalsBlend, 1, VF_CHEAT,
 	                   "Blend lights and cubemaps of vis areas connected to portals 0=off, 1=on");
 	REGISTER_CVAR(e_PortalsMaxRecursion, 8, VF_NULL,
@@ -777,7 +781,7 @@ void CVars::Init()
 	              "Controls objects tree balancing");
 	REGISTER_CVAR(e_ObjectsTreeNodeSizeRatio, 1.f / 16.f, VF_CHEAT,
 	              "Controls objects tree balancing");
-	REGISTER_CVAR(e_ExecuteRenderAsJobMask, BIT(eERType_Brush) | BIT(eERType_Vegetation) | BIT(eERType_Road) | BIT(eERType_WaterVolume), VF_NULL,
+	REGISTER_CVAR(e_ExecuteRenderAsJobMask, BIT(eERType_Brush) | BIT(eERType_MovableBrush) | BIT(eERType_Vegetation) | BIT(eERType_Road) | BIT(eERType_Decal) | BIT(eERType_WaterVolume), VF_NULL,
 	              "Each bit specifies object type to render it in jobs");
 	REGISTER_CVAR(e_ObjectsTreeLevelsDebug, 0, VF_CHEAT,
 	              "If non 0 - render only octree nodes of specified size");
@@ -793,8 +797,6 @@ void CVars::Init()
 	#define DEFAULT_CHECK_OCCLUSION_OUTPUT_QUEUE_SIZE 4096
 #endif
 
-	REGISTER_CVAR(e_CheckOcclusionQueueSize, DEFAULT_CHECK_OCCLUSION_QUEUE_SIZE, VF_NULL,
-	              "Size of queue for data send to check occlusion job");
 	REGISTER_CVAR(e_CheckOcclusionOutputQueueSize, DEFAULT_CHECK_OCCLUSION_OUTPUT_QUEUE_SIZE, VF_NULL,
 	              "Size of queue for data send from check occlusion job");
 	REGISTER_CVAR(e_StatObjTessellationMode, 1, VF_CHEAT,
@@ -1030,9 +1032,6 @@ void CVars::Init()
 	              "Particles detail quality");
 	REGISTER_CVAR(e_ObjShadowCastSpec, 0, VF_NULL,
 	              "Object shadow casting spec. Only objects with Shadow Cast Spec <= e_ObjShadowCastSpec will cast shadows");
-
-	REGISTER_CVAR(e_ParticlesPoolSize, 16 << 10, VF_CHEAT | VF_CHEAT_NOCHECK,
-	              "Particle system pool memory size in KB");
 
 	REGISTER_CVAR(e_ParticlesLights, 1, VF_NULL,
 	              "Allows to have light source attached to every particle\n"

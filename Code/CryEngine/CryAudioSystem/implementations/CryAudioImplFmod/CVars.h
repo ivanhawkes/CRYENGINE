@@ -22,6 +22,7 @@ public:
 	void RegisterVariables();
 	void UnregisterVariables();
 
+	int   m_eventPoolSize = 0;
 	int   m_maxChannels = 0;
 	int   m_enableSynchronousUpdate = 1;
 
@@ -32,9 +33,10 @@ public:
 	float m_dopplerScale = 1.0f;
 	float m_rolloffScale = 1.0f;
 
-#if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 	int m_enableLiveUpdate = 0;
-#endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
+	int m_debugListFilter = 0;
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 };
 
 extern CCVars g_cvars;

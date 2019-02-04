@@ -3,10 +3,12 @@
 #include "stdafx.h"
 #include "Object.h"
 #include "Event.h"
-#include "Parameter.h"
+#include "EventInstance.h"
+#include "Impl.h"
+#include "Listener.h"
+#include "VolumeParameter.h"
 #include "StandaloneFile.h"
-#include "SwitchState.h"
-#include "Trigger.h"
+#include "VolumeState.h"
 #include "SoundEngine.h"
 
 #include <SDL_mixer.h>
@@ -18,11 +20,77 @@ namespace Impl
 namespace SDL_mixer
 {
 //////////////////////////////////////////////////////////////////////////
+void CObject::Update(float const deltaTime)
+{
+	if (!m_eventInstances.empty())
+	{
+		float distance = 0.0f;
+		float angle = 0.0f;
+		GetDistanceAngleToObject(g_pListener->GetTransformation(), m_transformation, distance, angle);
+
+		auto iter(m_eventInstances.begin());
+		auto iterEnd(m_eventInstances.end());
+
+		while (iter != iterEnd)
+		{
+			auto const pEventInstance = *iter;
+
+			if (pEventInstance->IsToBeRemoved())
+			{
+				gEnv->pAudioSystem->ReportFinishedTriggerConnectionInstance(pEventInstance->GetTriggerInstanceId(), ETriggerResult::Playing);
+				g_pImpl->DestructEventInstance(pEventInstance);
+
+				if (iter != (iterEnd - 1))
+				{
+					(*iter) = m_eventInstances.back();
+				}
+
+				m_eventInstances.pop_back();
+				iter = m_eventInstances.begin();
+				iterEnd = m_eventInstances.end();
+			}
+			else
+			{
+				for (auto const channelIndex : pEventInstance->m_channels)
+				{
+					SetChannelPosition(pEventInstance->GetEvent(), channelIndex, distance, angle);
+				}
+
+				++iter;
+			}
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CObject::StopAllTriggers()
+{
+	for (auto const pEventInstance : m_eventInstances)
+	{
+		pEventInstance->Stop();
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
 ERequestStatus CObject::SetName(char const* const szName)
 {
-	// SDL_mixer does not have the concept of objects and with that the debugging of such.
-	// Therefore the name is currently not needed here.
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+	m_name = szName;
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+
 	return ERequestStatus::Success;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CObject::StopEvent(uint32 const id)
+{
+	for (auto const pEventInstance : m_eventInstances)
+	{
+		if (pEventInstance->GetEventId() == id)
+		{
+			pEventInstance->Stop();
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -34,15 +102,15 @@ void CObject::SetVolume(SampleId const sampleId, float const value)
 	{
 		float const volumeMultiplier = GetVolumeMultiplier(this, sampleId);
 
-		for (auto const pEvent : m_events)
+		for (auto const pEventInstance : m_eventInstances)
 		{
-			auto const pTrigger = pEvent->m_pTrigger;
+			auto const pEvent = pEventInstance->GetEvent();
 
-			if ((pTrigger != nullptr) && (pTrigger->GetSampleId() == sampleId))
+			if (pEvent->GetSampleId() == sampleId)
 			{
-				int const mixVolume = GetAbsoluteVolume(pTrigger->GetVolume(), volumeMultiplier);
+				int const mixVolume = GetAbsoluteVolume(pEvent->GetVolume(), volumeMultiplier);
 
-				for (auto const channel : pEvent->m_channels)
+				for (auto const channel : pEventInstance->m_channels)
 				{
 					Mix_Volume(channel, mixVolume);
 				}

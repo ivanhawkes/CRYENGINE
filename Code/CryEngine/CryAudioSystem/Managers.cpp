@@ -2,9 +2,7 @@
 
 #include "stdafx.h"
 #include "Managers.h"
-#include "EventManager.h"
 #include "FileManager.h"
-#include "ObjectManager.h"
 #include "ListenerManager.h"
 #include "FileCacheManager.h"
 #include "EventListenerManager.h"
@@ -12,9 +10,7 @@
 
 namespace CryAudio
 {
-CEventManager g_eventManager;
 CFileManager g_fileManager;
-CObjectManager g_objectManager;
 CListenerManager g_listenerManager;
 CFileCacheManager g_fileCacheManager;
 CEventListenerManager g_eventListenerManager;

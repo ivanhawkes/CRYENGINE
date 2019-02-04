@@ -69,7 +69,7 @@ public:
 	virtual void                   SetLocation(const QuatTS& loc) override;
 	virtual QuatTS                 GetLocation() const override                       { return m_location; }
 	virtual void                   SetTarget(const ParticleTarget& target) override;
-	virtual void                   Update() override;
+	virtual void                   Update() override                                  { UpdateState(); }
 	virtual void                   EmitParticle(const EmitParticleData* pData = NULL)  override;
 
 	// pfx2 IParticleEmitter
@@ -80,6 +80,7 @@ public:
 	void                      InitSeed();
 	void                      DebugRender(const SRenderingPassInfo& passInfo) const;
 	void                      CheckUpdated();
+	bool                      UpdateState();
 	bool                      UpdateParticles();
 	void                      SyncUpdateParticles();
 	void                      PostUpdate();
@@ -120,7 +121,7 @@ public:
 	uint                      GetParticleSpec() const;
 
 	void                      SetChanged();
-	bool                      IsStable() const             { return m_time > m_timeStable && !m_realBounds.IsReset(); }
+	bool                      IsStable() const             { return m_time > m_timeStable && !m_bounds.IsReset(); }
 	bool                      IsIndependent() const        { return Unique(); }
 	bool                      HasParticles() const;
 	bool                      HasBounds() const            { return m_bounds.GetVolume() > 0.0f; }
@@ -128,7 +129,7 @@ public:
 	bool                      NeedsUpdate() const          { return ThreadMode() < 3 || !IsStable() || WasRenderedLastFrame(); }
 
 private:
-	void     UpdateBounds(bool allowShrink);
+	void     UpdateBounds();
 	void     UpdateRuntimes();
 	void     UpdateFromEntity();
 	IEntity* GetEmitGeometryEntity() const;

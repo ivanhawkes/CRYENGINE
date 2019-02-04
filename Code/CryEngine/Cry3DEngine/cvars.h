@@ -121,7 +121,6 @@ struct CVars : public Cry3DEngineBase
 
 	int    e_PermanentRenderObjects;
 	int    e_TerrainTextureStreamingPoolItemsNum;
-	int    e_ParticlesPoolSize;
 	int    e_ParticlesVertexPoolSize;
 	int    e_ParticlesIndexPoolSize;
 	int    e_ParticlesProfile;
@@ -265,7 +264,6 @@ struct CVars : public Cry3DEngineBase
 	int   e_StreamInstancesMaxTasks;
 	float e_StreamInstancesDistRatio;
 	int   e_CheckOcclusion;
-	int   e_CheckOcclusionQueueSize;
 	int   e_CheckOcclusionOutputQueueSize;
 	DeclareConstIntCVar(e_WaterVolumes, e_WaterVolumesDefault);
 	DeclareConstFloatCVar(e_TerrainOcclusionCullingPrecisionDistRatio);
@@ -289,7 +287,7 @@ struct CVars : public Cry3DEngineBase
 	DeclareConstFloatCVar(e_CameraRotationSpeed);
 	float  e_ScreenShotMapSizeY;
 	int    e_GI;
-	DeclareConstIntCVar(e_PortalsBigEntitiesFix, 1);
+	DeclareConstIntCVar(e_PortalsBigEntitiesFix, 0);
 	int    e_SQTestBegin;
 	int    e_VegetationSprites;
 	ICVar* e_CameraGoto;

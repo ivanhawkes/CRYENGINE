@@ -9,7 +9,7 @@
 #include "../CryCore/CryEnumMacro.h"
 #include "../CryCore/CryCrc32.h"
 
-#define AUDIO_SYSTEM_DATA_ROOT "audio"
+#define CRY_AUDIO_DATA_ROOT "audio"
 
 namespace CryAudio
 {
@@ -19,90 +19,86 @@ using SwitchStateId = IdType;
 using EnvironmentId = IdType;
 using PreloadRequestId = IdType;
 using FileEntryId = IdType;
-using TriggerImplId = IdType;
 using TriggerInstanceId = IdType;
 using EnumFlagsType = IdType;
 using AuxObjectId = IdType;
 using LibraryId = IdType;
 
-static constexpr ControlId InvalidControlId = 0;
-static constexpr SwitchStateId InvalidSwitchStateId = 0;
-static constexpr EnvironmentId InvalidEnvironmentId = 0;
-static constexpr PreloadRequestId InvalidPreloadRequestId = 0;
-static constexpr FileEntryId InvalidFileEntryId = 0;
-static constexpr TriggerImplId InvalidTriggerImplId = 0;
-static constexpr TriggerInstanceId InvalidTriggerInstanceId = 0;
-static constexpr EnumFlagsType InvalidEnumFlagType = 0;
-static constexpr AuxObjectId InvalidAuxObjectId = 0;
-static constexpr AuxObjectId DefaultAuxObjectId = 1;
-static constexpr uint8 MaxInfoStringLength = 128;
-static constexpr uint8 MaxControlNameLength = 128;
-static constexpr uint8 MaxFileNameLength = 128;
-static constexpr uint16 MaxFilePathLength = 256;
-static constexpr uint16 MaxObjectNameLength = 256;
-static constexpr uint16 MaxMiscStringLength = 512;
-static constexpr uint32 InvalidCRC32 = 0xFFFFffff;
-static constexpr float FloatEpsilon = 1.0e-3f;
+constexpr ControlId InvalidControlId = 0;
+constexpr SwitchStateId InvalidSwitchStateId = 0;
+constexpr EnvironmentId InvalidEnvironmentId = 0;
+constexpr PreloadRequestId InvalidPreloadRequestId = 0;
+constexpr FileEntryId InvalidFileEntryId = 0;
+constexpr TriggerInstanceId InvalidTriggerInstanceId = 0;
+constexpr AuxObjectId InvalidAuxObjectId = 0;
+constexpr AuxObjectId DefaultAuxObjectId = 1;
+constexpr uint8 MaxInfoStringLength = 128;
+constexpr uint8 MaxControlNameLength = 128;
+constexpr uint8 MaxFileNameLength = 128;
+constexpr uint16 MaxFilePathLength = 256;
+constexpr uint16 MaxObjectNameLength = 256;
+constexpr uint16 MaxMiscStringLength = 512;
+constexpr uint32 InvalidCRC32 = 0xFFFFffff;
+constexpr float FloatEpsilon = 1.0e-3f;
 
-static constexpr char const* s_szLoseFocusTriggerName = "lose_focus";
-static constexpr char const* s_szGetFocusTriggerName = "get_focus";
-static constexpr char const* s_szMuteAllTriggerName = "mute_all";
-static constexpr char const* s_szUnmuteAllTriggerName = "unmute_all";
-static constexpr char const* s_szPauseAllTriggerName = "pause_all";
-static constexpr char const* s_szResumeAllTriggerName = "resume_all";
-static constexpr char const* s_szGlobalPreloadRequestName = "global_audio_system_preload";
+constexpr char const* g_szLoseFocusTriggerName = "lose_focus";
+constexpr char const* g_szGetFocusTriggerName = "get_focus";
+constexpr char const* g_szMuteAllTriggerName = "mute_all";
+constexpr char const* g_szUnmuteAllTriggerName = "unmute_all";
+constexpr char const* g_szPauseAllTriggerName = "pause_all";
+constexpr char const* g_szResumeAllTriggerName = "resume_all";
+constexpr char const* g_szGlobalPreloadRequestName = "global_audio_system_preload";
 
-static constexpr char const* s_szDefaultLibraryName = "default_controls";
-static constexpr char const* s_szRootNodeTag = "AudioSystemData";
-static constexpr char const* s_szImplDataNodeTag = "ImplData";
-static constexpr char const* s_szEditorDataTag = "EditorData";
-static constexpr char const* s_szTriggersNodeTag = "Triggers";
-static constexpr char const* s_szParametersNodeTag = "Parameters";
-static constexpr char const* s_szSwitchesNodeTag = "Switches";
-static constexpr char const* s_szPreloadsNodeTag = "Preloads";
-static constexpr char const* s_szEnvironmentsNodeTag = "Environments";
-static constexpr char const* s_szSettingsNodeTag = "Settings";
+constexpr char const* g_szDefaultLibraryName = "default_controls";
+constexpr char const* g_szRootNodeTag = "AudioSystemData";
+constexpr char const* g_szImplDataNodeTag = "ImplData";
+constexpr char const* g_szEditorDataTag = "EditorData";
+constexpr char const* g_szTriggersNodeTag = "Triggers";
+constexpr char const* g_szParametersNodeTag = "Parameters";
+constexpr char const* g_szSwitchesNodeTag = "Switches";
+constexpr char const* g_szPreloadsNodeTag = "Preloads";
+constexpr char const* g_szEnvironmentsNodeTag = "Environments";
+constexpr char const* g_szSettingsNodeTag = "Settings";
 
-static constexpr char const* s_szTriggerTag = "Trigger";
-static constexpr char const* s_szParameterTag = "Parameter";
-static constexpr char const* s_szSwitchTag = "Switch";
-static constexpr char const* s_szStateTag = "State";
-static constexpr char const* s_szEnvironmentTag = "Environment";
-static constexpr char const* s_szPreloadRequestTag = "PreloadRequest";
-static constexpr char const* s_szSettingTag = "Setting";
-static constexpr char const* s_szPlatformTag = "Platform";
-static constexpr char const* s_szEventTag = "Event";
+constexpr char const* g_szTriggerTag = "Trigger";
+constexpr char const* g_szParameterTag = "Parameter";
+constexpr char const* g_szSwitchTag = "Switch";
+constexpr char const* g_szStateTag = "State";
+constexpr char const* g_szEnvironmentTag = "Environment";
+constexpr char const* g_szPreloadRequestTag = "PreloadRequest";
+constexpr char const* g_szSettingTag = "Setting";
+constexpr char const* g_szPlatformTag = "Platform";
 
-static constexpr char const* s_szNameAttribute = "name";
-static constexpr char const* s_szVersionAttribute = "version";
-static constexpr char const* s_szNumTriggersAttribute = "triggers";
-static constexpr char const* s_szNumParametersAttribute = "parameters";
-static constexpr char const* s_szNumSwitchesAttribute = "switches";
-static constexpr char const* s_szNumStatesAttribute = "states";
-static constexpr char const* s_szNumEnvironmentsAttribute = "environments";
-static constexpr char const* s_szNumPreloadsAttribute = "preloads";
-static constexpr char const* s_szNumSettingsAttribute = "settings";
-static constexpr char const* s_szNumFilesAttribute = "files";
-static constexpr char const* s_szTypeAttribute = "type";
+constexpr char const* g_szNameAttribute = "name";
+constexpr char const* g_szVersionAttribute = "version";
+constexpr char const* g_szNumTriggersAttribute = "triggers";
+constexpr char const* g_szNumParametersAttribute = "parameters";
+constexpr char const* g_szNumSwitchesAttribute = "switches";
+constexpr char const* g_szNumStatesAttribute = "states";
+constexpr char const* g_szNumEnvironmentsAttribute = "environments";
+constexpr char const* g_szNumPreloadsAttribute = "preloads";
+constexpr char const* g_szNumSettingsAttribute = "settings";
+constexpr char const* g_szNumFilesAttribute = "files";
+constexpr char const* g_szTypeAttribute = "type";
 
-static constexpr char const* s_szDataLoadType = "autoload";
+constexpr char const* g_szDataLoadType = "autoload";
 
-static constexpr char const* s_szConfigFolderName = "ace";
-static constexpr char const* s_szAssetsFolderName = "assets";
-static constexpr char const* s_szLevelsFolderName = "levels";
+constexpr char const* g_szConfigFolderName = "ace";
+constexpr char const* g_szAssetsFolderName = "assets";
+constexpr char const* g_szLevelsFolderName = "levels";
 
 /**
  * A utility function to convert a string value to an Id.
  * @param szSource - string to convert
  * @return a 32bit CRC computed on the lower case version of the passed string
  */
-static constexpr IdType StringToId(char const* const szSource)
+constexpr IdType StringToId(char const* const szSource)
 {
 	return static_cast<IdType>(CCrc32::ComputeLowercase_CompileTime(szSource));
 }
 
-static constexpr PreloadRequestId GlobalPreloadRequestId = StringToId(s_szGlobalPreloadRequestName);
-static constexpr LibraryId DefaultLibraryId = StringToId(s_szDefaultLibraryName);
+constexpr PreloadRequestId GlobalPreloadRequestId = StringToId(g_szGlobalPreloadRequestName);
+constexpr LibraryId DefaultLibraryId = StringToId(g_szDefaultLibraryName);
 
 /**
  * @enum CryAudio::ERequestFlags
@@ -139,14 +135,10 @@ enum class ERequestStatus : EnumFlagsType
 {
 	None,                    /**< Used to initialize variables of this type and to determine whether the variable was properly handled. */
 	Success,                 /**< Returned if the request processed successfully. */
-	SuccessDoNotTrack,       /**< Audio middleware implementations return this if during ExecuteTrigger an event was actually stopped so that internal data can be immediately freed. */
 	SuccessNeedsRefresh,     /**< Audio middleware implementations return this if after an action they require to be refreshed. */
-	SuccessVirtual,          /**< Audio middleware implementations return this if the event is virtual after executing a trigger. */
 	PartialSuccess,          /**< Returned if the outcome of the request wasn't a complete success but also not complete failure. */
 	Failure,                 /**< Returned if the request failed to process. */
 	Pending,                 /**< Returned if the request was delivered but final execution is pending. It's then kept in the system until its status changed. */
-	FailureInvalidControlId, /**< Returned if the request referenced a non-existing audio control. */
-	FailureInvalidRequest,   /**< Returned if the request type is unknown/unhandled. */
 };
 
 /**
@@ -161,6 +153,24 @@ enum class ERequestResult : EnumFlagsType
 	None,    /**< Used to initialize variables of this type and to determine whether the variable was properly handled. */
 	Success, /**< Set if the request processed successfully. */
 	Failure, /**< Set if the request failed to process. */
+};
+
+/**
+ * @enum CryAudio::ETriggerResult
+ * @brief A strongly typed enum class representing a list of possible outcomes of a trigger connection being executed.
+ * @var CryAudio::ETriggerResult::Playing
+ * @var CryAudio::ETriggerResult::Virtual
+ * @var CryAudio::ETriggerResult::Pending
+ * @var CryAudio::ETriggerResult::DoNotTrack
+ * @var CryAudio::ETriggerResult::Failure
+ */
+enum class ETriggerResult : EnumFlagsType
+{
+	Playing,    /**< Returned if the trigger connection sucessfully started and is playing. */
+	Virtual,    /**< Returned if the trigger connection sucessfully started and is virtual. */
+	Pending,    /**< Returned if the trigger connection is pending. */
+	DoNotTrack, /**< Returned if the trigger connection should not get tracked from the audio system. */
+	Failure,    /**< Returned if the trigger connection fails to start. */
 };
 
 /**

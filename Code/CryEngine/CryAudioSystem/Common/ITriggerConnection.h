@@ -24,45 +24,20 @@ struct ITriggerConnection
 
 	/**
 	 * Activate a trigger on this object.
-	 * @param pIObject - implementation-specific object to execute the trigger on
-	 * @param pIEvent - implementation-specific event corresponding to this particular trigger execution
-	 * @return ERequestStatus - indicates the outcome of underlying process
+	 * @param pIObject - implementation-specific object to execute the trigger on.The audio system guarantees that this is never a null pointer.
+	 * @param triggerInstanceId - instance id of the executed trigger.
+	 * @return ETriggerResult - indicates the outcome of underlying process
+	 * @see Stop
 	 */
-	virtual ERequestStatus Execute(IObject* const pIObject, IEvent* const pIEvent) = 0;
+	virtual ETriggerResult Execute(IObject* const pIObject, TriggerInstanceId const triggerInstanceId) = 0;
 
 	/**
-	 * Load the metadata and media needed by the audio middleware to execute this trigger
-	 * Loading Triggers manually is only necessary if their data have not been loaded via PreloadRequests
-	 * @return ERequestStatus::Success if the the data was successfully loaded, ERequestStatus::Failure otherwise
-	 * @see Unload, LoadAsync, UnloadAsync
+	 * Stops a trigger on this object.
+	 * @param pIObject - implementation-specific object to stop the trigger on. The audio system guarantees that this is never a null pointer.
+	 * @return void
+	 * @see Execute
 	 */
-	virtual ERequestStatus Load() const = 0;
-
-	/**
-	 * Release the metadata and media needed by the audio middleware to execute this trigger
-	 * Unloading Triggers manually is only necessary if their data are not managed via PreloadRequests.
-	 * @return ERequestStatus::Success if the the data was successfully unloaded, ERequestStatus::Failure otherwise
-	 * @see Load, LoadAsync, UnloadAsync
-	 */
-	virtual ERequestStatus Unload() const = 0;
-
-	/**
-	 * Load the metadata and media needed by the audio middleware to execute this trigger asynchronously.
-	 * Loading Triggers manually is only necessary if their data have not been loaded via PreloadRequests.
-	 * @param pIEvent - The callback called once the loading is done must report that this event is finished.
-	 * @return ERequestStatus::Success if the the request was successfully sent to the audio middleware, ERequestStatus::Failure otherwise
-	 * @see Load, Unload, UnloadAsync
-	 */
-	virtual ERequestStatus LoadAsync(IEvent* const pIEvent) const = 0;
-
-	/**
-	 * Release the metadata and media needed by the audio middleware to execute this trigger asynchronously.
-	 * Unloading Triggers manually is only necessary if their data have not been loaded via PreloadRequests.
-	 * @param pIEvent - The callback called once the loading is done must report that this event is finished.
-	 * @return ERequestStatus::Success if the the request was successfully sent to the audio middleware, ERequestStatus::Failure otherwise
-	 * @see Load, Unload, LoadAsync
-	 */
-	virtual ERequestStatus UnloadAsync(IEvent* const pIEvent) const = 0;
+	virtual void Stop(IObject* const pIObject) = 0;
 };
 } // namespace Impl
 } // namespace CryAudio

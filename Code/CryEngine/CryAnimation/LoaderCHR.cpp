@@ -144,6 +144,8 @@ void CryCHRLoader::EndStreamSkel(IReadStream* pStream)
 
 void CryCHRLoader::StreamOnComplete(IReadStream* pStream, unsigned nError)
 {
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_CHR, 0, "CryCHRLoader::StreamOnComplete");
+
 	if (m_pModelSkel)
 	{
 		CModelMesh* pModelMesh = m_pModelSkel->GetModelMesh();
@@ -469,7 +471,7 @@ bool CDefaultSkeleton::LoadNewSKEL(const char* szFilePath, uint32 nLoadingFlags)
 			m_arrBackupPhysInfo[j] = m_arrModelJoints[j].m_PhysInfoRef[0];
 		m_arrBackupPhyBoneMeshes = pSkinningInfo->m_arrPhyBoneMeshes;
 		m_arrBackupBoneEntities = pSkinningInfo->m_arrBoneEntities;
-		if (!SetupPhysicalProxies(m_arrBackupPhyBoneMeshes, m_arrBackupBoneEntities, pMaterial, szFilePath))
+		if (!SetupPhysicalProxies(m_arrBackupPhyBoneMeshes, m_arrBackupBoneEntities, pMaterial, szFilePath, CA_None))
 			return 0;
 	}
 	if (isSkeletonValid == 0)

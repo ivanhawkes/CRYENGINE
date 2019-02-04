@@ -127,6 +127,7 @@ void CParticleEmitter::Render(const struct SRendParams& rParam, const SRendering
 		jobManager.ScheduleUpdateEmitter(this);
 	}
 
+	// TODO: make it threadsafe and add it to e_ExecuteRenderAsJobMask
 	CLightVolumesMgr& lightVolumeManager = m_p3DEngine->GetLightVolumeManager();
 	SRenderContext renderContext(rParam, passInfo);
 	renderContext.m_lightVolumeId = lightVolumeManager.RegisterVolume(GetPos(), GetBBox().GetRadius() * 0.5f, rParam.nClipVolumeStencilRef, passInfo);
@@ -152,19 +153,33 @@ void CParticleEmitter::Render(const struct SRendParams& rParam, const SRendering
 
 void CParticleEmitter::CheckUpdated()
 {
-	if (m_effectEditVersion < 0 || (gEnv->IsEditing() && m_effectEditVersion != m_pEffectOriginal->GetEditVersion() + m_emitterEditVersion))
+	CRY_PFX2_PROFILE_DETAIL;
+	if (m_effectEditVersion != m_pEffectOriginal->GetEditVersion() + m_emitterEditVersion)
 	{
 		m_attributeInstance.Reset(m_pEffectOriginal->GetAttributeTable());
 		UpdateRuntimes();
 	}
-	if (m_time > m_timeDeath)
-		if (m_timeUpdated < m_time)
-			m_alive = false;
 }
 
-void CParticleEmitter::Update()
+bool CParticleEmitter::UpdateState()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
+
+	if (m_time > m_timeDeath && m_timeUpdated < m_time)
+		m_alive = false;
+	if (!m_alive)
+	{
+		if (!m_componentRuntimesFor.empty())
+			Clear();
+		return false;
+	}
+
+	if (m_componentRuntimesFor.empty())
+	{
+		if (!m_active)
+			return false;
+		UpdateRuntimes();
+	}
 
 	if (m_attributeInstance.WasChanged())
 		SetChanged();
@@ -200,6 +215,8 @@ void CParticleEmitter::Update()
 
 	if (HasBounds())
 		UpdatePhysEnv();
+
+	return true;
 }
 
 namespace Bounds
@@ -208,10 +225,11 @@ namespace Bounds
 	float ShrinkThreshold = 0.125f;
 }
 
-void CParticleEmitter::UpdateBounds(bool allowShrink)
+void CParticleEmitter::UpdateBounds()
 {
 	CRY_PFX2_PROFILE_DETAIL;
 
+	const bool allowShrink = ThreadMode() < 3 || !IsStable();
 	if (!m_registered || (allowShrink && m_realBounds.GetVolume() <= m_bounds.GetVolume() * Bounds::ShrinkThreshold))
 	{
 		m_boundsChanged = true;
@@ -233,6 +251,7 @@ void CParticleEmitter::UpdateBounds(bool allowShrink)
 			m_nextBounds = AABB(center - extent, center + extent);
 		}
 	}
+	m_realBounds.Reset();
 }
 
 void CParticleEmitter::AddBounds(const AABB& bb)
@@ -259,7 +278,6 @@ bool CParticleEmitter::UpdateParticles()
 	auto& stats = GetPSystem()->GetThreadData().statsCPU;
 	stats.emitters.updated ++;
 
-	m_realBounds = AABB::RESET;
 	m_alive = false;
 	for (auto& pRuntime : m_componentRuntimes)
 	{
@@ -270,8 +288,7 @@ bool CParticleEmitter::UpdateParticles()
 
 	PostUpdate();
 
-	const bool allowShrink = !m_pEffect->RenderDeferred.size() || !WasRenderedLastFrame();
-	UpdateBounds(allowShrink);
+	UpdateBounds();
 	m_timeUpdated = m_time;
 	return true;
 }
@@ -300,8 +317,6 @@ void CParticleEmitter::RenderDeferred(const SRenderContext& renderContext)
 			pComponent->RenderDeferred(*pRuntime, renderContext);
 		}
 	}
-
-	UpdateBounds(true);
 }
 
 void CParticleEmitter::DebugRender(const SRenderingPassInfo& passInfo) const
@@ -452,18 +467,24 @@ void CParticleEmitter::Activate(bool activate)
 	}
 	else
 	{
+		int hasParticles = 0;
 		for (auto& pRuntime : m_componentRuntimes)
 		{
 			if (!pRuntime->IsChild())
 				pRuntime->RemoveAllSubInstances();
+			hasParticles += pRuntime->HasParticles();
 		}
-		m_timeStable = m_timeDeath = m_time + timings.m_stableTime;
+		m_timeDeath = m_time;
+		if (hasParticles)
+			m_timeDeath += timings.m_stableTime;
+		m_timeStable = m_timeDeath;
 	}
 }
 
 void CParticleEmitter::Restart()
 {
-	Activate(false);
+	if (m_time != m_timeCreated)
+		Activate(false);
 	Activate(true);
 }
 
@@ -473,7 +494,8 @@ void CParticleEmitter::SetChanged()
 	if (m_pEffect)
 	{
 		const auto& timings = m_pEffect->GetTimings();
-		m_timeStable = max(timings.m_equilibriumTime, m_time + timings.m_stableTime);
+		const float frameTime = gEnv->pTimer->GetFrameTime() * GetTimeScale();
+		m_timeStable = max(timings.m_equilibriumTime, m_time + timings.m_stableTime) + frameTime;
 	}
 }
 
@@ -736,6 +758,7 @@ ILINE void CParticleEmitter::UpdateFromEntity()
 
 IEntity* CParticleEmitter::GetEmitGeometryEntity() const
 {
+	CRY_PFX2_PROFILE_DETAIL;
 	IEntity* pEntity = m_entityOwner;
 	if (pEntity)
 	{
@@ -748,12 +771,14 @@ IEntity* CParticleEmitter::GetEmitGeometryEntity() const
 
 void CParticleEmitter::UpdateEmitGeomFromEntity()
 {
+	CRY_PFX2_PROFILE_DETAIL;
 	IEntity* pEntity = GetEmitGeometryEntity();
 	m_emitterGeometrySlot = m_emitterGeometry.Set(pEntity);
 }
 
 QuatTS CParticleEmitter::GetEmitterGeometryLocation() const
 {
+	CRY_PFX2_PROFILE_DETAIL;
 	if (IEntity* pEntity = GetEmitGeometryEntity())
 	{
 		SEntitySlotInfo slotInfo;
@@ -822,6 +847,7 @@ void CParticleEmitter::Unregister()
 
 void CParticleEmitter::Clear()
 {
+	CRY_PFX2_PROFILE_DETAIL;
 	m_alive = m_active = false;
 	Unregister();
 	m_componentRuntimes.clear();

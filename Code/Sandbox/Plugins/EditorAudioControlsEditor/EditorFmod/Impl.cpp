@@ -42,31 +42,31 @@ EItemType TagToType(char const* const szTag)
 {
 	EItemType type = EItemType::None;
 
-	if (_stricmp(szTag, CryAudio::s_szEventTag) == 0)
+	if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szEventTag) == 0)
 	{
 		type = EItemType::Event;
 	}
-	else if (_stricmp(szTag, CryAudio::Impl::Fmod::s_szParameterTag) == 0)
+	else if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szParameterTag) == 0)
 	{
 		type = EItemType::Parameter;
 	}
-	else if (_stricmp(szTag, CryAudio::Impl::Fmod::s_szKeyTag) == 0)
+	else if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szKeyTag) == 0)
 	{
 		type = EItemType::Key;
 	}
-	else if (_stricmp(szTag, CryAudio::Impl::Fmod::s_szSnapshotTag) == 0)
+	else if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szSnapshotTag) == 0)
 	{
 		type = EItemType::Snapshot;
 	}
-	else if (_stricmp(szTag, CryAudio::Impl::Fmod::s_szFileTag) == 0)
+	else if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szFileTag) == 0)
 	{
 		type = EItemType::Bank;
 	}
-	else if (_stricmp(szTag, CryAudio::Impl::Fmod::s_szBusTag) == 0)
+	else if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szBusTag) == 0)
 	{
 		type = EItemType::Return;
 	}
-	else if (_stricmp(szTag, CryAudio::Impl::Fmod::s_szVcaTag) == 0)
+	else if (_stricmp(szTag, CryAudio::Impl::Fmod::g_szVcaTag) == 0)
 	{
 		type = EItemType::VCA;
 	}
@@ -115,25 +115,25 @@ char const* TypeToTag(EItemType const type)
 	switch (type)
 	{
 	case EItemType::Event:
-		szTag = CryAudio::s_szEventTag;
+		szTag = CryAudio::Impl::Fmod::g_szEventTag;
 		break;
 	case EItemType::Key:
-		szTag = CryAudio::Impl::Fmod::s_szKeyTag;
+		szTag = CryAudio::Impl::Fmod::g_szKeyTag;
 		break;
 	case EItemType::Parameter:
-		szTag = CryAudio::Impl::Fmod::s_szParameterTag;
+		szTag = CryAudio::Impl::Fmod::g_szParameterTag;
 		break;
 	case EItemType::Snapshot:
-		szTag = CryAudio::Impl::Fmod::s_szSnapshotTag;
+		szTag = CryAudio::Impl::Fmod::g_szSnapshotTag;
 		break;
 	case EItemType::Bank:
-		szTag = CryAudio::Impl::Fmod::s_szFileTag;
+		szTag = CryAudio::Impl::Fmod::g_szFileTag;
 		break;
 	case EItemType::Return:
-		szTag = CryAudio::Impl::Fmod::s_szBusTag;
+		szTag = CryAudio::Impl::Fmod::g_szBusTag;
 		break;
 	case EItemType::VCA:
-		szTag = CryAudio::Impl::Fmod::s_szVcaTag;
+		szTag = CryAudio::Impl::Fmod::g_szVcaTag;
 		break;
 	default:
 		szTag = nullptr;
@@ -185,10 +185,15 @@ void CountConnections(EAssetType const assetType, EItemType const itemType)
 	switch (itemType)
 	{
 	case EItemType::Event: // Intentional fall-through.
-	case EItemType::Key:   // Intentional fall-through.
+	case EItemType::Key:
+		{
+			++g_connections.events;
+			break;
+		}
+
 	case EItemType::Snapshot:
 		{
-			++g_connections.triggers;
+			++g_connections.snapshots;
 			break;
 		}
 	case EItemType::Parameter:
@@ -202,12 +207,12 @@ void CountConnections(EAssetType const assetType, EItemType const itemType)
 				}
 			case EAssetType::State:
 				{
-					++g_connections.switchStates;
+					++g_connections.parameterStates;
 					break;
 				}
 			case EAssetType::Environment:
 				{
-					++g_connections.envParameters;
+					++g_connections.parameterEnvironments;
 					break;
 				}
 			default:
@@ -222,7 +227,7 @@ void CountConnections(EAssetType const assetType, EItemType const itemType)
 			{
 			case EAssetType::Parameter:
 				{
-					++g_connections.vcaParameters;
+					++g_connections.vcas;
 					break;
 				}
 			case EAssetType::State:
@@ -238,12 +243,12 @@ void CountConnections(EAssetType const assetType, EItemType const itemType)
 		}
 	case EItemType::Return:
 		{
-			++g_connections.envBuses;
+			++g_connections.returns;
 			break;
 		}
 	case EItemType::Bank:
 		{
-			++g_connections.files;
+			++g_connections.banks;
 			break;
 		}
 	default:
@@ -282,8 +287,8 @@ CItem* SearchForItem(CItem* const pItem, string const& name, EItemType const typ
 //////////////////////////////////////////////////////////////////////////
 CImpl::CImpl()
 	: m_pDataPanel(nullptr)
-	, m_projectPath(AUDIO_SYSTEM_DATA_ROOT "/fmod_project")
-	, m_assetsPath(AUDIO_SYSTEM_DATA_ROOT "/" + string(CryAudio::Impl::Fmod::s_szImplFolderName) + "/" + string(CryAudio::s_szAssetsFolderName))
+	, m_projectPath(CRY_AUDIO_DATA_ROOT "/fmod_project")
+	, m_assetsPath(CRY_AUDIO_DATA_ROOT "/" + string(CryAudio::Impl::Fmod::g_szImplFolderName) + "/" + string(CryAudio::g_szAssetsFolderName))
 	, m_localizedAssetsPath(m_assetsPath)
 	, m_szUserSettingsFile("%USER%/audiocontrolseditor_fmod.user")
 {
@@ -561,20 +566,14 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 
 		if (type != EItemType::None)
 		{
-			string name = pNode->getAttr(CryAudio::s_szNameAttribute);
-			string localizedAttribute = pNode->getAttr(CryAudio::Impl::Fmod::s_szLocalizedAttribute);
+			string name = pNode->getAttr(CryAudio::g_szNameAttribute);
+
 #if defined (USE_BACKWARDS_COMPATIBILITY)
 			if (name.IsEmpty() && pNode->haveAttr("fmod_name"))
 			{
 				name = pNode->getAttr("fmod_name");
 			}
-
-			if (localizedAttribute.IsEmpty() && pNode->haveAttr("fmod_localized"))
-			{
-				localizedAttribute = pNode->getAttr("fmod_localized");
-			}
 #endif      // USE_BACKWARDS_COMPATIBILITY
-			bool const isLocalized = (localizedAttribute.compareNoCase(CryAudio::Impl::Fmod::s_szTrueValue) == 0);
 
 			CItem* pItem = nullptr;
 
@@ -593,6 +592,15 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 				// We want to keep that connection even if it's not in the middleware as the user could
 				// be using the engine without the fmod project
 
+				string localizedAttribute = pNode->getAttr(CryAudio::Impl::Fmod::g_szLocalizedAttribute);
+#if defined (USE_BACKWARDS_COMPATIBILITY)
+				if (localizedAttribute.IsEmpty() && pNode->haveAttr("fmod_localized"))
+				{
+					localizedAttribute = pNode->getAttr("fmod_localized");
+				}
+#endif        // USE_BACKWARDS_COMPATIBILITY
+				bool const isLocalized = (localizedAttribute.compareNoCase(CryAudio::Impl::Fmod::g_szTrueValue) == 0);
+
 				string path = "";
 				int const pos = name.find_last_of("/");
 
@@ -602,14 +610,14 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 					name = name.substr(pos + 1, name.length() - pos);
 				}
 
-				pItem = CreatePlaceholderItem(name, type, CreatePlaceholderFolderPath(path));
+				pItem = CreatePlaceholderItem(name, type, isLocalized, CreatePlaceholderFolderPath(path));
 			}
 
 			switch (type)
 			{
 			case EItemType::Event:
 				{
-					string actionType = pNode->getAttr(CryAudio::s_szTypeAttribute);
+					string actionType = pNode->getAttr(CryAudio::g_szTypeAttribute);
 
 #if defined (USE_BACKWARDS_COMPATIBILITY)
 					if (actionType.IsEmpty() && pNode->haveAttr("fmod_event_type"))
@@ -620,15 +628,15 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 
 					CEventConnection::EActionType eventActionType = CEventConnection::EActionType::Start;
 
-					if (actionType.compareNoCase(CryAudio::Impl::Fmod::s_szStopValue) == 0)
+					if (actionType.compareNoCase(CryAudio::Impl::Fmod::g_szStopValue) == 0)
 					{
 						eventActionType = CEventConnection::EActionType::Stop;
 					}
-					else if (actionType.compareNoCase(CryAudio::Impl::Fmod::s_szPauseValue) == 0)
+					else if (actionType.compareNoCase(CryAudio::Impl::Fmod::g_szPauseValue) == 0)
 					{
 						eventActionType = CEventConnection::EActionType::Pause;
 					}
-					else if (actionType.compareNoCase(CryAudio::Impl::Fmod::s_szResumeValue) == 0)
+					else if (actionType.compareNoCase(CryAudio::Impl::Fmod::g_szResumeValue) == 0)
 					{
 						eventActionType = CEventConnection::EActionType::Resume;
 					}
@@ -638,14 +646,14 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 				break;
 			case EItemType::Key:
 				{
-					string const eventName = pNode->getAttr(CryAudio::Impl::Fmod::s_szEventAttribute);
+					string const eventName = pNode->getAttr(CryAudio::Impl::Fmod::g_szEventAttribute);
 
 					pIConnection = static_cast<IConnection*>(new CKeyConnection(pItem->GetId(), eventName));
 				}
 				break;
 			case EItemType::Snapshot:
 				{
-					string actionType = pNode->getAttr(CryAudio::s_szTypeAttribute);
+					string actionType = pNode->getAttr(CryAudio::g_szTypeAttribute);
 
 #if defined (USE_BACKWARDS_COMPATIBILITY)
 					if (actionType.IsEmpty() && pNode->haveAttr("fmod_event_type"))
@@ -654,7 +662,7 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 					}
 #endif          // USE_BACKWARDS_COMPATIBILITY
 
-					CSnapshotConnection::EActionType const snapshotActionType = (actionType.compareNoCase(CryAudio::Impl::Fmod::s_szStopValue) == 0) ? CSnapshotConnection::EActionType::Stop : CSnapshotConnection::EActionType::Start;
+					CSnapshotConnection::EActionType const snapshotActionType = (actionType.compareNoCase(CryAudio::Impl::Fmod::g_szStopValue) == 0) ? CSnapshotConnection::EActionType::Stop : CSnapshotConnection::EActionType::Start;
 					pIConnection = static_cast<IConnection*>(new CSnapshotConnection(pItem->GetId(), snapshotActionType));
 				}
 				break;
@@ -663,12 +671,12 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 				{
 					if ((assetType == EAssetType::Parameter) || (assetType == EAssetType::Environment))
 					{
-						float mult = CryAudio::Impl::Fmod::s_defaultParamMultiplier;
-						float shift = CryAudio::Impl::Fmod::s_defaultParamShift;
+						float mult = CryAudio::Impl::Fmod::g_defaultParamMultiplier;
+						float shift = CryAudio::Impl::Fmod::g_defaultParamShift;
 
-						if (pNode->haveAttr(CryAudio::Impl::Fmod::s_szMutiplierAttribute))
+						if (pNode->haveAttr(CryAudio::Impl::Fmod::g_szMutiplierAttribute))
 						{
-							string const value = pNode->getAttr(CryAudio::Impl::Fmod::s_szMutiplierAttribute);
+							string const value = pNode->getAttr(CryAudio::Impl::Fmod::g_szMutiplierAttribute);
 							mult = (float)std::atof(value.c_str());
 						}
 #if defined (USE_BACKWARDS_COMPATIBILITY)
@@ -678,9 +686,9 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 							mult = (float)std::atof(value.c_str());
 						}
 #endif            // USE_BACKWARDS_COMPATIBILITY
-						if (pNode->haveAttr(CryAudio::Impl::Fmod::s_szShiftAttribute))
+						if (pNode->haveAttr(CryAudio::Impl::Fmod::g_szShiftAttribute))
 						{
-							string const value = pNode->getAttr(CryAudio::Impl::Fmod::s_szShiftAttribute);
+							string const value = pNode->getAttr(CryAudio::Impl::Fmod::g_szShiftAttribute);
 							shift = (float)std::atof(value.c_str());
 						}
 #if defined (USE_BACKWARDS_COMPATIBILITY)
@@ -695,7 +703,7 @@ IConnection* CImpl::CreateConnectionFromXMLNode(XmlNodeRef pNode, EAssetType con
 					}
 					else if (assetType == EAssetType::State)
 					{
-						string valueString = pNode->getAttr(CryAudio::Impl::Fmod::s_szValueAttribute);
+						string valueString = pNode->getAttr(CryAudio::Impl::Fmod::g_szValueAttribute);
 #if defined (USE_BACKWARDS_COMPATIBILITY)
 						if (valueString.IsEmpty() && pNode->haveAttr("fmod_value"))
 						{
@@ -741,7 +749,7 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(IConnection const* const pIConnect
 		{
 		case EItemType::Event:
 			{
-				pNode->setAttr(CryAudio::s_szNameAttribute, Utils::GetPathName(pItem, m_rootItem));
+				pNode->setAttr(CryAudio::g_szNameAttribute, Utils::GetPathName(pItem, m_rootItem));
 				auto const pEventConnection = static_cast<CEventConnection const*>(pIConnection);
 
 				if (pEventConnection != nullptr)
@@ -750,50 +758,50 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(IConnection const* const pIConnect
 
 					if (actionType == CEventConnection::EActionType::Stop)
 					{
-						pNode->setAttr(CryAudio::s_szTypeAttribute, CryAudio::Impl::Fmod::s_szStopValue);
+						pNode->setAttr(CryAudio::g_szTypeAttribute, CryAudio::Impl::Fmod::g_szStopValue);
 					}
 					else if (actionType == CEventConnection::EActionType::Pause)
 					{
-						pNode->setAttr(CryAudio::s_szTypeAttribute, CryAudio::Impl::Fmod::s_szPauseValue);
+						pNode->setAttr(CryAudio::g_szTypeAttribute, CryAudio::Impl::Fmod::g_szPauseValue);
 					}
 					else if (actionType == CEventConnection::EActionType::Resume)
 					{
-						pNode->setAttr(CryAudio::s_szTypeAttribute, CryAudio::Impl::Fmod::s_szResumeValue);
+						pNode->setAttr(CryAudio::g_szTypeAttribute, CryAudio::Impl::Fmod::g_szResumeValue);
 					}
 				}
 			}
 			break;
 		case EItemType::Key:
 			{
-				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
+				pNode->setAttr(CryAudio::g_szNameAttribute, pItem->GetName());
 				auto const pKeyConnection = static_cast<CKeyConnection const*>(pIConnection);
 
 				if (pKeyConnection != nullptr)
 				{
-					pNode->setAttr(CryAudio::Impl::Fmod::s_szEventAttribute, pKeyConnection->GetEvent());
+					pNode->setAttr(CryAudio::Impl::Fmod::g_szEventAttribute, pKeyConnection->GetEvent());
 				}
 			}
 			break;
 		case EItemType::Snapshot:
 			{
-				pNode->setAttr(CryAudio::s_szNameAttribute, Utils::GetPathName(pItem, m_rootItem));
+				pNode->setAttr(CryAudio::g_szNameAttribute, Utils::GetPathName(pItem, m_rootItem));
 				auto const pEventConnection = static_cast<CSnapshotConnection const*>(pIConnection);
 
 				if ((pEventConnection != nullptr) && (pEventConnection->GetActionType() == CSnapshotConnection::EActionType::Stop))
 				{
-					pNode->setAttr(CryAudio::s_szTypeAttribute, CryAudio::Impl::Fmod::s_szStopValue);
+					pNode->setAttr(CryAudio::g_szTypeAttribute, CryAudio::Impl::Fmod::g_szStopValue);
 				}
 			}
 			break;
 		case EItemType::Return:
 			{
-				pNode->setAttr(CryAudio::s_szNameAttribute, Utils::GetPathName(pItem, m_rootItem));
+				pNode->setAttr(CryAudio::g_szNameAttribute, Utils::GetPathName(pItem, m_rootItem));
 			}
 			break;
 		case EItemType::Parameter: // Intentional fall-through.
 		case EItemType::VCA:
 			{
-				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
+				pNode->setAttr(CryAudio::g_szNameAttribute, pItem->GetName());
 
 				if (assetType == EAssetType::State)
 				{
@@ -801,32 +809,32 @@ XmlNodeRef CImpl::CreateXMLNodeFromConnection(IConnection const* const pIConnect
 
 					if (pStateConnection != nullptr)
 					{
-						pNode->setAttr(CryAudio::Impl::Fmod::s_szValueAttribute, pStateConnection->GetValue());
+						pNode->setAttr(CryAudio::Impl::Fmod::g_szValueAttribute, pStateConnection->GetValue());
 					}
 				}
 				else if ((assetType == EAssetType::Parameter) || (assetType == EAssetType::Environment))
 				{
 					auto const pParamConnection = static_cast<CParameterConnection const*>(pIConnection);
 
-					if (pParamConnection->GetMultiplier() != CryAudio::Impl::Fmod::s_defaultParamMultiplier)
+					if (pParamConnection->GetMultiplier() != CryAudio::Impl::Fmod::g_defaultParamMultiplier)
 					{
-						pNode->setAttr(CryAudio::Impl::Fmod::s_szMutiplierAttribute, pParamConnection->GetMultiplier());
+						pNode->setAttr(CryAudio::Impl::Fmod::g_szMutiplierAttribute, pParamConnection->GetMultiplier());
 					}
 
-					if (pParamConnection->GetShift() != CryAudio::Impl::Fmod::s_defaultParamShift)
+					if (pParamConnection->GetShift() != CryAudio::Impl::Fmod::g_defaultParamShift)
 					{
-						pNode->setAttr(CryAudio::Impl::Fmod::s_szShiftAttribute, pParamConnection->GetShift());
+						pNode->setAttr(CryAudio::Impl::Fmod::g_szShiftAttribute, pParamConnection->GetShift());
 					}
 				}
 			}
 			break;
 		case EItemType::Bank:
 			{
-				pNode->setAttr(CryAudio::s_szNameAttribute, pItem->GetName());
+				pNode->setAttr(CryAudio::g_szNameAttribute, pItem->GetName());
 
 				if ((pItem->GetFlags() & EItemFlags::IsLocalized) != 0)
 				{
-					pNode->setAttr(CryAudio::Impl::Fmod::s_szLocalizedAttribute, CryAudio::Impl::Fmod::s_szTrueValue);
+					pNode->setAttr(CryAudio::Impl::Fmod::g_szLocalizedAttribute, CryAudio::Impl::Fmod::g_szTrueValue);
 				}
 			}
 			break;
@@ -844,51 +852,57 @@ XmlNodeRef CImpl::SetDataNode(char const* const szTag)
 	XmlNodeRef pNode = GetISystem()->CreateXmlNode(szTag);
 	bool hasConnections = false;
 
-	if (g_connections.triggers > 0)
+	if (g_connections.events > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szTriggersAttribute, g_connections.triggers);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szEventsAttribute, g_connections.events);
 		hasConnections = true;
 	}
 
 	if (g_connections.parameters > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szParametersAttribute, g_connections.parameters);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szParametersAttribute, g_connections.parameters);
 		hasConnections = true;
 	}
 
-	if (g_connections.switchStates > 0)
+	if (g_connections.parameterEnvironments > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szSwitchStatesAttribute, g_connections.switchStates);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szParameterEnvironmentsAttribute, g_connections.parameterEnvironments);
 		hasConnections = true;
 	}
 
-	if (g_connections.envBuses > 0)
+	if (g_connections.parameterStates > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szEnvBusesAttribute, g_connections.envBuses);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szParameterStatesAttribute, g_connections.parameterStates);
 		hasConnections = true;
 	}
 
-	if (g_connections.envParameters > 0)
+	if (g_connections.snapshots > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szEnvParametersAttribute, g_connections.envParameters);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szSnapshotsAttribute, g_connections.snapshots);
 		hasConnections = true;
 	}
 
-	if (g_connections.vcaParameters > 0)
+	if (g_connections.returns > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szVcaParametersAttribute, g_connections.vcaParameters);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szReturnsAttribute, g_connections.returns);
+		hasConnections = true;
+	}
+
+	if (g_connections.vcas > 0)
+	{
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szVcasAttribute, g_connections.vcas);
 		hasConnections = true;
 	}
 
 	if (g_connections.vcaStates > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szVcaStatesAttribute, g_connections.vcaStates);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szVcaStatesAttribute, g_connections.vcaStates);
 		hasConnections = true;
 	}
 
-	if (g_connections.files > 0)
+	if (g_connections.banks > 0)
 	{
-		pNode->setAttr(CryAudio::Impl::Fmod::s_szFilesAttribute, g_connections.files);
+		pNode->setAttr(CryAudio::Impl::Fmod::g_szBanksAttribute, g_connections.banks);
 		hasConnections = true;
 	}
 
@@ -989,7 +1003,7 @@ void CImpl::SetImplInfo(SImplInfo& implInfo)
 	SetLocalizedAssetsPath();
 
 	implInfo.name = m_implName.c_str();
-	implInfo.folderName = CryAudio::Impl::Fmod::s_szImplFolderName;
+	implInfo.folderName = CryAudio::Impl::Fmod::g_szImplFolderName;
 	implInfo.projectPath = m_projectPath.c_str();
 	implInfo.assetsPath = m_assetsPath.c_str();
 	implInfo.localizedAssetsPath = m_localizedAssetsPath.c_str();
@@ -1016,17 +1030,17 @@ void CImpl::SetLocalizedAssetsPath()
 			m_localizedAssetsPath += "/";
 			m_localizedAssetsPath += szLanguage;
 			m_localizedAssetsPath += "/";
-			m_localizedAssetsPath += AUDIO_SYSTEM_DATA_ROOT;
+			m_localizedAssetsPath += CRY_AUDIO_DATA_ROOT;
 			m_localizedAssetsPath += "/";
-			m_localizedAssetsPath += CryAudio::Impl::Fmod::s_szImplFolderName;
+			m_localizedAssetsPath += CryAudio::Impl::Fmod::g_szImplFolderName;
 			m_localizedAssetsPath += "/";
-			m_localizedAssetsPath += CryAudio::s_szAssetsFolderName;
+			m_localizedAssetsPath += CryAudio::g_szAssetsFolderName;
 		}
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-CItem* CImpl::CreatePlaceholderItem(string const& name, EItemType const type, CItem* const pParent)
+CItem* CImpl::CreatePlaceholderItem(string const& name, EItemType const type, bool const isLocalized, CItem* const pParent)
 {
 	ControlId const id = Utils::GetId(type, name, pParent, m_rootItem);
 
@@ -1034,7 +1048,8 @@ CItem* CImpl::CreatePlaceholderItem(string const& name, EItemType const type, CI
 
 	if (pItem == nullptr)
 	{
-		pItem = new CItem(name, id, type, EItemFlags::IsPlaceHolder);
+		EItemFlags const flags = isLocalized ? (EItemFlags::IsPlaceHolder | EItemFlags::IsLocalized) : EItemFlags::IsPlaceHolder;
+		pItem = new CItem(name, id, type, flags);
 
 		if (pParent != nullptr)
 		{
@@ -1117,7 +1132,7 @@ CItem* CImpl::CreatePlaceholderFolderPath(string const& path)
 
 		if (pFoundChild == nullptr)
 		{
-			pFoundChild = CreatePlaceholderItem(token, EItemType::Folder, pItem);
+			pFoundChild = CreatePlaceholderItem(token, EItemType::Folder, false, pItem);
 		}
 
 		pItem = pFoundChild;

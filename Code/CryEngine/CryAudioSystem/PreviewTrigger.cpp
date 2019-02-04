@@ -1,25 +1,23 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
-#include "PreviewTrigger.h"
-#include "Common.h"
-#include "Managers.h"
-#include "EventManager.h"
-#include "Object.h"
-#include "Event.h"
-#include "Common/IEvent.h"
-#include "Common/IImpl.h"
-#include "Common/IObject.h"
-#include "Common/ITriggerConnection.h"
-#include "Common/ITriggerInfo.h"
-#include "Common/Logger.h"
+
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+	#include "PreviewTrigger.h"
+
+	#include "Common.h"
+	#include "Object.h"
+	#include "Common/IImpl.h"
+	#include "Common/IObject.h"
+	#include "Common/ITriggerConnection.h"
+	#include "Common/ITriggerInfo.h"
+	#include "Common/Logger.h"
 
 namespace CryAudio
 {
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
 //////////////////////////////////////////////////////////////////////////
 CPreviewTrigger::CPreviewTrigger()
-	: Control(PreviewTriggerId, EDataScope::Global, s_szPreviewTriggerName)
+	: Control(g_previewTriggerId, EDataScope::Global, g_szPreviewTriggerName)
 	, m_pConnection(nullptr)
 {
 }
@@ -42,44 +40,39 @@ void CPreviewTrigger::Execute(Impl::ITriggerInfo const& triggerInfo)
 		STriggerInstanceState triggerInstanceState;
 		triggerInstanceState.triggerId = GetId();
 
-		CEvent* const pEvent = g_eventManager.ConstructEvent();
-		ERequestStatus const activateResult = m_pConnection->Execute(g_previewObject.GetImplDataPtr(), pEvent->m_pImplData);
+		Impl::IObject* const pIObject = g_previewObject.GetImplDataPtr();
 
-		if (activateResult == ERequestStatus::Success || activateResult == ERequestStatus::Pending)
+		if (pIObject != nullptr)
 		{
-			pEvent->SetTriggerName(GetName());
-			pEvent->m_pObject = &g_previewObject;
-			pEvent->SetTriggerId(GetId());
-			pEvent->m_triggerInstanceId = g_triggerInstanceIdCounter;
+			ETriggerResult const result = m_pConnection->Execute(pIObject, g_triggerInstanceIdCounter);
 
-			if (activateResult == ERequestStatus::Success)
+			if ((result == ETriggerResult::Playing) || (result == ETriggerResult::Virtual) || (result == ETriggerResult::Pending))
 			{
-				pEvent->m_state = EEventState::Playing;
-				++(triggerInstanceState.numPlayingEvents);
+				if (result != ETriggerResult::Pending)
+				{
+					++(triggerInstanceState.numPlayingInstances);
+				}
+				else
+				{
+					++(triggerInstanceState.numPendingInstances);
+				}
 			}
-			else if (activateResult == ERequestStatus::Pending)
+			else if (result != ETriggerResult::DoNotTrack)
 			{
-				pEvent->m_state = EEventState::Loading;
-				++(triggerInstanceState.numLoadingEvents);
+				Cry::Audio::Log(ELogType::Warning, R"(Trigger "%s" failed on object "%s" during %s)", GetName(), g_previewObject.GetName(), __FUNCTION__);
 			}
-
-			g_previewObject.AddEvent(pEvent);
 		}
 		else
 		{
-			g_eventManager.DestructEvent(pEvent);
-
-			if (activateResult != ERequestStatus::SuccessDoNotTrack)
-			{
-				// No TriggerImpl generated an active event.
-				Cry::Audio::Log(ELogType::Warning, R"(Trigger "%s" failed on object "%s")", GetName(), g_previewObject.m_name.c_str());
-			}
+			Cry::Audio::Log(ELogType::Error, "Invalid impl object during %s", __FUNCTION__);
 		}
 
-		if (triggerInstanceState.numPlayingEvents > 0 || triggerInstanceState.numLoadingEvents > 0)
+		if ((triggerInstanceState.numPlayingInstances > 0) || (triggerInstanceState.numPendingInstances > 0))
 		{
 			triggerInstanceState.flags |= ETriggerStatus::Playing;
-			g_previewObject.AddTriggerState(g_triggerInstanceIdCounter++, triggerInstanceState);
+			g_triggerInstanceIdToObject[g_triggerInstanceIdCounter] = &g_previewObject;
+			g_previewObject.AddTriggerState(g_triggerInstanceIdCounter, triggerInstanceState);
+			IncrementTriggerInstanceIdCounter();
 		}
 		else
 		{
@@ -90,20 +83,10 @@ void CPreviewTrigger::Execute(Impl::ITriggerInfo const& triggerInfo)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CPreviewTrigger::Stop()
-{
-	for (auto const pEvent : g_previewObject.GetActiveEvents())
-	{
-		CRY_ASSERT_MESSAGE((pEvent != nullptr) && pEvent->IsPlaying(), "Invalid event during %s", __FUNCTION__);
-		pEvent->Stop();
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
 void CPreviewTrigger::Clear()
 {
 	g_pIImpl->DestructTriggerConnection(m_pConnection);
 	m_pConnection = nullptr;
 }
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
 }      // namespace CryAudio
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE

@@ -9,11 +9,6 @@ namespace pfx2
 
 MakeDataType(EPDT_Tile, uint8);
 
-SERIALIZATION_ENUM_DEFINE(EVariantMode, ,
-                          Random,
-                          Ordered
-                          )
-
 class CFeatureAppearanceTextureTiling : public CParticleFeature
 {
 public:
@@ -38,8 +33,6 @@ public:
 		if (VariantCount() > 1)
 		{
 			pComponent->AddParticleData(EPDT_Tile);
-			if (m_variantMode == EVariantMode::Ordered)
-				pComponent->AddParticleData(EPDT_SpawnId);
 			pComponent->InitParticles.add(this);
 		}
 
@@ -50,10 +43,10 @@ public:
 	{
 		CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
 
-		if (m_variantMode == EVariantMode::Random)
-			AssignTiles<EVariantMode::Random>(runtime);
+		if (m_variantMode == EDistribution::Random)
+			AssignTiles<EDistribution::Random>(runtime);
 		else
-			AssignTiles<EVariantMode::Ordered>(runtime);
+			AssignTiles<EDistribution::Ordered>(runtime);
 	}
 
 	virtual void Serialize(Serialization::IArchive& ar) override
@@ -72,27 +65,27 @@ private:
 	UBytePos          m_tilesY;
 	UBytePos          m_tileCount;
 	UByte             m_firstTile;
-	EVariantMode      m_variantMode = EVariantMode::Random;
+	EDistribution     m_variantMode = EDistribution::Random;
 	STextureAnimation m_anim;
 
-	template<EVariantMode mode>
+	template<EDistribution mode>
 	void AssignTiles(CParticleComponentRuntime& runtime)
 	{
 		CParticleContainer& container = runtime.GetContainer();
 		TIOStream<uint8> tiles = container.IOStream(EPDT_Tile);
-		TIStream<uint> spawnIds = container.IStream(EPDT_SpawnId);
-		uint variantCount = VariantCount();
+		const uint spawnIdOffset = container.GetSpawnIdOffset();
+		const uint variantCount = VariantCount();
 
 		for (auto particleId : runtime.SpawnedRange())
 		{
 			uint32 tile;
-			if (mode == EVariantMode::Random)
+			if (mode == EDistribution::Random)
 			{
 				tile = runtime.Chaos().Rand();
 			}
-			else if (mode == EVariantMode::Ordered)
+			else if (mode == EDistribution::Ordered)
 			{
-				tile = spawnIds.Load(particleId);
+				tile = particleId + spawnIdOffset;
 			}
 			tile %= variantCount;
 			tile *= m_anim.m_frameCount;

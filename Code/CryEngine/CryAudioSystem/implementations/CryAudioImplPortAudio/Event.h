@@ -2,37 +2,26 @@
 
 #pragma once
 
-#include <IEvent.h>
-#include <portaudio.h>
-#include <atomic>
+#include <ITriggerConnection.h>
 #include <PoolObject.h>
-
-// Forward declare C struct
-struct SNDFILE_tag;
-using SNDFILE = struct SNDFILE_tag;
+#include <portaudio.h>
 
 namespace CryAudio
 {
-class CEvent;
-
 namespace Impl
 {
 namespace PortAudio
 {
-enum class EEventState
-{
-	None                  = 0,
-	Playing               = BIT(0),
-	Stopped               = BIT(1),
-	Done                  = BIT(2),
-	WaitingForDestruction = BIT(3),
-};
-
-class CObject;
-
-class CEvent final : public IEvent, public CPoolObject<CEvent, stl::PSyncNone>
+class CEvent final : public ITriggerConnection, public CPoolObject<CEvent, stl::PSyncNone>
 {
 public:
+
+	enum class EActionType : EnumFlagsType
+	{
+		None,
+		Start,
+		Stop,
+	};
 
 	CEvent() = delete;
 	CEvent(CEvent const&) = delete;
@@ -40,34 +29,43 @@ public:
 	CEvent& operator=(CEvent const&) = delete;
 	CEvent& operator=(CEvent&&) = delete;
 
-	explicit CEvent(CryAudio::CEvent& event_);
-	virtual ~CEvent() override;
+	explicit CEvent(
+		uint32 const pathId_,
+		int const numLoops_,
+		double const sampleRate_,
+		EActionType const actionType_,
+		char const* const szFilePath,
+		PaStreamParameters const& streamParameters_,
+		char const* const szFolder,
+		char const* const szName,
+		bool const isLocalized)
+		: pathId(pathId_)
+		, numLoops(numLoops_)
+		, sampleRate(sampleRate_)
+		, actionType(actionType_)
+		, filePath(szFilePath)
+		, streamParameters(streamParameters_)
+		, m_folder(szFolder)
+		, m_name(szName)
+		, m_isLocalized(isLocalized)
+	{}
 
-	bool Execute(
-		int const numLoops,
-		double const sampleRate,
-		CryFixedStringT<MaxFilePathLength> const& filePath,
-		PaStreamParameters const& streamParameters);
-	void Update();
+	virtual ~CEvent() override = default;
 
-	// CryAudio::Impl::IEvent
-	virtual ERequestStatus Stop() override;
-	// ~CryAudio::Impl::IEvent
+	// CryAudio::Impl::ITriggerConnection
+	virtual ETriggerResult Execute(IObject* const pIObject, TriggerInstanceId const triggerInstanceId) override;
+	virtual void           Stop(IObject* const pIObject) override;
+	// ~CryAudio::Impl::ITriggerConnection
 
-	SNDFILE*                 pSndFile;
-	PaStream*                pStream;
-	void*                    pData;
-	CObject*                 pObject;
-	int                      numChannels;
-	int                      remainingLoops;
-	CryAudio::CEvent&        event;
-	uint32                   pathId;
-	PaSampleFormat           sampleFormat;
-	std::atomic<EEventState> state;
-
-private:
-
-	void Reset();
+	uint32 const                                pathId;
+	int const                                   numLoops;
+	double                                      sampleRate;
+	EActionType const                           actionType;
+	CryFixedStringT<MaxFilePathLength>          filePath;
+	PaStreamParameters                          streamParameters;
+	CryFixedStringT<MaxFilePathLength> const    m_folder;
+	CryFixedStringT<MaxControlNameLength> const m_name;
+	bool const                                  m_isLocalized;
 };
 } // namespace PortAudio
 } // namespace Impl

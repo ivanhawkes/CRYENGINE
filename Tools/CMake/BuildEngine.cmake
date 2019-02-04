@@ -108,6 +108,7 @@ if(ORBIS)
 	if(NOT RENDERER_GNM)
 		set(RENDERER_DX11 ON)
 	endif()
+	option(GNM_VALIDATION "Enable GNM validation" ON)
 endif()
 
 if(WINDOWS OR LINUX OR ANDROID)
@@ -121,6 +122,9 @@ if(WINDOWS OR LINUX OR ANDROID)
 endif()
 
 # Audio
+# Occlusion is enabled by default
+option(AUDIO_USE_OCCLUSION "Enable" ON)
+
 function(try_to_enable_fmod)
 if (NOT ORBIS)
 	if (DEFINED AUDIO_FMOD)

@@ -2,22 +2,18 @@
 
 #include "stdafx.h"
 #include "Object.h"
-#include "Common.h"
 #include "CVars.h"
-#include "Environment.h"
-#include "Event.h"
+#include "EventInstance.h"
+#include "Impl.h"
 #include "Listener.h"
-#include "Parameter.h"
-#include "SwitchState.h"
-#include "Trigger.h"
 
-#include <Logger.h>
 #include <AK/SoundEngine/Common/AkSoundEngine.h>
 
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	#include "Debug.h"
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#include <Logger.h>
+	#include <DebugStyle.h>
 	#include <CryRenderer/IRenderAuxGeom.h>
-#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -25,55 +21,27 @@ namespace Impl
 {
 namespace Wwise
 {
-static constexpr char const* s_szAbsoluteVelocityParameterName = "absolute_velocity";
-static AkRtpcID const s_absoluteVelocityParameterId = AK::SoundEngine::GetIDFromString(s_szAbsoluteVelocityParameterName);
+constexpr char const* g_szAbsoluteVelocityParameterName = "absolute_velocity";
+static AkRtpcID const s_absoluteVelocityParameterId = AK::SoundEngine::GetIDFromString(g_szAbsoluteVelocityParameterName);
 
-static constexpr char const* s_szRelativeVelocityParameterName = "relative_velocity";
-static AkRtpcID const s_relativeVelocityParameterId = AK::SoundEngine::GetIDFromString(s_szRelativeVelocityParameterName);
-
-//////////////////////////////////////////////////////////////////////////
-void SetParameterById(AkRtpcID const rtpcId, AkRtpcValue const value, AkGameObjectID const objectId)
-{
-	AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(rtpcId, value, objectId);
-
-	if (!IS_WWISE_OK(wwiseResult))
-	{
-		Cry::Audio::Log(
-			ELogType::Warning,
-			"Wwise - failed to set the Rtpc %" PRISIZE_T " to value %f on object %" PRISIZE_T,
-			rtpcId,
-			value,
-			objectId);
-	}
-}
+constexpr char const* g_szRelativeVelocityParameterName = "relative_velocity";
+static AkRtpcID const s_relativeVelocityParameterId = AK::SoundEngine::GetIDFromString(g_szRelativeVelocityParameterName);
 
 //////////////////////////////////////////////////////////////////////////
 CObject::CObject(AkGameObjectID const id, CTransformation const& transformation, char const* const szName)
-	: m_id(id)
-	, m_needsToUpdateEnvironments(false)
-	, m_needsToUpdateVirtualStates(false)
-	, m_flags(EObjectFlags::None)
-	, m_distanceToListener(0.0f)
+	: CBaseObject(id, szName, transformation.GetPosition())
+	, m_needsToUpdateAuxSends(false)
 	, m_previousRelativeVelocity(0.0f)
 	, m_previousAbsoluteVelocity(0.0f)
 	, m_transformation(transformation)
-	, m_position(transformation.GetPosition())
 	, m_previousPosition(transformation.GetPosition())
 	, m_velocity(ZERO)
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	, m_name(szName)
-#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
 {
 	m_auxSendValues.reserve(4);
 
 	AkSoundPosition soundPos;
 	FillAKObjectPosition(transformation, soundPos);
-	AKRESULT const wwiseResult = AK::SoundEngine::SetPosition(id, soundPos);
-
-	if (!IS_WWISE_OK(wwiseResult))
-	{
-		Cry::Audio::Log(ELogType::Warning, "Wwise - CObject constructor failed with AKRESULT: %d", wwiseResult);
-	}
+	AK::SoundEngine::SetPosition(id, soundPos);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -89,29 +57,12 @@ CObject::~CObject()
 //////////////////////////////////////////////////////////////////////////
 void CObject::Update(float const deltaTime)
 {
-	SetDistanceToListener();
-
-	if (m_needsToUpdateEnvironments)
+	if (m_needsToUpdateAuxSends)
 	{
-		PostEnvironmentAmounts();
+		SetAuxSendValues();
 	}
 
-#if !defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	// Always update in production code for debug draw.
-	if ((m_flags& EObjectFlags::UpdateVirtualStates) != 0)
-#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
-	{
-		if (m_needsToUpdateVirtualStates)
-		{
-			for (auto const pEvent : m_events)
-			{
-				if (!pEvent->m_toBeRemoved)
-				{
-					pEvent->UpdateVirtualState(m_distanceToListener);
-				}
-			}
-		}
-	}
+	CBaseObject::Update(deltaTime);
 
 	if (deltaTime > 0.0f)
 	{
@@ -141,128 +92,51 @@ void CObject::SetTransformation(CTransformation const& transformation)
 
 		AkSoundPosition soundPos;
 		FillAKObjectPosition(m_transformation, soundPos);
-		AKRESULT const wwiseResult = AK::SoundEngine::SetPosition(m_id, soundPos);
-
-		if (!IS_WWISE_OK(wwiseResult))
-		{
-			Cry::Audio::Log(ELogType::Warning, "Wwise - CObject::SetTransformation failed with AKRESULT: %d", wwiseResult);
-		}
+		AK::SoundEngine::SetPosition(m_id, soundPos);
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObject::SetOcclusion(float const occlusion)
 {
-	if (m_id != g_globalObjectId)
+	if (g_listenerId != AK_INVALID_GAME_OBJECT)
 	{
-		if (g_listenerId != AK_INVALID_GAME_OBJECT)
-		{
-			AKRESULT const wwiseResult = AK::SoundEngine::SetObjectObstructionAndOcclusion(
-				m_id,
-				g_listenerId,                     // Set occlusion for only the default listener for now.
-				static_cast<AkReal32>(occlusion), // The occlusion value is currently used on obstruction as well until a correct obstruction value is calculated.
-				static_cast<AkReal32>(occlusion));
-
-			if (!IS_WWISE_OK(wwiseResult))
-			{
-				Cry::Audio::Log(
-					ELogType::Warning,
-					"Wwise - failed to set Obstruction %f and Occlusion %f on object %" PRISIZE_T,
-					occlusion,
-					occlusion,
-					m_id);
-			}
-		}
-		else
-		{
-			Cry::Audio::Log(ELogType::Warning, "Wwise - invalid listener Id during %s!", __FUNCTION__);
-		}
+		AK::SoundEngine::SetObjectObstructionAndOcclusion(
+			m_id,
+			g_listenerId,                     // Set occlusion for only the default listener for now.
+			static_cast<AkReal32>(occlusion), // The occlusion value is currently used on obstruction as well until a correct obstruction value is calculated.
+			static_cast<AkReal32>(occlusion));
 	}
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
 	else
 	{
-		Cry::Audio::Log(ELogType::Error, "Trying to set occlusion value on the global object!");
+		Cry::Audio::Log(ELogType::Warning, "Wwise - invalid listener Id during %s!", __FUNCTION__);
 	}
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObject::SetOcclusionType(EOcclusionType const occlusionType)
 {
-	if (m_id != g_globalObjectId)
+	// For disabling ray casts of the propagation processor if an object is virtual.
+	if ((occlusionType != EOcclusionType::None) && (occlusionType != EOcclusionType::Ignore))
 	{
-		// For disabling ray casts of the propagation processor if an object is virtual.
-		if ((occlusionType != EOcclusionType::None) && (occlusionType != EOcclusionType::Ignore))
-		{
-			m_flags |= EObjectFlags::UpdateVirtualStates;
-		}
-		else
-		{
-			m_flags &= ~EObjectFlags::UpdateVirtualStates;
-		}
+		m_flags |= EObjectFlags::UpdateVirtualStates;
 	}
 	else
 	{
-		Cry::Audio::Log(ELogType::Error, "Trying to set occlusion type on the global object!");
+		m_flags &= ~EObjectFlags::UpdateVirtualStates;
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::AddEvent(CEvent* const pEvent)
+void CObject::SetAuxSendValues()
 {
-	m_events.push_back(pEvent);
-}
+	std::size_t const numAuxSends = m_auxSendValues.size();
 
-//////////////////////////////////////////////////////////////////////////
-void CObject::RemoveEvent(CEvent* const pEvent)
-{
-	if (!stl::find_and_erase(m_events, pEvent))
+	if (numAuxSends > 0)
 	{
-		Cry::Audio::Log(ELogType::Error, "Tried to remove an event from an object that does not own that event");
-	}
-
-	m_needsToUpdateVirtualStates = ((m_id != g_globalObjectId) && !m_events.empty());
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CObject::StopAllTriggers()
-{
-	// If the user wants to stop all triggers on the global object we want to stop them only on that particular object and not globally!
-	AkGameObjectID const objectId = (m_id != AK_INVALID_GAME_OBJECT) ? m_id : g_globalObjectId;
-	AK::SoundEngine::StopAll(objectId);
-}
-
-//////////////////////////////////////////////////////////////////////////
-ERequestStatus CObject::SetName(char const* const szName)
-{
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-	StopAllTriggers();
-
-	AKRESULT wwiseResult = AK::SoundEngine::UnregisterGameObj(m_id);
-	CRY_ASSERT(wwiseResult == AK_Success);
-
-	wwiseResult = AK::SoundEngine::RegisterGameObj(m_id, szName);
-	CRY_ASSERT(wwiseResult == AK_Success);
-
-	m_name = szName;
-
-	return ERequestStatus::SuccessNeedsRefresh;
-#else
-	return ERequestStatus::Success;
-#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CObject::PostEnvironmentAmounts()
-{
-	std::size_t const numEnvironments = m_auxSendValues.size();
-
-	if (numEnvironments > 0)
-	{
-		AKRESULT const wwiseResult = AK::SoundEngine::SetGameObjectAuxSendValues(m_id, &m_auxSendValues[0], static_cast<AkUInt32>(numEnvironments));
-
-		if (!IS_WWISE_OK(wwiseResult))
-		{
-			Cry::Audio::Log(ELogType::Warning, "Wwise - SetGameObjectAuxSendValues failed on object %" PRISIZE_T " with AKRESULT: %d", m_id, wwiseResult);
-		}
+		AK::SoundEngine::SetGameObjectAuxSendValues(m_id, &m_auxSendValues[0], static_cast<AkUInt32>(numAuxSends));
 
 		m_auxSendValues.erase(
 			std::remove_if(
@@ -274,15 +148,38 @@ void CObject::PostEnvironmentAmounts()
 			);
 	}
 
-	m_needsToUpdateEnvironments = false;
+	m_needsToUpdateAuxSends = false;
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::SetDistanceToListener()
+void CObject::SetAuxBusSend(AkAuxBusID const busId, float const amount)
 {
-	m_distanceToListener = m_position.GetDistance(g_pListener->GetPosition());
-}
+	static float const envEpsilon = 0.0001f;
+	bool addAuxSendValue = true;
 
+	for (auto& auxSendValue : m_auxSendValues)
+	{
+		if (auxSendValue.auxBusID == busId)
+		{
+			addAuxSendValue = false;
+
+			if (fabs(auxSendValue.fControlValue - amount) > envEpsilon)
+			{
+				auxSendValue.fControlValue = amount;
+				m_needsToUpdateAuxSends = true;
+			}
+
+			break;
+		}
+	}
+
+	if (addAuxSendValue)
+	{
+		// This temporary copy is needed until AK equips AkAuxSendValue with a ctor.
+		m_auxSendValues.emplace_back(AkAuxSendValue{ g_listenerId, busId, amount });
+		m_needsToUpdateAuxSends = true;
+	}
+}
 ///////////////////////////////////////////////////////////////////////////
 void CObject::UpdateVelocities(float const deltaTime)
 {
@@ -316,23 +213,16 @@ void CObject::UpdateVelocities(float const deltaTime)
 			{
 				m_previousAbsoluteVelocity = absoluteVelocity;
 
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
 				AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(s_absoluteVelocityParameterId, static_cast<AkRtpcValue>(absoluteVelocity), m_id);
 
-				if (!IS_WWISE_OK(wwiseResult))
+				if (CRY_AUDIO_IMPL_WWISE_IS_OK(wwiseResult))
 				{
-					Cry::Audio::Log(
-						ELogType::Warning,
-						"Wwise - failed to set the %s parameter to value %f on object %" PRISIZE_T,
-						s_szAbsoluteVelocityParameterName,
-						absoluteVelocity,
-						m_id);
+					m_parameterInfo[g_szAbsoluteVelocityParameterName] = absoluteVelocity;
 				}
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-				else
-				{
-					m_parameterInfo[s_szAbsoluteVelocityParameterName] = absoluteVelocity;
-				}
-#endif        // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+#else
+				AK::SoundEngine::SetRTPCValue(s_absoluteVelocityParameterId, static_cast<AkRtpcValue>(absoluteVelocity), m_id);
+#endif        // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
 			}
 		}
 
@@ -376,112 +266,103 @@ void CObject::TryToSetRelativeVelocity(float const relativeVelocity)
 	{
 		m_previousRelativeVelocity = relativeVelocity;
 
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
 		AKRESULT const wwiseResult = AK::SoundEngine::SetRTPCValue(s_relativeVelocityParameterId, static_cast<AkRtpcValue>(relativeVelocity), m_id);
 
-		if (!IS_WWISE_OK(wwiseResult))
+		if (CRY_AUDIO_IMPL_WWISE_IS_OK(wwiseResult))
 		{
-			Cry::Audio::Log(
-				ELogType::Warning,
-				"Wwise - failed to set the %s parameter to value %f on object %" PRISIZE_T,
-				s_szRelativeVelocityParameterName,
-				relativeVelocity,
-				m_id);
+			m_parameterInfo[g_szRelativeVelocityParameterName] = relativeVelocity;
 		}
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-		else
-		{
-			m_parameterInfo[s_szRelativeVelocityParameterName] = relativeVelocity;
-		}
-#endif    // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+#else
+		AK::SoundEngine::SetRTPCValue(s_relativeVelocityParameterId, static_cast<AkRtpcValue>(relativeVelocity), m_id);
+#endif    // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObject::ToggleFunctionality(EObjectFunctionality const type, bool const enable)
 {
-	if (m_id != g_globalObjectId)
+	switch (type)
 	{
-		switch (type)
+	case EObjectFunctionality::TrackAbsoluteVelocity:
 		{
-		case EObjectFunctionality::TrackAbsoluteVelocity:
+			if (enable)
 			{
-				if (enable)
-				{
-					m_flags |= EObjectFlags::TrackAbsoluteVelocity;
-				}
-				else
-				{
-					m_flags &= ~EObjectFlags::TrackAbsoluteVelocity;
-
-					SetParameterById(s_absoluteVelocityParameterId, 0.0f, m_id);
-				}
-
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-				if (enable)
-				{
-					m_parameterInfo[s_szAbsoluteVelocityParameterName] = 0.0f;
-				}
-				else
-				{
-					m_parameterInfo.erase(s_szAbsoluteVelocityParameterName);
-				}
-#endif        // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
-
-				break;
+				m_flags |= EObjectFlags::TrackAbsoluteVelocity;
 			}
-		case EObjectFunctionality::TrackRelativeVelocity:
+			else
 			{
-				if (enable)
-				{
-					if ((m_flags& EObjectFlags::TrackRelativeVelocity) == 0)
-					{
-						m_flags |= EObjectFlags::TrackRelativeVelocity;
-						g_numObjectsWithRelativeVelocity++;
-					}
-				}
-				else
-				{
-					if ((m_flags& EObjectFlags::TrackRelativeVelocity) != 0)
-					{
-						m_flags &= ~EObjectFlags::TrackRelativeVelocity;
-						SetParameterById(s_relativeVelocityParameterId, 0.0f, m_id);
+				m_flags &= ~EObjectFlags::TrackAbsoluteVelocity;
 
-						CRY_ASSERT_MESSAGE(g_numObjectsWithRelativeVelocity > 0, "g_numObjectsWithRelativeVelocity is 0 but an object with relative velocity tracking still exists during %s", __FUNCTION__);
-						g_numObjectsWithRelativeVelocity--;
-					}
-				}
-
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
-				if (enable)
-				{
-					m_parameterInfo[s_szRelativeVelocityParameterName] = 0.0f;
-				}
-				else
-				{
-					m_parameterInfo.erase(s_szRelativeVelocityParameterName);
-				}
-#endif        // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
-
-				break;
+				AK::SoundEngine::SetRTPCValue(s_absoluteVelocityParameterId, 0.0f, m_id);
 			}
-		default:
+
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+			if (enable)
+			{
+				m_parameterInfo[g_szAbsoluteVelocityParameterName] = 0.0f;
+			}
+			else
+			{
+				m_parameterInfo.erase(g_szAbsoluteVelocityParameterName);
+			}
+#endif          // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+
 			break;
 		}
+	case EObjectFunctionality::TrackRelativeVelocity:
+		{
+			if (enable)
+			{
+				if ((m_flags& EObjectFlags::TrackRelativeVelocity) == 0)
+				{
+					m_flags |= EObjectFlags::TrackRelativeVelocity;
+					g_numObjectsWithRelativeVelocity++;
+				}
+			}
+			else
+			{
+				if ((m_flags& EObjectFlags::TrackRelativeVelocity) != 0)
+				{
+					m_flags &= ~EObjectFlags::TrackRelativeVelocity;
+
+					AK::SoundEngine::SetRTPCValue(s_relativeVelocityParameterId, 0.0f, m_id);
+
+					CRY_ASSERT_MESSAGE(g_numObjectsWithRelativeVelocity > 0, "g_numObjectsWithRelativeVelocity is 0 but an object with relative velocity tracking still exists during %s", __FUNCTION__);
+					g_numObjectsWithRelativeVelocity--;
+				}
+			}
+
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+			if (enable)
+			{
+				m_parameterInfo[g_szRelativeVelocityParameterName] = 0.0f;
+			}
+			else
+			{
+				m_parameterInfo.erase(g_szRelativeVelocityParameterName);
+			}
+#endif          // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+
+			break;
+		}
+	default:
+		break;
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY, char const* const szTextFilter)
 {
-#if defined(INCLUDE_WWISE_IMPL_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
 
 	if (!m_parameterInfo.empty())
 	{
 		bool isVirtual = true;
 
-		for (auto const pEvent : m_events)
+		for (auto const pEventInstance : m_eventInstances)
 		{
-			if (pEvent->m_state != EEventState::Virtual)
+			if (pEventInstance->GetState() != EEventInstanceState::Virtual)
 			{
 				isVirtual = false;
 				break;
@@ -508,19 +389,19 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float pos
 				auxGeom.Draw2dLabel(
 					posX,
 					posY,
-					g_debugObjectFontSize,
-					isVirtual ? g_debugObjectColorVirtual.data() : g_debugObjectColorPhysical.data(),
+					Debug::g_objectFontSize,
+					isVirtual ? Debug::s_globalColorVirtual : Debug::s_objectColorParameter,
 					false,
 					"[Wwise] %s: %2.2f\n",
 					parameterPair.first,
 					parameterPair.second);
 
-				posY += g_debugObjectLineHeight;
+				posY += Debug::g_objectLineHeight;
 			}
 		}
 	}
 
-#endif  // INCLUDE_WWISE_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
 }
 } // namespace Wwise
 } // namespace Impl

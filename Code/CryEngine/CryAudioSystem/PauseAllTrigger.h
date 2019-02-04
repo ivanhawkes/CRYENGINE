@@ -17,15 +17,15 @@ public:
 	CPauseAllTrigger& operator=(CPauseAllTrigger const&) = delete;
 	CPauseAllTrigger& operator=(CPauseAllTrigger&&) = delete;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	CPauseAllTrigger()
-		: Control(PauseAllTriggerId, EDataScope::Global, s_szPauseAllTriggerName)
+		: Control(g_pauseAllTriggerId, EDataScope::Global, g_szPauseAllTriggerName)
 	{}
 #else
 	CPauseAllTrigger()
-		: Control(PauseAllTriggerId, EDataScope::Global)
+		: Control(g_pauseAllTriggerId, EDataScope::Global)
 	{}
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 	~CPauseAllTrigger();
 

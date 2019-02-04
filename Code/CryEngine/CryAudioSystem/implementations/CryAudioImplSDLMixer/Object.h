@@ -32,26 +32,38 @@ public:
 	virtual ~CObject() override = default;
 
 	// CryAudio::Impl::IObject
-	virtual void                   Update(float const deltaTime) override                                           {}
-	virtual void                   SetTransformation(CTransformation const& transformation) override                { m_transformation = transformation; }
-	virtual CTransformation const& GetTransformation() const override                                               { return m_transformation; }
-	virtual void                   SetOcclusion(float const occlusion) override                                     {}
-	virtual void                   SetOcclusionType(EOcclusionType const occlusionType) override                    {}
-	virtual void                   StopAllTriggers() override                                                       {}
+	virtual void                   Update(float const deltaTime) override;
+	virtual void                   SetTransformation(CTransformation const& transformation) override { m_transformation = transformation; }
+	virtual CTransformation const& GetTransformation() const override                                { return m_transformation; }
+	virtual void                   SetOcclusion(float const occlusion) override                      {}
+	virtual void                   SetOcclusionType(EOcclusionType const occlusionType) override     {}
+	virtual void                   StopAllTriggers() override;
 	virtual ERequestStatus         SetName(char const* const szName) override;
 	virtual void                   ToggleFunctionality(EObjectFunctionality const type, bool const enable) override {}
 
-	// Below data is only used when INCLUDE_SDLMIXER_IMPL_PRODUCTION_CODE is defined!
+	// Below data is only used when CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE is defined!
 	virtual void DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY, char const* const szTextFilter) override {}
 	// ~CryAudio::Impl::IObject
 
+	void StopEvent(uint32 const id);
 	void SetVolume(SampleId const sampleId, float const value);
 
-	uint32 const               m_id;
-	CTransformation            m_transformation;
-	EventInstanceList          m_events;
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+	char const* GetName() const { return m_name.c_str(); }
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+
+	EventInstances             m_eventInstances;
 	StandAloneFileInstanceList m_standaloneFiles;
 	VolumeMultipliers          m_volumeMultipliers;
+
+private:
+
+	uint32 const    m_id;
+	CTransformation m_transformation;
+
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+	CryFixedStringT<MaxObjectNameLength> m_name;
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
 };
 } // namespace SDL_mixer
 } // namespace Impl

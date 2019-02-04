@@ -7,12 +7,12 @@
 
 namespace CryAudio
 {
-static constexpr ControlId LoseFocusTriggerId = StringToId(s_szLoseFocusTriggerName);
-static constexpr ControlId GetFocusTriggerId = StringToId(s_szGetFocusTriggerName);
-static constexpr ControlId MuteAllTriggerId = StringToId(s_szMuteAllTriggerName);
-static constexpr ControlId UnmuteAllTriggerId = StringToId(s_szUnmuteAllTriggerName);
-static constexpr ControlId PauseAllTriggerId = StringToId(s_szPauseAllTriggerName);
-static constexpr ControlId ResumeAllTriggerId = StringToId(s_szResumeAllTriggerName);
+constexpr ControlId g_loseFocusTriggerId = StringToId(g_szLoseFocusTriggerName);
+constexpr ControlId g_getFocusTriggerId = StringToId(g_szGetFocusTriggerName);
+constexpr ControlId g_muteAllTriggerId = StringToId(g_szMuteAllTriggerName);
+constexpr ControlId g_unmuteAllTriggerId = StringToId(g_szUnmuteAllTriggerName);
+constexpr ControlId g_pauseAllTriggerId = StringToId(g_szPauseAllTriggerName);
+constexpr ControlId g_resumeAllTriggerId = StringToId(g_szResumeAllTriggerName);
 
 namespace Impl
 {
@@ -44,10 +44,10 @@ enum class ESystemStates : EnumFlagsType
 	None             = 0,
 	ImplShuttingDown = BIT(0),
 	IsMuted          = BIT(1),
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	IsPaused         = BIT(2),
 	PoolsAllocated   = BIT(3),
-#endif  // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif  // CRY_AUDIO_USE_PRODUCTION_CODE
 };
 CRY_CREATE_ENUM_FLAG_OPERATORS(ESystemStates);
 
@@ -57,12 +57,14 @@ using SwitchLookup = std::map<ControlId, CSwitch const*>;
 using PreloadRequestLookup = std::map<PreloadRequestId, CPreloadRequest*>;
 using EnvironmentLookup = std::map<EnvironmentId, CEnvironment const*>;
 using SettingLookup = std::map<ControlId, CSetting const*>;
+using TriggerInstanceIdLookup = std::map<TriggerInstanceId, CObject*>;
 
 using TriggerConnections = std::vector<Impl::ITriggerConnection*>;
 using ParameterConnections = std::vector<Impl::IParameterConnection*>;
 using SwitchStateConnections = std::vector<Impl::ISwitchStateConnection*>;
 using EnvironmentConnections = std::vector<Impl::IEnvironmentConnection*>;
 using SettingConnections = std::vector<Impl::ISettingConnection*>;
+using Objects = std::vector<CObject*>;
 
 extern Impl::IImpl* g_pIImpl;
 extern CSystem g_system;
@@ -73,18 +75,21 @@ extern SwitchLookup g_switches;
 extern PreloadRequestLookup g_preloadRequests;
 extern EnvironmentLookup g_environments;
 extern SettingLookup g_settings;
-extern CObject* g_pObject;
+extern TriggerInstanceIdLookup g_triggerInstanceIdToObject;
+extern CObject g_object;
 extern CLoseFocusTrigger g_loseFocusTrigger;
 extern CGetFocusTrigger g_getFocusTrigger;
 extern CMuteAllTrigger g_muteAllTrigger;
 extern CUnmuteAllTrigger g_unmuteAllTrigger;
 extern CPauseAllTrigger g_pauseAllTrigger;
 extern CResumeAllTrigger g_resumeAllTrigger;
+extern Objects g_activeObjects;
 
 extern SImplInfo g_implInfo;
 extern CryFixedStringT<MaxFilePathLength> g_configPath;
 
 extern TriggerInstanceId g_triggerInstanceIdCounter;
+constexpr TriggerInstanceId g_maxTriggerInstanceId = std::numeric_limits<TriggerInstanceId>::max();
 
 struct SPoolSizes final
 {
@@ -100,13 +105,28 @@ struct SPoolSizes final
 
 extern SPoolSizes g_poolSizes;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
-static constexpr char const* s_szPreviewTriggerName = "preview_trigger";
-static constexpr ControlId PreviewTriggerId = StringToId(s_szPreviewTriggerName);
+static void IncrementTriggerInstanceIdCounter()
+{
+	if (g_triggerInstanceIdCounter == g_maxTriggerInstanceId)
+	{
+		// Set to 1 because 0 is an invalid id.
+		g_triggerInstanceIdCounter = 1;
+	}
+	else
+	{
+		++g_triggerInstanceIdCounter;
+	}
+}
+
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+extern Objects g_constructedObjects;
+
+constexpr char const* g_szPreviewTriggerName = "preview_trigger";
+constexpr ControlId g_previewTriggerId = StringToId(g_szPreviewTriggerName);
 
 class CPreviewTrigger;
 extern CPreviewTrigger g_previewTrigger;
 extern CObject g_previewObject;
 extern SPoolSizes g_debugPoolSizes;
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 }      // namespace CryAudio

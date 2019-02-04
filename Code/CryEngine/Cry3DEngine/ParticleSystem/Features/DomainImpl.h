@@ -217,6 +217,35 @@ private:
 	SChaosKeyV& m_chaos;
 };
 
+struct SpawnId
+{
+	template<typename Source>
+	struct Sampler: Source
+	{
+		Sampler(const CParticleComponentRuntime& runtime, uint modulus)
+			: Source(runtime)
+			, m_scale(convert<floatv>(rcp(float(modulus))))
+		{
+			uint32 idOffset = Source::Container(runtime).GetSpawnIdOffset();
+			#ifdef CRY_PFX2_USE_SSE
+				m_idOffsets = convert<uint32v>(idOffset) + convert<uint32v>(0, 1, 2, 3);
+			#else
+				m_idOffsets = idOffset;
+			#endif
+		}
+		ILINE floatv Sample(TParticleGroupId particleId) const
+		{
+			const TParticleIdv index = convert<uint32v>(+Source::Id(particleId)) + m_idOffsets;
+			const floatv number = convert<floatv>(index) * m_scale;
+			return frac(number);
+		}
+	private:
+		uint32v  m_idOffsets;
+		floatv m_scale;
+	};
+};
+
+
 struct ViewAngle
 {
 	template<typename Source>
@@ -326,6 +355,9 @@ void TModFunction<Child, T, TFrom>::Modify(const CParticleComponentRuntime& runt
 		Child().DoModify(
 		  runtime, range, stream,
 		  detail::CChaosSampler(runtime));
+		break;
+	case EDomain::SpawnId:
+		ModifyFromSampler<detail::SpawnId>(runtime, range, stream, domain, m_idModulus);
 		break;
 	case EDomain::ViewAngle:
 		ModifyFromSampler<detail::ViewAngle>(runtime, range, stream, domain);

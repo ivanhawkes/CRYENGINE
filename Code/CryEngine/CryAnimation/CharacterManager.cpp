@@ -13,7 +13,6 @@
 #include <CrySystem/File/IResourceManager.h>
 #include "ParametricSampler.h"
 #include "AttachmentVCloth.h"
-#include "AttachmentMerger.h"
 #include "Serialization/SerializationCommon.h"
 
 float g_YLine = 0.0f;
@@ -1421,11 +1420,6 @@ const IFacialAnimation* CharacterManager::GetIFacialAnimation() const
 	return m_pFacialAnimation;
 }
 
-const IAttachmentMerger& CharacterManager::GetIAttachmentMerger() const
-{
-	return CAttachmentMerger::Instance();
-}
-
 // returns statistics about this instance of character animation manager
 // don't call this too frequently
 void CharacterManager::GetStatistics(Statistics& rStats) const
@@ -1812,6 +1806,7 @@ void CharacterManager::Update(bool bPaused)
 void CharacterManager::UpdateStreaming(int nFullUpdateRoundId, int nFastUpdateRoundId)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_ANIMATION)
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CharacterManager::UpdateStreaming");
 
 	if (nFastUpdateRoundId >= 0)
 		m_nStreamUpdateRoundId[0] = static_cast<uint32>(nFastUpdateRoundId);
@@ -3034,6 +3029,8 @@ void CharacterManager::SkelExtension(CCharInstance* pCharacter, const CharacterD
 
 void CharacterManager::ExtendDefaultSkeletonWithSkinAttachments(ICharacterInstance* pICharacter, const char* /*unused*/, const char** szSkinAttachments, const uint32 skinsCount, const uint32 loadingFlags)
 {
+	CRY_PROFILE_FUNCTION_ARG(PROFILE_ANIMATION, pICharacter->GetFilePath());
+
 	CCharInstance* const pCharacter = static_cast<CCharInstance*>(pICharacter);
 
 	const char* originalSkeletonFilename = pCharacter->m_pDefaultSkeleton->GetModelFilePath();
@@ -3184,6 +3181,8 @@ static struct
 
 CDefaultSkeleton* CharacterManager::CreateExtendedSkel(CDefaultSkeleton* const pSourceSkeleton, const std::vector<const char*>& mismatchingSkins, IMaterial* const pMaterial, const uint32 nLoadingFlags)
 {
+	CRY_PROFILE_FUNCTION(PROFILE_ANIMATION);
+
 	assert(pSourceSkeleton);
 	assert(pSourceSkeleton->GetModelFilePathCRC64() == 0);
 	assert(pMaterial);
@@ -3295,7 +3294,7 @@ CDefaultSkeleton* CharacterManager::CreateExtendedSkel(CDefaultSkeleton* const p
 	pExtendedSkeleton->SetModelAnimEventDatabase(pSourceSkeleton->GetModelAnimEventDatabaseCStr());
 	pExtendedSkeleton->RebuildJointLookupCaches();
 	pExtendedSkeleton->CopyAndAdjustSkeletonParams(pSourceSkeleton);
-	pExtendedSkeleton->SetupPhysicalProxies(pSourceSkeleton->m_arrBackupPhyBoneMeshes, pSourceSkeleton->m_arrBackupBoneEntities, pMaterial, pSourceSkeleton->GetModelFilePath());
+	pExtendedSkeleton->SetupPhysicalProxies(pSourceSkeleton->m_arrBackupPhyBoneMeshes, pSourceSkeleton->m_arrBackupBoneEntities, pMaterial, pSourceSkeleton->GetModelFilePath(), nLoadingFlags);
 	pExtendedSkeleton->VerifyHierarchy();
 
 	return pExtendedSkeleton;
@@ -3425,13 +3424,32 @@ void CharacterManager::UpdateInstances(bool bPause)
 		return;
 
 	// Go through all registered character instances and check if they need to be updated.
-	CRY_PROFILE_FUNCTION(PROFILE_ANIMATION)
+	CRY_PROFILE_FUNCTION(PROFILE_ANIMATION);
+
+	// This acts as a filter for weeding out character instances which are attached on top of other characters. Such instances will
+	// be processed recursively by their parents through attachment hierarchy traversal to ensure correct transform propagation.
+	// By applying this filter, we make sure that only top-level characters have their updates dispatched here.
+	static std::unordered_set<CCharInstance*> dependentCharacterInstances;
+	dependentCharacterInstances.clear();
+	for (auto& modelRef : m_arrModelCacheSKEL)
+	{
+		for (CCharInstance* pCharacter : modelRef.m_RefByInstances)
+		{
+			for (CCharInstance* pDependentCharacter : pCharacter->m_AttachmentManager.GetAttachedCharacterInstances())
+			{
+				dependentCharacterInstances.insert(pDependentCharacter);
+			}
+		}
+	}
 
 	for (auto& modelRef : m_arrModelCacheSKEL)
 	{
-		for (CCharInstance* pCharInstance : modelRef.m_RefByInstances)
+		for (CCharInstance* pCharacter : modelRef.m_RefByInstances)
 		{
-			pCharInstance->PerFrameUpdate();
+			if (dependentCharacterInstances.find(pCharacter) == dependentCharacterInstances.end())
+			{
+				pCharacter->PerFrameUpdate();
+			}
 		}
 	}
 }

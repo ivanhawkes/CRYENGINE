@@ -47,14 +47,18 @@ enum ECharRenderFlags
 
 enum CHRLOADINGFLAGS : uint32
 {
-	CA_IGNORE_LOD               = BIT32(0),
-	CA_CharEditModel            = BIT32(1),
-	CA_PreviewMode              = BIT32(2),
-	CA_DoNotStreamStaticObjects = BIT32(3),
-	CA_SkipSkelRecreation       = BIT32(4),
-	CA_DisableLogWarnings       = BIT32(5),
-	CA_SkipBoneRemapping        = BIT32(6),
-	CA_ImmediateMode            = BIT32(7)
+	CA_None                        = 0,
+	CA_IGNORE_LOD                  = BIT32(0),
+	CA_CharEditModel               = BIT32(1),
+	CA_PreviewMode                 = BIT32(2),
+	CA_DoNotStreamStaticObjects    = BIT32(3),
+	CA_SkipSkelRecreation          = BIT32(4),
+	CA_DisableLogWarnings          = BIT32(5),
+	CA_SkipBoneRemapping           = BIT32(6),
+	CA_ImmediateMode               = BIT32(7),
+	CA_ExcludeChrProxies           = BIT32(8),
+	CA_ExcludeChrCgfProxies        = BIT32(9),
+	CA_ExcludeChrRagdollCgfProxies = BIT32(10),
 };
 
 enum EReloadCAFResult
@@ -84,6 +88,7 @@ struct  SRendParams;
 struct CryEngineDecalInfo;
 struct ParticleParams;
 struct CryCharMorphParams;
+struct ICharacterRenderNode;
 struct IMaterial;
 struct IStatObj;
 struct IRenderMesh;
@@ -107,7 +112,6 @@ struct IAnimEvents;
 struct TFace;
 struct IFacialInstance;
 struct IFacialAnimation;
-struct IAttachmentMerger;
 
 class ICrySizer;
 struct CryCharAnimationParams;
@@ -299,8 +303,6 @@ struct ICharacterManager
 
 	virtual void                     UpdateRendererFrame() = 0;
 	virtual void                     PostInit() = 0;
-
-	virtual const IAttachmentMerger& GetIAttachmentMerger() const = 0;
 	
 	//! Extends the default skeleton of a character instance with skin attachments
 	virtual void ExtendDefaultSkeletonWithSkinAttachments(ICharacterInstance* pCharInstance, const char* szFilepathSKEL, const char** szSkinAttachments, const uint32 skinCount, const uint32 nLoadingFlags) = 0;
@@ -580,6 +582,11 @@ struct ICharacterInstance : IMeshObj
 	//! Is called during GetISkeletonAnim and GetISkeletonPose if the bNeedSync flag is set to true(the default) to
 	//! ensure all computations have finished when necessary.
 	virtual void FinishAnimationComputations() = 0;
+
+	//! Sets up a non-owning reference to the parent IRenderNode instance.
+	//! Reference set through this method is used for propagating state to IRenderNodes controlled by this character instance (e.g. character attachments).
+	//! This method has been introduced as a temporary measure and should not be relied upon by any system apart from 3DEngine.
+	virtual void SetParentRenderNode(const ICharacterRenderNode* pRenderNode) = 0;
 
 	// This is a hack to keep entity attachments in synch.
 	virtual void SetAttachmentLocation_DEPRECATED(const QuatTS& newCharacterLocation) = 0;

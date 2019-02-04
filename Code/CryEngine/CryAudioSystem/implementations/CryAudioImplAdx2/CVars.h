@@ -23,6 +23,7 @@ public:
 	void    RegisterVariables();
 	void    UnregisterVariables();
 
+	int   m_cuePoolSize = 0;
 	int   m_maxVirtualVoices = 0;
 	int   m_maxVoiceLimitGroups = 0;
 	int   m_maxCategories = 0;
@@ -45,6 +46,10 @@ public:
 	float m_velocityTrackingThreshold = 0.0f;
 	float m_positionUpdateThresholdMultiplier = 0.02f;
 	float m_maxVelocity = 100.0f;
+
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE)
+	int m_debugListFilter = 0;
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE
 };
 
 extern CCVars g_cvars;

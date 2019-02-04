@@ -3,11 +3,14 @@
 #include "stdafx.h"
 #include "Impl.h"
 #include "CVars.h"
-#include <Logger.h>
 #include <CryAudio/IAudioSystem.h>
 #include <CryCore/Platform/platform_impl.inl>
 #include <CrySystem/IEngineModule.h>
 #include <CryExtension/ClassWeaver.h>
+
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+	#include <Logger.h>
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -40,10 +43,11 @@ class CEngineModule_CryAudioImplSDLMixer : public IImplModule
 		gEnv->pAudioSystem->AddRequestListener(&CEngineModule_CryAudioImplSDLMixer::OnEvent, nullptr, ESystemEvents::ImplSet);
 		SRequestUserData const data(ERequestFlags::ExecuteBlocking | ERequestFlags::CallbackOnExternalOrCallingThread);
 
-		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioSystem, 0, "CryAudio::Impl::SDL_mixer::CImpl");
+		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_AudioImpl, 0, "CryAudio::Impl::SDL_mixer::CImpl");
 		gEnv->pAudioSystem->SetImpl(new CImpl, data);
 		gEnv->pAudioSystem->RemoveRequestListener(&CEngineModule_CryAudioImplSDLMixer::OnEvent, nullptr);
 
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
 		if (m_bSuccess)
 		{
 			Cry::Audio::Log(ELogType::Always, "CryAudioImplSDLMixer loaded");
@@ -52,6 +56,7 @@ class CEngineModule_CryAudioImplSDLMixer : public IImplModule
 		{
 			Cry::Audio::Log(ELogType::Error, "CryAudioImplSDLMixer failed to load");
 		}
+#endif    // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
 
 		return m_bSuccess;
 	}

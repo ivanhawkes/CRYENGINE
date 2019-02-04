@@ -16,15 +16,8 @@ namespace SDL_mixer
 //////////////////////////////////////////////////////////////////////////
 ERequestStatus CStandaloneFile::Play(IObject* const pIObject)
 {
-	ERequestStatus status = ERequestStatus::Failure;
-
-	if (pIObject != nullptr)
-	{
-		auto const pObject = static_cast<CObject*>(pIObject);
-		status = SoundEngine::PlayFile(pObject, this);
-	}
-
-	return status;
+	auto const pObject = static_cast<CObject*>(pIObject);
+	return SoundEngine::PlayFile(pObject, this);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -32,26 +25,23 @@ ERequestStatus CStandaloneFile::Stop(IObject* const pIObject)
 {
 	ERequestStatus status = ERequestStatus::Failure;
 
-	if (pIObject != nullptr)
+	auto const pObject = static_cast<CObject*>(pIObject);
+
+	for (auto const pTempStandaloneFile : pObject->m_standaloneFiles)
 	{
-		auto const pObject = static_cast<CObject*>(pIObject);
-
-		for (auto const pTempStandaloneFile : pObject->m_standaloneFiles)
+		if (pTempStandaloneFile == this)
 		{
-			if (pTempStandaloneFile == this)
+			// need to make a copy because the callback
+			// registered with Mix_ChannelFinished can edit the list
+			ChannelList const channels = m_channels;
+
+			for (auto const channel : channels)
 			{
-				// need to make a copy because the callback
-				// registered with Mix_ChannelFinished can edit the list
-				ChannelList const channels = m_channels;
-
-				for (auto const channel : channels)
-				{
-					Mix_HaltChannel(channel);
-				}
-
-				status = ERequestStatus::Pending;
-				break;
+				Mix_HaltChannel(channel);
 			}
+
+			status = ERequestStatus::Pending;
+			break;
 		}
 	}
 

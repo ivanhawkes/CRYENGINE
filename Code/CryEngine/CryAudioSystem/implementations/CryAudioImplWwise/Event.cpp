@@ -2,10 +2,12 @@
 
 #include "stdafx.h"
 #include "Event.h"
-#include "Object.h"
+#include "Common.h"
+#include "EventInstance.h"
+#include "Impl.h"
+#include "BaseObject.h"
 
 #include <AK/SoundEngine/Common/AkSoundEngine.h>
-#include <CryAudio/IAudioSystem.h>
 
 namespace CryAudio
 {
@@ -14,60 +16,75 @@ namespace Impl
 namespace Wwise
 {
 //////////////////////////////////////////////////////////////////////////
-CEvent::~CEvent()
+void EndEventCallback(AkCallbackType callbackType, AkCallbackInfo* pCallbackInfo)
 {
-	if (m_pObject != nullptr)
+	if ((callbackType == AK_EndOfEvent) && !g_pImpl->IsToBeReleased() && (pCallbackInfo->pCookie != nullptr))
 	{
-		m_pObject->RemoveEvent(this);
+		auto const pEventInstance = static_cast<CEventInstance*>(pCallbackInfo->pCookie);
+		pEventInstance->SetToBeRemoved();
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-ERequestStatus CEvent::Stop()
+void PrepareEventCallback(
+	AkUniqueID eventId,
+	void const* pBankPtr,
+	AKRESULT wwiseResult,
+	AkMemPoolId memPoolId,
+	void* pCookie)
 {
-	switch (m_state)
-	{
-	case EEventState::Playing:
-	case EEventState::Virtual:
-		{
-			AK::SoundEngine::StopPlayingID(m_id, 10);
-			break;
-		}
-	default:
-		{
-			// Stopping an event of this type is not supported!
-			CRY_ASSERT(false);
-			break;
-		}
-	}
+	auto const pEventInstance = static_cast<CEventInstance*>(pCookie);
 
-	return ERequestStatus::Success;
+	if (pEventInstance != nullptr)
+	{
+		pEventInstance->SetPlayingId(eventId);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CEvent::SetInitialVirtualState(float const distance)
+ETriggerResult CEvent::Execute(IObject* const pIObject, TriggerInstanceId const triggerInstanceId)
 {
-	m_state = ((m_maxAttenuation > 0.0f) && (m_maxAttenuation < distance)) ? EEventState::Virtual : EEventState::Playing;
+	ETriggerResult result = ETriggerResult::Failure;
+
+	auto const pBaseObject = static_cast<CBaseObject*>(pIObject);
+
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	CEventInstance* const pEventInstance = g_pImpl->ConstructEventInstance(triggerInstanceId, m_id, m_maxAttenuation, pBaseObject, this);
+#else
+	CEventInstance* const pEventInstance = g_pImpl->ConstructEventInstance(triggerInstanceId, m_id, m_maxAttenuation);
+#endif      // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+
+	pBaseObject->SetAuxSendValues();
+
+	AkPlayingID const playingId = AK::SoundEngine::PostEvent(m_id, pBaseObject->GetId(), AK_EndOfEvent, &EndEventCallback, pEventInstance);
+
+	if (playingId != AK_INVALID_PLAYING_ID)
+	{
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+		{
+			CryAutoLock<CryCriticalSection> const lock(CryAudio::Impl::Wwise::g_cs);
+			g_playingIds[playingId] = pEventInstance;
+		}
+#endif      // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+
+		pEventInstance->SetPlayingId(playingId);
+		pBaseObject->AddEventInstance(pEventInstance);
+
+		result = (pEventInstance->GetState() == EEventInstanceState::Virtual) ? ETriggerResult::Virtual : ETriggerResult::Playing;
+	}
+	else
+	{
+		g_pImpl->DestructEventInstance(pEventInstance);
+	}
+
+	return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CEvent::UpdateVirtualState(float const distance)
+void CEvent::Stop(IObject* const pIObject)
 {
-	EEventState const state = ((m_maxAttenuation > 0.0f) && (m_maxAttenuation < distance)) ? EEventState::Virtual : EEventState::Playing;
-
-	if (m_state != state)
-	{
-		m_state = state;
-
-		if (m_state == EEventState::Virtual)
-		{
-			gEnv->pAudioSystem->ReportVirtualizedEvent(m_event);
-		}
-		else
-		{
-			gEnv->pAudioSystem->ReportPhysicalizedEvent(m_event);
-		}
-	}
+	auto const pBaseObject = static_cast<CBaseObject*>(pIObject);
+	pBaseObject->StopEvent(m_id);
 }
 } // namespace Wwise
 } // namespace Impl

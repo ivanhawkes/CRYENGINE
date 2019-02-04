@@ -11,6 +11,11 @@ namespace CryAudio
 class CObject;
 struct STriggerInstanceState;
 
+namespace Impl
+{
+struct IObject;
+} // namespace Impl
+
 class CTrigger final : public Control, public CPoolObject<CTrigger, stl::PSyncNone>
 {
 public:
@@ -21,7 +26,7 @@ public:
 	CTrigger& operator=(CTrigger const&) = delete;
 	CTrigger& operator=(CTrigger&&) = delete;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	explicit CTrigger(
 		ControlId const id,
 		EDataScope const dataScope,
@@ -40,7 +45,7 @@ public:
 		: Control(id, dataScope)
 		, m_connections(connections)
 	{}
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 	~CTrigger();
 
@@ -50,11 +55,7 @@ public:
 		void* const pUserData = nullptr,
 		void* const pUserDataOwner = nullptr,
 		ERequestFlags const flags = ERequestFlags::None) const;
-	void Execute(
-		CObject& object,
-		TriggerInstanceId const triggerInstanceId,
-		STriggerInstanceState& triggerInstanceState) const;
-	void LoadAsync(CObject& object, bool const doLoad) const;
+	void Stop(Impl::IObject* const pIObject) const;
 	void PlayFile(
 		CObject& object,
 		char const* const szName,
@@ -63,17 +64,22 @@ public:
 		void* const pUserData = nullptr,
 		void* const pUserDataOwner = nullptr) const;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+	void Execute(
+		CObject& object,
+		TriggerInstanceId const triggerInstanceId,
+		STriggerInstanceState& triggerInstanceState,
+		uint16 const triggerCounter) const;
 	float GetRadius() const { return m_radius; }
 	void  PlayFile(CObject& object, CStandaloneFile* const pFile) const;
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 private:
 
 	TriggerConnections const m_connections;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	float const m_radius;
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 };
 } // namespace CryAudio

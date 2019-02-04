@@ -2,15 +2,19 @@
 
 #include "stdafx.h"
 #include "BaseObject.h"
+#include "Impl.h"
 #include "BaseStandaloneFile.h"
 #include "Event.h"
-#include "Environment.h"
+#include "EventInstance.h"
 #include "Parameter.h"
-#include "SwitchState.h"
-#include "Trigger.h"
+#include "ParameterState.h"
+#include "Return.h"
 
-#include <Logger.h>
 #include <CryAudio/IAudioSystem.h>
+
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+	#include <Logger.h>
+#endif // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -26,40 +30,307 @@ CBaseObject::CBaseObject()
 	m_attributes.forward.z = 1.0f;
 	m_attributes.up.y = 1.0f;
 
-	// Reserve enough room for events to minimize/prevent runtime allocations.
-	m_events.reserve(2);
+	m_eventInstances.reserve(2);
 }
 
 //////////////////////////////////////////////////////////////////////////
-CBaseObject::~CBaseObject()
+void CBaseObject::Update(float const deltaTime)
 {
-	// If the object is deleted before its events get
-	// cleared we need to remove all references to it
-	for (auto const pEvent : m_events)
-	{
-		pEvent->SetObject(nullptr);
-	}
+	bool removedEvent = false;
 
-	for (auto const pEvent : m_pendingEvents)
+	if (!m_pendingEventInstances.empty())
 	{
-		pEvent->SetObject(nullptr);
-	}
-}
+		auto iter(m_pendingEventInstances.begin());
+		auto iterEnd(m_pendingEventInstances.end());
 
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::RemoveEvent(CEvent* const pEvent)
-{
-	if (!stl::find_and_erase(m_events, pEvent))
-	{
-		if (!stl::find_and_erase(m_pendingEvents, pEvent))
+		while (iter != iterEnd)
 		{
-			Cry::Audio::Log(ELogType::Error, "Tried to remove an event from an object that does not own that event");
+			CEventInstance* const pEventInstance = *iter;
+
+			if (pEventInstance->IsToBeRemoved())
+			{
+				gEnv->pAudioSystem->ReportFinishedTriggerConnectionInstance(pEventInstance->GetTriggerInstanceId(), ETriggerResult::Pending);
+				g_pImpl->DestructEventInstance(pEventInstance);
+				removedEvent = true;
+
+				if (iter != (iterEnd - 1))
+				{
+					(*iter) = m_pendingEventInstances.back();
+				}
+
+				m_pendingEventInstances.pop_back();
+				iter = m_pendingEventInstances.begin();
+				iterEnd = m_pendingEventInstances.end();
+			}
+			else if (SetEventInstance(pEventInstance))
+			{
+				ETriggerResult const result = (pEventInstance->GetState() == EEventState::Playing) ? ETriggerResult::Playing : ETriggerResult::Virtual;
+				gEnv->pAudioSystem->ReportStartedTriggerConnectionInstance(pEventInstance->GetTriggerInstanceId(), result);
+
+				if (iter != (iterEnd - 1))
+				{
+					(*iter) = m_pendingEventInstances.back();
+				}
+
+				m_pendingEventInstances.pop_back();
+				iter = m_pendingEventInstances.begin();
+				iterEnd = m_pendingEventInstances.end();
+			}
+			else
+			{
+				++iter;
+			}
+		}
+	}
+
+	if (!m_pendingFiles.empty())
+	{
+		auto iter(m_pendingFiles.begin());
+		auto iterEnd(m_pendingFiles.end());
+
+		while (iter != iterEnd)
+		{
+			CBaseStandaloneFile* const pStandaloneFile = *iter;
+
+			if (pStandaloneFile->IsReady())
+			{
+				m_files.push_back(pStandaloneFile);
+
+				pStandaloneFile->PlayFile(m_attributes);
+
+				if (iter != (iterEnd - 1))
+				{
+					(*iter) = m_pendingFiles.back();
+				}
+
+				m_pendingFiles.pop_back();
+				iter = m_pendingFiles.begin();
+				iterEnd = m_pendingFiles.end();
+			}
+			else
+			{
+				++iter;
+			}
+		}
+	}
+
+	EObjectFlags const previousFlags = m_flags;
+
+	if (!m_eventInstances.empty())
+	{
+		m_flags |= EObjectFlags::IsVirtual;
+	}
+
+	auto iter(m_eventInstances.begin());
+	auto iterEnd(m_eventInstances.end());
+
+	while (iter != iterEnd)
+	{
+		CEventInstance* const pEventInstance = *iter;
+
+		if (pEventInstance->IsToBeRemoved())
+		{
+			gEnv->pAudioSystem->ReportFinishedTriggerConnectionInstance(pEventInstance->GetTriggerInstanceId(), ETriggerResult::Playing);
+			g_pImpl->DestructEventInstance(pEventInstance);
+			removedEvent = true;
+
+			if (iter != (iterEnd - 1))
+			{
+				(*iter) = m_eventInstances.back();
+			}
+
+			m_eventInstances.pop_back();
+			iter = m_eventInstances.begin();
+			iterEnd = m_eventInstances.end();
+		}
+		else
+		{
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+			// Always update in production code for debug draw.
+			pEventInstance->UpdateVirtualState();
+
+			if (pEventInstance->GetState() != EEventState::Virtual)
+			{
+				m_flags &= ~EObjectFlags::IsVirtual;
+			}
+#else
+			if (((m_flags& EObjectFlags::IsVirtual) != 0) && ((m_flags& EObjectFlags::UpdateVirtualStates) != 0))
+			{
+				pEventInstance->UpdateVirtualState();
+
+				if (pEventInstance->GetState() != EEventState::Virtual)
+				{
+					m_flags &= ~EObjectFlags::IsVirtual;
+				}
+			}
+#endif      // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
+			++iter;
+		}
+	}
+
+	if ((previousFlags != m_flags) && (!m_eventInstances.empty() || !m_pendingEventInstances.empty()))
+	{
+		if (((previousFlags& EObjectFlags::IsVirtual) != 0) && ((m_flags& EObjectFlags::IsVirtual) == 0))
+		{
+			gEnv->pAudioSystem->ReportPhysicalizedObject(this);
+		}
+		else if (((previousFlags& EObjectFlags::IsVirtual) == 0) && ((m_flags& EObjectFlags::IsVirtual) != 0))
+		{
+			gEnv->pAudioSystem->ReportVirtualizedObject(this);
+		}
+	}
+
+	if (removedEvent)
+	{
+		UpdateVelocityTracking();
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::StopAllTriggers()
+{
+	for (auto const pEventInstance : m_eventInstances)
+	{
+		pEventInstance->StopImmediate();
+	}
+}
+//////////////////////////////////////////////////////////////////////////
+ERequestStatus CBaseObject::SetName(char const* const szName)
+{
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+	m_name = szName;
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
+	return ERequestStatus::Success;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::AddPendingEventInstance(CEventInstance* const pEventInstance)
+{
+	m_pendingEventInstances.push_back(pEventInstance);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::StopEventInstance(uint32 const id)
+{
+	for (auto const pEventInstance : m_eventInstances)
+	{
+		if (pEventInstance->GetId() == id)
+		{
+			pEventInstance->StopAllowFadeOut();
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::SetParameter(uint32 const id, float const value)
+{
+	FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
+
+	for (auto const pEventInstance : m_eventInstances)
+	{
+		FMOD::Studio::EventInstance* const pFmodEventInstance = pEventInstance->GetFmodEventInstance();
+		CRY_ASSERT_MESSAGE(pFmodEventInstance != nullptr, "Fmod event instance doesn't exist during %s", __FUNCTION__);
+		CEvent const* const pEvent = pEventInstance->GetEvent();
+		CRY_ASSERT_MESSAGE(pEvent != nullptr, "Event doesn't exist during %s", __FUNCTION__);
+
+		FMOD::Studio::EventDescription* pEventDescription = nullptr;
+		fmodResult = pFmodEventInstance->getDescription(&pEventDescription);
+		CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+
+		if (g_eventToParameterIndexes.find(pEvent) != g_eventToParameterIndexes.end())
+		{
+			ParameterIdToIndex& parameters = g_eventToParameterIndexes[pEvent];
+
+			if (parameters.find(id) != parameters.end())
+			{
+				fmodResult = pFmodEventInstance->setParameterValueByIndex(parameters[id], value);
+				CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+			}
+			else
+			{
+				int parameterCount = 0;
+				fmodResult = pFmodEventInstance->getParameterCount(&parameterCount);
+				CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+
+				for (int index = 0; index < parameterCount; ++index)
+				{
+					FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
+					fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
+					CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+
+					if (id == StringToId(parameterDescription.name))
+					{
+						parameters.emplace(id, index);
+						fmodResult = pFmodEventInstance->setParameterValueByIndex(index, value);
+						CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			int parameterCount = 0;
+			fmodResult = pFmodEventInstance->getParameterCount(&parameterCount);
+			CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+
+			for (int index = 0; index < parameterCount; ++index)
+			{
+				FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
+				fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
+				CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+
+				if (id == StringToId(parameterDescription.name))
+				{
+					g_eventToParameterIndexes[pEvent].emplace(std::make_pair(id, index));
+					fmodResult = pFmodEventInstance->setParameterValueByIndex(index, value);
+					CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
+					break;
+				}
+			}
+		}
+	}
+
+	m_parameters[id] = value;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::RemoveParameter(uint32 const id)
+{
+	m_parameters.erase(id);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::SetReturn(CReturn const* const pReturn, float const amount)
+{
+	bool shouldUpdate = true;
+	auto const iter(m_returns.find(pReturn));
+
+	if (iter != m_returns.end())
+	{
+		if (shouldUpdate = (fabs(iter->second - amount) > 0.001f))
+		{
+			iter->second = amount;
 		}
 	}
 	else
 	{
-		UpdateVelocityTracking();
+		m_returns.emplace(pReturn, amount);
 	}
+
+	if (shouldUpdate)
+	{
+		for (auto const pEventInstance : m_eventInstances)
+		{
+			pEventInstance->SetReturnSend(pReturn, amount);
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CBaseObject::RemoveReturn(CReturn const* const pReturn)
+{
+	m_returns.erase(pReturn);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -69,94 +340,63 @@ void CBaseObject::RemoveFile(CBaseStandaloneFile const* const pFile)
 	{
 		if (!stl::find_and_erase(m_pendingFiles, pFile))
 		{
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 			Cry::Audio::Log(ELogType::Error, "Tried to remove an audio file from an object that is not playing that file");
+#endif      // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 		}
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-bool CBaseObject::SetEvent(CEvent* const pEvent)
+bool CBaseObject::SetEventInstance(CEventInstance* const pEventInstance)
 {
 	bool bSuccess = false;
 
-	// Update the event with all parameter and switch values
+	// Update the event with all parameter and environment values
 	// that are currently set on the object before starting it.
-	if (pEvent->PrepareForOcclusion())
+	if (pEventInstance->PrepareForOcclusion())
 	{
-		m_events.push_back(pEvent);
+		m_eventInstances.push_back(pEventInstance);
 
-		FMOD::Studio::EventInstance* const pEventInstance = pEvent->GetInstance();
-		CRY_ASSERT_MESSAGE(pEventInstance != nullptr, "Event instance doesn't exist during %s", __FUNCTION__);
-		CTrigger const* const pTrigger = pEvent->GetTrigger();
-		CRY_ASSERT_MESSAGE(pTrigger != nullptr, "Trigger doesn't exist during %s", __FUNCTION__);
+		FMOD::Studio::EventInstance* const pFModEventInstance = pEventInstance->GetFmodEventInstance();
+		CRY_ASSERT_MESSAGE(pFModEventInstance != nullptr, "Fmod event instance doesn't exist during %s", __FUNCTION__);
+		CEvent const* const pEvent = pEventInstance->GetEvent();
+		CRY_ASSERT_MESSAGE(pEvent != nullptr, "Event doesn't exist during %s", __FUNCTION__);
 
 		FMOD::Studio::EventDescription* pEventDescription = nullptr;
-		FMOD_RESULT fmodResult = pEventInstance->getDescription(&pEventDescription);
-		ASSERT_FMOD_OK;
+		FMOD_RESULT fmodResult = pFModEventInstance->getDescription(&pEventDescription);
+		CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 
-		if (g_triggerToParameterIndexes.find(pTrigger) != g_triggerToParameterIndexes.end())
+		if (g_eventToParameterIndexes.find(pEvent) != g_eventToParameterIndexes.end())
 		{
-			ParameterIdToIndex& parameters = g_triggerToParameterIndexes[pTrigger];
+			ParameterIdToIndex& parameters = g_eventToParameterIndexes[pEvent];
 
 			for (auto const& parameterPair : m_parameters)
 			{
-				uint32 const parameterId = parameterPair.first->GetId();
+				uint32 const parameterId = parameterPair.first;
 
 				if (parameters.find(parameterId) != parameters.end())
 				{
-					fmodResult = pEventInstance->setParameterValueByIndex(parameters[parameterId], parameterPair.second);
-					ASSERT_FMOD_OK;
+					fmodResult = pFModEventInstance->setParameterValueByIndex(parameters[parameterId], parameterPair.second);
+					CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 				}
 				else
 				{
 					int parameterCount = 0;
-					fmodResult = pEventInstance->getParameterCount(&parameterCount);
-					ASSERT_FMOD_OK;
+					fmodResult = pFModEventInstance->getParameterCount(&parameterCount);
+					CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 
 					for (int index = 0; index < parameterCount; ++index)
 					{
 						FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
 						fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
-						ASSERT_FMOD_OK;
+						CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 
 						if (parameterId == StringToId(parameterDescription.name))
 						{
 							parameters.emplace(parameterId, index);
-							fmodResult = pEventInstance->setParameterValueByIndex(index, parameterPair.second);
-							ASSERT_FMOD_OK;
-							break;
-						}
-					}
-				}
-			}
-
-			for (auto const& switchPair : m_switches)
-			{
-				CBaseSwitchState const* const pSwitchState = switchPair.second;
-				uint32 const parameterId = pSwitchState->GetId();
-
-				if (parameters.find(parameterId) != parameters.end())
-				{
-					fmodResult = pEventInstance->setParameterValueByIndex(parameters[parameterId], pSwitchState->GetValue());
-					ASSERT_FMOD_OK;
-				}
-				else
-				{
-					int parameterCount = 0;
-					fmodResult = pEventInstance->getParameterCount(&parameterCount);
-					ASSERT_FMOD_OK;
-
-					for (int index = 0; index < parameterCount; ++index)
-					{
-						FMOD_STUDIO_PARAMETER_DESCRIPTION parameterDescription;
-						fmodResult = pEventDescription->getParameterByIndex(index, &parameterDescription);
-						ASSERT_FMOD_OK;
-
-						if (parameterId == StringToId(parameterDescription.name))
-						{
-							parameters.emplace(parameterId, index);
-							fmodResult = pEventInstance->setParameterValueByIndex(index, pSwitchState->GetValue());
-							ASSERT_FMOD_OK;
+							fmodResult = pFModEventInstance->setParameterValueByIndex(index, parameterPair.second);
+							CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 							break;
 						}
 					}
@@ -164,20 +404,19 @@ bool CBaseObject::SetEvent(CEvent* const pEvent)
 			}
 		}
 
-		for (auto const& environmentPair : m_environments)
+		for (auto const& returnPair : m_returns)
 		{
-			pEvent->TrySetEnvironment(environmentPair.first, environmentPair.second);
+			pEventInstance->SetReturnSend(returnPair.first, returnPair.second);
 		}
 
 		UpdateVelocityTracking();
-		pEvent->SetOcclusion(m_occlusion);
-		pEvent->SetAbsoluteVelocity(m_absoluteVelocity);
+		pEventInstance->SetOcclusion(m_occlusion);
+		pEventInstance->SetAbsoluteVelocity(m_absoluteVelocity);
 
-		fmodResult = pEvent->GetInstance()->start();
-		ASSERT_FMOD_OK;
+		fmodResult = pEventInstance->GetFmodEventInstance()->start();
+		CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 
-		pEvent->UpdateVirtualState();
-
+		pEventInstance->UpdateVirtualState();
 		bSuccess = true;
 	}
 
@@ -189,9 +428,9 @@ void CBaseObject::UpdateVelocityTracking()
 {
 	bool trackVelocity = false;
 
-	for (auto const pEvent : m_events)
+	for (auto const pEventInstance : m_eventInstances)
 	{
-		if (pEvent->HasAbsoluteVelocityParameter())
+		if (pEventInstance->HasAbsoluteVelocityParameter())
 		{
 			trackVelocity = true;
 			break;
@@ -199,103 +438,6 @@ void CBaseObject::UpdateVelocityTracking()
 	}
 
 	trackVelocity ? (m_flags |= EObjectFlags::TrackAbsoluteVelocity) : (m_flags &= ~EObjectFlags::TrackAbsoluteVelocity);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::RemoveParameter(CBaseParameter const* const pParameter)
-{
-	m_parameters.erase(pParameter);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::RemoveSwitch(CBaseSwitchState const* const pSwitch)
-{
-	m_switches.erase(pSwitch->GetId());
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::RemoveEnvironment(CEnvironment const* const pEnvironment)
-{
-	m_environments.erase(pEnvironment);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::Update(float const deltaTime)
-{
-	if (!m_pendingEvents.empty())
-	{
-		auto iter(m_pendingEvents.begin());
-		auto iterEnd(m_pendingEvents.cend());
-
-		while (iter != iterEnd)
-		{
-			if (SetEvent(*iter))
-			{
-				iter = m_pendingEvents.erase(iter);
-				iterEnd = m_pendingEvents.cend();
-				continue;
-			}
-
-			++iter;
-		}
-	}
-
-	if (!m_pendingFiles.empty())
-	{
-		auto iter(m_pendingFiles.begin());
-		auto iterEnd(m_pendingFiles.cend());
-
-		while (iter != iterEnd)
-		{
-			CBaseStandaloneFile* pStandaloneFile = *iter;
-
-			if (pStandaloneFile->IsReady())
-			{
-				m_files.push_back(pStandaloneFile);
-
-				pStandaloneFile->PlayFile(m_attributes);
-
-				iter = m_pendingFiles.erase(iter);
-				iterEnd = m_pendingFiles.cend();
-				continue;
-			}
-			++iter;
-		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::StopAllTriggers()
-{
-	FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
-
-	for (auto const pEvent : m_events)
-	{
-		fmodResult = pEvent->GetInstance()->stop(FMOD_STUDIO_STOP_IMMEDIATE);
-		ASSERT_FMOD_OK;
-	}
-}
-//////////////////////////////////////////////////////////////////////////
-ERequestStatus CBaseObject::SetName(char const* const szName)
-{
-	// Fmod does not have the concept of objects and with that the debugging of such.
-	// Therefore the name is currently not needed here.
-	return ERequestStatus::Success;
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CBaseObject::StopEvent(uint32 const id)
-{
-	FMOD_RESULT fmodResult = FMOD_ERR_UNINITIALIZED;
-
-	for (auto const pEvent : m_events)
-	{
-		if (pEvent->GetId() == id)
-		{
-			fmodResult = pEvent->GetInstance()->stop(FMOD_STUDIO_STOP_ALLOWFADEOUT);
-			ASSERT_FMOD_OK;
-		}
-	}
 }
 } // namespace Fmod
 } // namespace Impl

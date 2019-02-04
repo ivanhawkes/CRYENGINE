@@ -51,9 +51,7 @@
 #include <qt_windows.h>
 #include <QApplication>
 
-#if QT_VERSION >= 0x050000
-	#define QT_WA(unicode, ansi) unicode
-#endif
+#define QT_WA(unicode, ansi) unicode
 
 /*!
     \class QWinHost qwinhost.h
@@ -121,29 +119,6 @@ QWinHost::~QWinHost()
 }
 
 /*!
-    Reimplement this virtual function to create and return the native
-    Win32 window. \a parent is the handle to this widget, and \a
-    instance is the handle to the application instance. The returned HWND
-    must be a child of the \a parent HWND.
-
-    The default implementation returns null. The window returned by a
-    reimplementation of this function is owned by this QWinHost
-    instance and will be destroyed in the destructor.
-
-    This function is called by the implementation of polish() if no
-    window has been set explicitly using setWindow(). Call polish() to
-    force this function to be called.
-
-    \sa setWindow()
- */
-HWND QWinHost::createWindow(HWND parent, HINSTANCE instance)
-{
-	Q_UNUSED(parent);
-	Q_UNUSED(instance);
-	return 0;
-}
-
-/*!
     Ensures that the window provided a child of this widget, unless
     it is a WS_OVERLAPPED window.
  */
@@ -173,7 +148,7 @@ void QWinHost::fixParent()
     call DestroyWindow. To verify that the handle is destroyed when expected, handle
     WM_DESTROY in the window procedure.
 
-    \sa window(), createWindow()
+    \sa window()
  */
 void QWinHost::setWindow(HWND window, bool bOwnWindow)
 {
@@ -194,7 +169,7 @@ void QWinHost::setWindow(HWND window, bool bOwnWindow)
     Returns the handle to the native Win32 window, or null if no
     window has been set or created yet.
 
-    \sa setWindow(), createWindow()
+    \sa setWindow()
  */
 HWND QWinHost::window() const
 {
@@ -272,7 +247,6 @@ bool QWinHost::event(QEvent* e)
 	case QEvent::Polish:
 		if (!hwnd)
 		{
-			hwnd = createWindow((HWND)winId(), qWinAppInst());
 			fixParent();
 			own_hwnd = hwnd != 0;
 		}
@@ -355,15 +329,9 @@ void QWinHost::resizeEvent(QResizeEvent* e)
 /*!
     \reimp
  */
-#if QT_VERSION >= 0x050000
 bool QWinHost::nativeEvent(const QByteArray& eventType, void* message, long* result)
-#else
-bool QWinHost::winEvent(MSG* msg, long* result)
-#endif
 {
-#if QT_VERSION >= 0x050000
 	MSG* msg = (MSG*)message;
-#endif
 	switch (msg->message)
 	{
 	case WM_SETFOCUS:
@@ -375,9 +343,5 @@ bool QWinHost::winEvent(MSG* msg, long* result)
 	default:
 		break;
 	}
-#if QT_VERSION >= 0x050000
 	return QWidget::nativeEvent(eventType, message, result);
-#else
-	return QWidget::winEvent(msg, result);
-#endif
 }

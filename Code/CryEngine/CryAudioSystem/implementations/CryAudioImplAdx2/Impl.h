@@ -13,6 +13,8 @@ namespace Impl
 {
 namespace Adx2
 {
+class CCue;
+
 class CImpl final : public IImpl
 {
 public:
@@ -27,7 +29,7 @@ public:
 
 	// CryAudio::Impl::IImpl
 	virtual void                       Update() override {}
-	virtual ERequestStatus             Init(uint16 const objectPoolSize, uint16 const eventPoolSize) override;
+	virtual ERequestStatus             Init(uint16 const objectPoolSize) override;
 	virtual void                       ShutDown() override;
 	virtual void                       OnBeforeRelease() override {}
 	virtual void                       Release() override;
@@ -41,10 +43,8 @@ public:
 	virtual void                       PauseAll() override;
 	virtual void                       ResumeAll() override;
 	virtual ERequestStatus             StopAllSounds() override;
-	virtual void                       SetGlobalParameter(IParameterConnection* const pIParameterConnection, float const value) override;
-	virtual void                       SetGlobalSwitchState(ISwitchStateConnection* const pISwitchStateConnection) override;
-	virtual ERequestStatus             RegisterInMemoryFile(SFileInfo* const pFileInfo) override;
-	virtual ERequestStatus             UnregisterInMemoryFile(SFileInfo* const pFileInfo) override;
+	virtual void                       RegisterInMemoryFile(SFileInfo* const pFileInfo) override;
+	virtual void                       UnregisterInMemoryFile(SFileInfo* const pFileInfo) override;
 	virtual ERequestStatus             ConstructFile(XmlNodeRef const pRootNode, SFileInfo* const pFileInfo) override;
 	virtual void                       DestructFile(IFile* const pIFile) override;
 	virtual char const* const          GetFileLocation(SFileInfo* const pFileInfo) override;
@@ -65,8 +65,6 @@ public:
 	virtual void                       DestructObject(IObject const* const pIObject) override;
 	virtual IListener*                 ConstructListener(CTransformation const& transformation, char const* const szName = nullptr) override;
 	virtual void                       DestructListener(IListener* const pIListener) override;
-	virtual IEvent*                    ConstructEvent(CryAudio::CEvent& event) override;
-	virtual void                       DestructEvent(IEvent const* const pIEvent) override;
 	virtual IStandaloneFileConnection* ConstructStandaloneFileConnection(CryAudio::CStandaloneFile& standaloneFile, char const* const szFile, bool const bLocalized, ITriggerConnection const* pITriggerConnection = nullptr) override;
 	virtual void                       DestructStandaloneFileConnection(IStandaloneFileConnection const* const pIStandaloneFileConnection) override;
 	virtual void                       GamepadConnected(DeviceId const deviceUniqueID) override;
@@ -74,10 +72,19 @@ public:
 	virtual void                       OnRefresh() override;
 	virtual void                       SetLanguage(char const* const szLanguage) override;
 
-	// Below data is only used when INCLUDE_ADX2_IMPL_PRODUCTION_CODE is defined!
+	// Below data is only used when CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE is defined!
 	virtual void GetFileData(char const* const szName, SFileData& fileData) const override;
-	virtual void DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float& posY, bool const showDetailedInfo) override;
+	virtual void DrawDebugMemoryInfo(IRenderAuxGeom& auxGeom, float const posX, float& posY, bool const showDetailedInfo) override;
+	virtual void DrawDebugInfoList(IRenderAuxGeom& auxGeom, float& posX, float posY, float const debugDistance, char const* const szTextFilter) const override;
 	// ~CryAudio::Impl::IImpl
+
+	CCueInstance* ConstructCueInstance(
+		TriggerInstanceId const triggerInstanceId,
+		uint32 const cueId,
+		CriAtomExPlaybackId const playbackId,
+		CCue const* const pCue,
+		CBaseObject const* const pBaseObject = nullptr);
+	void DestructCueInstance(CCueInstance const* const pCueInstance);
 
 private:
 
@@ -103,10 +110,10 @@ private:
 	CriAtomDbasId                         m_dbasId;
 	CriAtomEx3dListenerConfig             m_listenerConfig;
 
-#if defined(INCLUDE_ADX2_IMPL_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE)
 	CryFixedStringT<MaxInfoStringLength> const m_name;
 	size_t m_acfFileSize = 0;
-#endif  // INCLUDE_ADX2_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE
 };
 } // namespace Adx2
 } // namespace Impl

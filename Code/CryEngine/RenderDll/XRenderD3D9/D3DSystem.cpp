@@ -2071,7 +2071,6 @@ bool CD3D9Renderer::CreateDevice()
 
 void CD3D9Renderer::GetVideoMemoryUsageStats(size_t& vidMemUsedThisFrame, size_t& vidMemUsedRecently, bool bGetPoolsSizes)
 {
-
 	if (bGetPoolsSizes)
 	{
 		vidMemUsedThisFrame = vidMemUsedRecently = (GetTexturesStreamPoolSize() + CV_r_rendertargetpoolsize) * 1024 * 1024;
@@ -2101,6 +2100,10 @@ void CD3D9Renderer::GetVideoMemoryUsageStats(size_t& vidMemUsedThisFrame, size_t
 #else
 		struct { SIZE_T CurrentUsage; } videoMemoryInfoA = {};
 		struct { SIZE_T CurrentUsage; } videoMemoryInfoB = {};
+
+	#if CRY_RENDERER_GNM
+		gGnmDevice->GetMemoryUsageStats(videoMemoryInfoA.CurrentUsage, videoMemoryInfoB.CurrentUsage);
+	#endif
 #endif
 
 		vidMemUsedThisFrame = size_t(videoMemoryInfoA.CurrentUsage);

@@ -17,15 +17,15 @@ public:
 	CResumeAllTrigger& operator=(CResumeAllTrigger const&) = delete;
 	CResumeAllTrigger& operator=(CResumeAllTrigger&&) = delete;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	CResumeAllTrigger()
-		: Control(ResumeAllTriggerId, EDataScope::Global, s_szResumeAllTriggerName)
+		: Control(g_resumeAllTriggerId, EDataScope::Global, g_szResumeAllTriggerName)
 	{}
 #else
 	CResumeAllTrigger()
-		: Control(ResumeAllTriggerId, EDataScope::Global)
+		: Control(g_resumeAllTriggerId, EDataScope::Global)
 	{}
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 	~CResumeAllTrigger();
 

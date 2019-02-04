@@ -135,9 +135,9 @@ public:
 
 private:
 
-	UUnitFloat                 m_probability    = 1.0f;
-	TValue<THideDefault<uint>> m_group;
-	UUnitFloat                 m_selectionStart = 0.0f;
+	UUnitFloat                m_probability    = 1.0f;
+	TValue<TDefaultMin<uint>> m_group;
+	UUnitFloat                m_selectionStart = 0.0f;
 };
 
 CRY_PFX2_IMPLEMENT_FEATURE(CParticleFeature, CFeatureComponentActivateRandom, "Component", "ActivateRandom", colorComponent);
@@ -176,7 +176,7 @@ public:
 				(particleSpec >= uint(m_minimumConfig)) &&
 				(particleSpec <= uint(m_maximumConfig));
 		}
-		else if (particleSpec == CONFIG_DURANGO && m_XBoxOne)
+		else if ((particleSpec == CONFIG_DURANGO || particleSpec == CONFIG_DURANGO_X) && m_XBoxOne)
 			return true;
 		else if (particleSpec == CONFIG_ORBIS && m_PS4)
 			return true;

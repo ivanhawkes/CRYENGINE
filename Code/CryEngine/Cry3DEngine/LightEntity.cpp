@@ -1811,6 +1811,8 @@ void CLightEntity::UpdateCastShadowFlag(float fDistance, const SRenderingPassInf
 
 void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& passInfo)
 {
+	FUNCTION_PROFILER_3DENGINE;
+
 	DBG_LOCK_TO_THREAD(this);
 
 #if defined(FEATURE_SVO_GI)
@@ -1842,8 +1844,6 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 	}
 
 	UpdateCastShadowFlag(rParams.fDistance, passInfo);
-
-	FUNCTION_PROFILER_3DENGINE;
 
 	int nRenderNodeMinSpec = (m_dwRndFlags & ERF_SPEC_BITS_MASK) >> ERF_SPEC_BITS_SHIFT;
 	if (!CheckMinSpec(nRenderNodeMinSpec))
@@ -1986,6 +1986,7 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 
 	bool bAdded = false;
 
+	// TODO: make it threadsafe and add it to e_ExecuteRenderAsJobMask
 	//3dengine side - lightID assigning
 	m_light.m_Id = int16(Get3DEngine()->GetDynamicLightSources()->Count() + passInfo.GetIRenderView()->GetLightsCount(eDLT_DeferredLight));
 
@@ -2003,12 +2004,23 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 
 		if (GetCVars()->e_DynamicLights && m_fWSMaxViewDist)
 		{
-			if (GetCVars()->e_DynamicLights == 2)
+			SRenderLight* pL = &m_light;
+			const bool isEnvProbe = (pL->m_Flags & DLF_DEFERRED_CUBEMAPS) != 0;
+			if (GetCVars()->e_DynamicLights == 2 && !isEnvProbe)
 			{
-				SRenderLight* pL = &m_light;
 				float fSize = 0.05f * (sinf(GetCurTimeSec() * 10.f) + 2.0f);
 				DrawSphere(pL->m_Origin, fSize, pL->m_Color);
-				IRenderAuxText::DrawLabelF(pL->m_Origin, 1.3f, "id=%d, rad=%.1f, vdr=%d", pL->m_Id, pL->m_fRadius, (int)m_ucViewDistRatio);
+				{
+					IRenderAuxText::DrawLabelF(pL->m_Origin, 1.3f, "id=%d, rad=%.1f, vdr=%d", pL->m_Id, pL->m_fRadius, (int)m_ucViewDistRatio);
+				}
+			}
+			else if (GetCVars()->e_DynamicLights == 3 && isEnvProbe)
+			{
+				float fSize = 0.05f * (sinf(GetCurTimeSec() * 10.f) + 2.0f);
+				DrawSphere(pL->m_Origin, fSize, pL->m_Color);
+				{
+					IRenderAuxText::DrawLabelF(pL->m_Origin, 1.3f, "id=%d, rad=%.1f, vdr=%d", pL->m_Id, pL->m_fRadius, (int)m_ucViewDistRatio);
+				}
 			}
 
 			const float mult = SATURATE(6.f * (1.f - (rParams.fDistance / m_fWSMaxViewDist)));

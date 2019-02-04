@@ -400,16 +400,6 @@ void CD3D9Renderer::SF_PrecacheShaders()
 	SDeviceObjectHelpers::THwShaderInfo shaderInfoXY16iCF32;
 	SDeviceObjectHelpers::THwShaderInfo shaderInfoGlyph;
 
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16i,     pShader, Res.m_shTech_SolidColor             , 0, 0, MDV_NONE, nullptr, false);
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16iC32,  pShader, Res.m_shTech_CxformGouraudNoAddAlpha, 0, 0, MDV_NONE, nullptr, false);
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoXY16iCF32, pShader, Res.m_shTech_CxformGouraud          , 0, 0, MDV_NONE, nullptr, false);
-	SDeviceObjectHelpers::GetShaderInstanceInfo(shaderInfoGlyph,     pShader, Res.m_shTech_GlyphTexture           , 0, 0, MDV_NONE, nullptr, false);
-
-	auto* pInstanceXY16i     = reinterpret_cast<CHWShader_D3D::SHWSInstance*>(shaderInfoXY16i    [eHWSC_Vertex].pHwShaderInstance);
-	auto* pInstanceXY16iC32  = reinterpret_cast<CHWShader_D3D::SHWSInstance*>(shaderInfoXY16iC32 [eHWSC_Vertex].pHwShaderInstance);
-	auto* pInstanceXY16iCF32 = reinterpret_cast<CHWShader_D3D::SHWSInstance*>(shaderInfoXY16iCF32[eHWSC_Vertex].pHwShaderInstance);
-	auto* pInstanceGlyph     = reinterpret_cast<CHWShader_D3D::SHWSInstance*>(shaderInfoGlyph    [eHWSC_Vertex].pHwShaderInstance);
-
 	Res.m_vertexDecls[IScaleformPlayback::Vertex_XY16i]     = CDeviceObjectFactory::CreateCustomVertexFormat(1, VertexDeclXY16i);
 	Res.m_vertexDecls[IScaleformPlayback::Vertex_XY16iC32]  = CDeviceObjectFactory::CreateCustomVertexFormat(2, VertexDeclXY16iC32);
 	Res.m_vertexDecls[IScaleformPlayback::Vertex_XY16iCF32] = CDeviceObjectFactory::CreateCustomVertexFormat(3, VertexDeclXY16iCF32);
@@ -770,12 +760,16 @@ bool CD3D9Renderer::SF_ClearTexture(int texId, int mipLevel, int numRects, const
 	if (!pDevTex)
 		return false;
 
+	D3DSurface* pSurface = pTexture->GetSurface(0, mipLevel);
+	if (!pSurface)
+		return false;
+
 	GPUPIN_DEVICE_TEXTURE(GetPerformanceDeviceContext(), pDevTex);
 	const ColorF clearValue(pData[0], pData[1], pData[2], pData[3]);
 	if (!numRects || !pRects)
 	{
 		CDeviceCommandListRef commandList = GetDeviceObjectFactory().GetCoreCommandList();
-		commandList.GetGraphicsInterface()->ClearSurface(pTexture->GetSurface(0, mipLevel), clearValue);
+		commandList.GetGraphicsInterface()->ClearSurface(pSurface, clearValue);
 	}
 	else
 	{
@@ -787,7 +781,7 @@ bool CD3D9Renderer::SF_ClearTexture(int texId, int mipLevel, int numRects, const
 							   static_cast<LONG>(pRects[i].dstX + pRects[i].width),
 							   static_cast<LONG>(pRects[i].dstY + pRects[i].height) };
 			CDeviceCommandListRef commandList = GetDeviceObjectFactory().GetCoreCommandList();
-			commandList.GetGraphicsInterface()->ClearSurface(pTexture->GetSurface(0, mipLevel), clearValue, 1, &box);
+			commandList.GetGraphicsInterface()->ClearSurface(pSurface, clearValue, 1, &box);
 		}
 	}
 	return true;

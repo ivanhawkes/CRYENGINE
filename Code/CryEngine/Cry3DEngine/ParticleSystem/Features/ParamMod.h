@@ -167,29 +167,194 @@ template<typename T>
 struct SInstanceUpdateBuffer: STempBuffer<T>
 {
 	template<typename TParamMod>
-	SInstanceUpdateBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod)
+	SInstanceUpdateBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, EDataDomain domain)
 		: STempBuffer<T>(runtime, paramMod), m_runtime(runtime), m_range(1, 1)
 	{
 		if (paramMod.HasModifiers())
 		{
-			this->Allocate(SUpdateRange(0, runtime.GetNumInstances()));
-			m_range = paramMod.GetValues(runtime, this->m_buffer, EDD_PerInstance);
+			this->Allocate(SUpdateRange(0, runtime.GetDomainSize(domain)));
+			m_range = paramMod.GetValues(runtime, this->m_buffer, domain);
 		}
 	}
 
-	ILINE T operator[](uint id) const
+	TRange<T> operator[](uint id) const
 	{
-		const TParticleId parentId = m_runtime.GetInstance(id).m_parentId;
-		return this->SafeLoad(parentId);
+		if (this->IsValid() && id < m_runtime.GetNumInstances())
+		{
+			const TParticleId parentId = m_runtime.GetInstance(id).m_parentId;
+			return m_range * this->Load(parentId);
+		}
+		else
+			return this->Load(0);
 	}
-
-	TRange<T> const& Range() const { return m_range; }
 
 private:
 	const CParticleComponentRuntime& m_runtime;
 	TRange<T>                        m_range;
 };
 
+
+///////////////////////////////////////////////////////////////////////////////
+// Domain distribution
+
+SERIALIZATION_ENUM_DECLARE(EDistribution, ,
+	Random,
+	Ordered
+)
+
+template<uint Dim, typename T = std::array<float, Dim>>
+struct SDistribution
+{
+	void Serialize(Serialization::IArchive& ar)
+	{
+		SERIALIZE_VAR(ar, m_distribution);
+		if (m_distribution == EDistribution::Ordered)
+			SERIALIZE_VAR(ar, m_modulus);
+	}
+
+	EDistribution m_distribution = EDistribution::Random;
+	PosInt       m_modulus[Dim];
+};
+
+template<uint Dim, typename T = std::array<float, Dim>>
+struct SDistributor
+{
+	SDistributor(const SDistribution<Dim, T>& dist, CParticleComponentRuntime& runtime)
+		: m_distribution(dist.m_distribution)
+		, m_chaos(runtime.Chaos())
+		, m_order(runtime.GetContainer().GetSpawnIdOffset())
+	{
+		if (m_distribution == EDistribution::Ordered)
+		{
+			for (uint e = 0; e < Dim; ++e)
+				m_order.SetModulus(dist.m_modulus[e], e);
+		}
+	}
+
+	void SetRange(uint e, Range range, bool isOpen = false)
+	{
+		if (m_distribution == EDistribution::Random)
+			m_chaos.SetRange(e, range, isOpen);
+		else
+			m_order.SetRange(e, range, isOpen);
+	}
+
+	T operator()()
+	{
+		if (m_distribution == EDistribution::Random)
+			return m_chaos();
+		else
+			return m_order();
+	}
+
+private:
+	const EDistribution m_distribution;
+	SChaosKeyN<Dim, T> m_chaos;
+	SOrderKeyN<Dim, T> m_order;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Distributor specializations
+
+struct ChaosTypes
+{
+	template<uint Dim, typename T = std::array<float, Dim>> using type = SChaosKeyN<Dim, T>;
+};
+struct OrderTypes
+{
+	template<uint Dim, typename T = std::array<float, Dim>> using type = SOrderKeyN<Dim, T>;
+};
+struct DistributorTypes
+{
+	template<uint Dim, typename T = std::array<float, Dim>> using type = SDistributor<Dim, T>;
+};
+
+template<typename Types>
+struct SCircleDistributor
+{
+	template<class... Args>
+	SCircleDistributor(Args&&... args)
+		: m_base(std::forward<Args>(args)...)
+	{
+		m_base.SetRange(0, {0, gf_PI2}, true);
+	}
+	Vec2 operator()()
+	{
+		return CirclePoint(m_base()[0]);
+	}
+
+protected:
+	typename Types::template type<1> m_base;
+};
+
+template<typename Types>
+struct SDiskDistributor
+{
+	template<class... Args>
+	SDiskDistributor(Args&&... args)
+		: m_base(std::forward<Args>(args)...)
+	{
+		m_base.SetRange(0, {0, gf_PI2}, true);
+		m_base.SetRange(1, {0, 1});
+	}
+	void SetRadiusRange(Range radii)
+	{
+		m_base.SetRange(1, {sqr(radii.start), sqr(radii.end)});
+	}
+	Vec2 operator()()
+	{
+		auto vals = m_base();
+		return DiskPoint(vals[0], vals[1]);
+	}
+
+protected:
+	typename Types::template type<2> m_base;
+};
+
+template<typename Types>
+struct SSphereDistributor
+{
+	template<class... Args>
+	SSphereDistributor(Args&&... args)
+		: m_base(std::forward<Args>(args)...)
+	{
+		m_base.SetRange(0, {0, gf_PI2}, true);
+		m_base.SetRange(1, {-1, +1});
+	}
+	Vec3 operator()()
+	{
+		auto vals = m_base();
+		return SpherePoint(vals[0], vals[1]);
+	}
+
+protected:
+	typename Types::template type<2> m_base;
+};
+
+template<typename Types>
+struct SBallDistributor
+{
+	template<class... Args>
+	SBallDistributor(Args&&... args)
+		: m_base(std::forward<Args>(args)...)
+	{
+		m_base.SetRange(0, {0, gf_PI2}, true);
+		m_base.SetRange(1, {-1, +1});
+		m_base.SetRange(2, {0, 1});
+	}
+	void SetRadiusRange(Range radii)
+	{
+		this->m_base.SetRange(2, {cube(radii.start), cube(radii.end)});
+	}
+	Vec3 operator()()
+	{
+		auto vals = m_base();
+		return BallPoint(vals[0], vals[1], vals[2]);
+	}
+
+protected:
+	typename Types::template type<3> m_base;
+};
 
 
 }

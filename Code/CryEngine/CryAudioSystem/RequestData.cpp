@@ -38,7 +38,6 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 			{
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::SetImpl)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ReleaseImpl)
-				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::RefreshSystem)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::StopAllSounds)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ParseControlsData)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ParsePreloadsData)
@@ -50,8 +49,6 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::SetGlobalParameter)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::SetSwitchState)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::SetGlobalSwitchState)
-				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::LoadTrigger)
-				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::UnloadTrigger)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::PlayFile)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::StopFile)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::AutoLoadSetting)
@@ -73,7 +70,8 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ExecuteDefaultTrigger)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::StopTrigger)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::StopAllTriggers)
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::RefreshSystem)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ReloadControlsData)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::RetriggerControls)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::DrawDebugInfo)
@@ -81,7 +79,7 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ExecutePreviewTriggerEx)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::StopPreviewTrigger)
 				CRY_AUDIO_SYSTEM_REQUEST_BLOCK(ESystemRequestType::ResetRequestCount)
-#endif    // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif    // CRY_AUDIO_USE_PRODUCTION_CODE
 			default:
 				{
 					CRY_ASSERT_MESSAGE(false, "Unknown audio system request type (%u) during %s", pBase->systemRequestType, __FUNCTION__);
@@ -98,16 +96,16 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 
 			switch (pBase->objectRequestType)
 			{
-				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::LoadTrigger)
-				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::UnloadTrigger)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::PlayFile)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::StopFile)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::ExecuteTrigger)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::StopTrigger)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::StopAllTriggers)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetTransformation)
+#if defined(CRY_AUDIO_USE_OCCLUSION)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetOcclusionType)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetOcclusionRayOffset)
+#endif    // CRY_AUDIO_USE_OCCLUSION
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetParameter)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetSwitchState)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetCurrentEnvironments)
@@ -115,9 +113,9 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::ProcessPhysicsRay)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::ToggleAbsoluteVelocityTracking)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::ToggleRelativeVelocityTracking)
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 				CRY_AUDIO_OBJECT_REQUEST_BLOCK(EObjectRequestType::SetName)
-#endif    // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif    // CRY_AUDIO_USE_PRODUCTION_CODE
 			default:
 				{
 					CRY_ASSERT_MESSAGE(false, "Unknown object request type (%u) during %s", pBase->objectRequestType, __FUNCTION__);
@@ -134,9 +132,9 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 			switch (pBase->listenerRequestType)
 			{
 				CRY_AUDIO_LISTENER_REQUEST_BLOCK(EListenerRequestType::SetTransformation)
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 				CRY_AUDIO_LISTENER_REQUEST_BLOCK(EListenerRequestType::SetName)
-#endif    // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif    // CRY_AUDIO_USE_PRODUCTION_CODE
 			default:
 				{
 					CRY_ASSERT_MESSAGE(false, "Unknown listener request type (%u) during %s", pBase->listenerRequestType, __FUNCTION__);
@@ -153,13 +151,13 @@ std::shared_ptr<SRequestData> AllocateRequestData(SRequestData const* const pReq
 
 			switch (pBase->callbackRequestType)
 			{
-				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportStartedEvent)
-				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportFinishedEvent)
+				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportStartedTriggerConnectionInstance)
+				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportFinishedTriggerConnectionInstance)
 				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportFinishedTriggerInstance)
 				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportStartedFile)
 				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportStoppedFile)
-				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportVirtualizedEvent)
-				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportPhysicalizedEvent)
+				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportPhysicalizedObject)
+				CRY_AUDIO_CALLBACK_REQUEST_BLOCK(ECallbackRequestType::ReportVirtualizedObject)
 			default:
 				{
 					CRY_ASSERT_MESSAGE(false, "Unknown callback request type (%u) during %s", pBase->callbackRequestType, __FUNCTION__);

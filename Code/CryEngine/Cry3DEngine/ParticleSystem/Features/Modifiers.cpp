@@ -133,12 +133,12 @@ public:
 	{
 		CRY_PFX2_PROFILE_DETAIL;
 
-		SChaosKeyV::Range randRange(1.0f - m_amount, 1.0f);
+		auto randRange = SChaosKeyV::Range(1.0f - m_amount, 1.0f);
 
 		for (auto particleGroupId : SGroupRange(range))
 		{
 			const floatv inValue = stream.Load(particleGroupId);
-			const floatv value = runtime.ChaosV().Rand(randRange);
+			const floatv value = runtime.ChaosV()(randRange);
 			const floatv outvalue = Mul(inValue, value);
 			stream.Store(particleGroupId, outvalue);
 		}
@@ -493,7 +493,8 @@ const SSpecData gConfigSpecs[] =
 	{ "Medium",   "Medium",         CONFIG_MEDIUM_SPEC },
 	{ "High",     "High",           CONFIG_HIGH_SPEC },
 	{ "VeryHigh", "Very High",      CONFIG_VERYHIGH_SPEC },
-	{ "XBO",      "XBox One",       CONFIG_DURANGO },
+	{ "XboxOne",  "XBox One",       CONFIG_DURANGO },
+	{ "XboxOneX", "XBox One X",     CONFIG_DURANGO_X },
 	{ "PS4",      "Playstation 4",  CONFIG_ORBIS },
 };
 

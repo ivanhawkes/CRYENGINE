@@ -3,8 +3,8 @@
 #include "stdafx.h"
 #include "Object.h"
 #include "Event.h"
-#include "Trigger.h"
-#include <Logger.h>
+#include "EventInstance.h"
+#include "Impl.h"
 
 namespace CryAudio
 {
@@ -15,33 +15,50 @@ namespace PortAudio
 //////////////////////////////////////////////////////////////////////////
 void CObject::StopEvent(uint32 const pathId)
 {
-	for (auto const pEvent : m_activeEvents)
+	for (auto const pEventInstance : m_eventInstances)
 	{
-		if (pEvent->pathId == pathId)
+		if (pEventInstance->GetPathId() == pathId)
 		{
-			pEvent->Stop();
+			pEventInstance->Stop();
 		}
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CObject::RegisterEvent(CEvent* const pEvent)
+void CObject::RegisterEventInstance(CEventInstance* const pEventInstance)
 {
-	m_activeEvents.push_back(pEvent);
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CObject::UnregisterEvent(CEvent* const pEvent)
-{
-	m_activeEvents.erase(std::remove(m_activeEvents.begin(), m_activeEvents.end(), pEvent), m_activeEvents.end());
+	m_eventInstances.push_back(pEventInstance);
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObject::Update(float const deltaTime)
 {
-	for (auto const pEvent : m_activeEvents)
+	auto iter(m_eventInstances.begin());
+	auto iterEnd(m_eventInstances.end());
+
+	while (iter != iterEnd)
 	{
-		pEvent->Update();
+		auto const pEventInstance = *iter;
+
+		if (pEventInstance->IsToBeRemoved())
+		{
+			gEnv->pAudioSystem->ReportFinishedTriggerConnectionInstance(pEventInstance->GetTriggerInstanceId(), ETriggerResult::Playing);
+			g_pImpl->DestructEventInstance(pEventInstance);
+
+			if (iter != (iterEnd - 1))
+			{
+				(*iter) = m_eventInstances.back();
+			}
+
+			m_eventInstances.pop_back();
+			iter = m_eventInstances.begin();
+			iterEnd = m_eventInstances.end();
+		}
+		else
+		{
+			pEventInstance->Update();
+			++iter;
+		}
 	}
 }
 
@@ -63,17 +80,19 @@ void CObject::SetOcclusionType(EOcclusionType const occlusionType)
 //////////////////////////////////////////////////////////////////////////
 void CObject::StopAllTriggers()
 {
-	for (auto const pEvent : m_activeEvents)
+	for (auto const pEventInstance : m_eventInstances)
 	{
-		pEvent->Stop();
+		pEventInstance->Stop();
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 ERequestStatus CObject::SetName(char const* const szName)
 {
-	// PortAudio does not have the concept of audio objects and with that the debugging of such.
-	// Therefore the name is currently not needed here.
+#if defined(CRY_AUDIO_IMPL_PORTAUDIO_USE_PRODUCTION_CODE)
+	m_name = szName;
+#endif  // CRY_AUDIO_IMPL_PORTAUDIO_USE_PRODUCTION_CODE
+
 	return ERequestStatus::Success;
 }
 

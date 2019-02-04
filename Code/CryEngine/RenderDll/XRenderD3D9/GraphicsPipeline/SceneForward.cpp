@@ -894,7 +894,7 @@ void CSceneForwardStage::ExecuteOpaque()
 		m_forwardEyeOverlayPass.EndExecution();
 
 		m_forwardOpaquePass.BeginExecution();
-		m_forwardOpaquePass.SetupDrawContext(m_stageID, ePass_Forward, TTYPE_GENERAL, FB_GENERAL | FB_TILED_FORWARD, bForwardFilter | FB_ZPREPASS);
+		m_forwardOpaquePass.SetupDrawContext(m_stageID, ePass_Forward, TTYPE_GENERAL, FB_GENERAL | FB_TILED_FORWARD, FB_ZPREPASS);
 		m_forwardOpaquePass.DrawRenderItems(pRenderView, EFSLIST_FORWARD_OPAQUE_NEAREST, 0, nearestFNoZPre);
 		if (CRenderer::CV_r_DeferredShadingTiled == CTiledShadingStage::eDeferredMode_Disabled)
 			m_forwardOpaquePass.DrawRenderItems(pRenderView, EFSLIST_NEAREST_OBJECTS, 0, nearestGNoZPre);
@@ -904,7 +904,7 @@ void CSceneForwardStage::ExecuteOpaque()
 		m_forwardOpaquePass.EndExecution();
 
 		m_forwardOpaquePass.BeginExecution();
-		m_forwardOpaquePass.SetupDrawContext(m_stageID, ePass_ForwardPrepassed, TTYPE_GENERAL, FB_GENERAL | FB_TILED_FORWARD | FB_ZPREPASS, bForwardFilter);
+		m_forwardOpaquePass.SetupDrawContext(m_stageID, ePass_ForwardPrepassed, TTYPE_GENERAL, FB_GENERAL | FB_TILED_FORWARD | FB_ZPREPASS);
 		m_forwardOpaquePass.DrawRenderItems(pRenderView, EFSLIST_FORWARD_OPAQUE_NEAREST, nearestFNoZPre, nearestFNum);
 		if (CRenderer::CV_r_DeferredShadingTiled == CTiledShadingStage::eDeferredMode_Disabled)
 			m_forwardOpaquePass.DrawRenderItems(pRenderView, EFSLIST_NEAREST_OBJECTS, nearestGNoZPre, nearestGNum);
@@ -1284,11 +1284,20 @@ void CSceneForwardStage::SetHDRSkyParameters()
 
 	// SkyBox
 	{
+		IMaterial* skyMat = m_pSkyMat ? m_pSkyMat : gEnv->p3DEngine->GetSkyMaterial();
+		CShaderResources* skyRes = nullptr;
+		if (!skyMat || !skyMat->GetShaderItem().m_pShaderResources)
+			return;
+
+		skyRes = (CShaderResources*)skyMat->GetShaderItem().m_pShaderResources;
+
 		static CCryNameR skyBoxParamName("SkyDome_SkyBoxParams");
 		const float skyBoxAngle = 0.0f;// DEG2RAD(gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKY_SKYBOX_ANGLE));
 		const float skyBoxScaling = 2.0f;// 1.0f / std::max(0.0001f, gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKY_SKYBOX_STRETCHING));
 		const float skyBoxMultiplier = gEnv->p3DEngine->GetGlobalParameter(E3DPARAM_SKYBOX_MULTIPLIER);
-		const Vec4 skyBoxParams(skyBoxAngle, skyBoxScaling, skyBoxMultiplier, 0);
+		Vec4 skyBoxParams(skyBoxAngle, skyBoxScaling, skyBoxMultiplier, 0);
+		SShaderParam::GetValue("SkyboxAngle", &skyRes->GetParameters(), &skyBoxParams.x, 0);
+		skyBoxParams.x = DEG2RAD(skyBoxParams.x);
 		m_skyPass.SetConstant(skyBoxParamName, skyBoxParams, eHWSC_Pixel);
 	}
 
@@ -1424,6 +1433,9 @@ void CSceneForwardStage::ExecuteSky(CTexture* pColorTex, CTexture* pDepthTex)
 	FUNCTION_PROFILER_RENDERER();
 
 	if (!m_pHDRSkyRE && !m_pSkyRE)
+		return;
+
+	if (m_pHDRSkyRE && !m_pHDRSkyRE->m_pRenderParams)
 		return;
 
 	PROFILE_LABEL_SCOPE("SKY_PASS");

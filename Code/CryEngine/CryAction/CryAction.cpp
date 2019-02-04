@@ -178,6 +178,9 @@
 
 #include <CryFlowGraph/IFlowBaseNode.h>
 
+#if !CrySharedLibrarySupported
+extern "C" IGameStartup * CreateGameStartup();
+#endif //!CrySharedLibrarySupported
 
 #define DEFAULT_BAN_TIMEOUT     (30.0f)
 
@@ -2059,6 +2062,7 @@ bool CCryAction::InitGame(SSystemInitParams& startupParams)
 
 	HMODULE hGameDll = 0;
 
+#if CrySharedLibrarySupported
 	IGameStartup::TEntryFunction CreateGameStartup = (IGameStartup::TEntryFunction)CryGetProcAddress(CryGetCurrentModule(), "CreateGameStartup");
 	if (!CreateGameStartup)
 	{
@@ -2098,6 +2102,7 @@ bool CCryAction::InitGame(SSystemInitParams& startupParams)
 			return false;
 		}
 	}
+#endif
 
 	// create the game startup interface
 	IGameStartup* pGameStartup = CreateGameStartup();
@@ -2802,6 +2807,7 @@ void CCryAction::PostRenderSubmit()
 {
 	CRY_PROFILE_REGION(PROFILE_GAME, "CCryAction::PostRenderSubmit");
 	CRYPROFILE_SCOPE_PROFILE_MARKER("CCryAction::PostRenderSubmit");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CCryAction::PostRenderSubmit");
 
 	if (m_pGame)
 	{

@@ -174,7 +174,7 @@ struct IMiniGUI;
 }
 
 typedef CryGUID CryInterfaceID;
-typedef void* CRY_HWND;
+typedef void*   CRY_HWND;
 
 #define PROC_MENU     1
 #define PROC_3DENGINE 2
@@ -210,11 +210,12 @@ enum ESystemConfigSpec
 	CONFIG_HIGH_SPEC     = 3,
 	CONFIG_VERYHIGH_SPEC = 4,
 
-	CONFIG_DURANGO       = 5,
-	CONFIG_ORBIS         = 6,
+	CONFIG_DURANGO       = 5, //! Xbox One (Potato)
+	CONFIG_DURANGO_X     = 6, //! Xbox One X
+	CONFIG_ORBIS         = 7,
 
 	//! Specialized detail config setting.
-	CONFIG_DETAIL_SPEC = 7,
+	CONFIG_DETAIL_SPEC = 8,
 
 	END_CONFIG_SPEC_ENUM, //!< Must be the last value, used for error checking.
 };
@@ -474,6 +475,9 @@ enum ESystemEvent
 
 	//! Sent to inform the audio system to resume.
 	ESYSTEM_EVENT_AUDIO_RESUME,
+
+	//! Sent to inform the audio system to refresh.
+	ESYSTEM_EVENT_AUDIO_REFRESH,
 
 	//! Sent when the audio language has changed.
 	ESYSTEM_EVENT_AUDIO_LANGUAGE_CHANGED,
@@ -920,6 +924,7 @@ struct SSystemGlobalEnvironment
 
 	//////////////////////////////////////////////////////////////////////////
 	// Used by frame profiler.
+	int                          bFrameProfilerActive;
 	int                          bDeepProfiling;
 	bool                         bBootProfilerEnabledFrames;
 	FrameProfilerSectionCallback callbackStartSection;
@@ -1203,9 +1208,6 @@ struct ISystem
 
 	//! Updates the engine's systems without creating a rendered frame
 	virtual bool Update(CEnumFlags<ESystemUpdateFlags> updateFlags, int nPauseMode = 0) = 0;
-
-	virtual void DoWorkDuringOcclusionChecks() = 0;
-	virtual bool NeedDoWorkDuringOcclusionChecks() = 0;
 
 	virtual void RenderPhysicsHelpers() = 0;
 
@@ -1585,12 +1587,8 @@ struct ISystem
 	//! GetSystemUpdate stats (all systems update without except console).
 	//! Very useful on dedicated server as we throttle it to fixed frequency.
 	//! \return zeros if no updates happened yet.
-	virtual void GetUpdateStats(SSystemUpdateStats& stats) = 0;
+	virtual void               GetUpdateStats(SSystemUpdateStats& stats) = 0;
 
-	//! Useful to investigate memory fragmentation.
-	//! Every time you call this from the console: #System.DumpMemoryCoverage()
-	//! it adds a line to "MemoryCoverage.bmp" (generated the first time, there is a max line count).
-	virtual void               DumpMemoryCoverage() = 0;
 	virtual ESystemGlobalState GetSystemGlobalState(void) = 0;
 	virtual void               SetSystemGlobalState(const ESystemGlobalState systemGlobalState) = 0;
 

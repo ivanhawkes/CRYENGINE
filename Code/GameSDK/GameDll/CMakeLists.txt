@@ -1389,6 +1389,7 @@ end_sources()
 #END-FILE-LIST
 
 add_subdirectory(${CRYENGINE_DIR}/Code/CryPlugins/CryLobby "${CMAKE_CURRENT_BINARY_DIR}/CryLobby")
+add_subdirectory(${CRYENGINE_DIR}/Code/CryPlugins/CryPerceptionSystem "${CMAKE_CURRENT_BINARY_DIR}/CryPerceptionSystem")
 
 CryGameModule(CryGameSDK PCH "StdAfx.cpp" SOLUTION_FOLDER "Projects/GameSDK")
 
@@ -1428,7 +1429,6 @@ endif()
 
 if (ORBIS OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	target_compile_options(${THIS_PROJECT} PRIVATE
-		-Wno-unused-variable
 		-Wno-parentheses
 		-Wno-reorder
 		-Wno-unused-value
@@ -1453,7 +1453,6 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(${THIS_PROJECT} PRIVATE
 		-Wno-unused-function
 		-Wno-unused-value
-		-Wno-unused-variable
 		-Wno-sign-compare
 		-Wno-ignored-attributes
 		-Wno-int-in-bool-context

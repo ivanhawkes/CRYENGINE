@@ -1,16 +1,5 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-// -------------------------------------------------------------------------
-//  File name:   3denginerender.cpp
-//  Version:     v1.00
-//  Created:     28/5/2001 by Vladimir Kajalin
-//  Compilers:   Visual Studio.NET
-//  Description: rendering
-// -------------------------------------------------------------------------
-//  History:
-//
-////////////////////////////////////////////////////////////////////////////
-
 #include "StdAfx.h"
 
 #include "3dEngine.h"
@@ -816,6 +805,7 @@ void C3DEngine::RenderWorld(const int nRenderFlags, const SRenderingPassInfo& pa
 {
 	CRY_PROFILE_REGION(PROFILE_3DENGINE, "3DEngine: RenderWorld");
 	CRYPROFILE_SCOPE_PROFILE_MARKER("RenderWorld");
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "C3DEngine::RenderWorld");
 
 	passInfo.GetIRenderView()->SetShaderRenderingFlags(nRenderFlags);
 
@@ -1622,7 +1612,7 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Add render elements for indoor
 	////////////////////////////////////////////////////////////////////////////////////////
-	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed() && JobManager::InvokeAsJob("CheckOcclusion"))
+	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed())
 		m_pObjManager->BeginOcclusionCulling(passInfo);
 
 
@@ -1649,6 +1639,8 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 
 	if (passInfo.RenderShadows() && !passInfo.IsRecursivePass())
 	{
+		CRY_PROFILE_REGION(PROFILE_3DENGINE, "Prepare Shadow Passes");
+
 		// Collect shadow passes used in scene and allocate render view for each of them
 		uint32 nTimeSlicedShadowsUpdatedThisFrame = 0;
 		PrepareShadowPasses(passInfo, nTimeSlicedShadowsUpdatedThisFrame, shadowFrustums, shadowPassInfo);
@@ -1663,10 +1655,11 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 	else
 	{
 		CRY_PROFILE_REGION(PROFILE_3DENGINE, "Traverse Outdoor Lights");
+		uint32 outdoorCullMask = IsOutdoorVisible() ? passCullMask : (passCullMask & ~kPassCullMainMask);
 
 		// render point lights
 		CLightEntity::SetShadowFrustumsCollector(nullptr);
-		m_pObjectsTree->Render_LightSources(false, passInfo);
+		m_pObjectsTree->Render_LightSources(false, outdoorCullMask, passInfo);
 	}
 
 	// draw objects inside visible vis areas
@@ -1721,7 +1714,8 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 		passInfo.GetRendItemSorter().IncreaseOctreeCounter();
 		{
 			CRY_PROFILE_REGION(PROFILE_3DENGINE, "Traverse Outdoor Octree");
-			m_pObjectsTree->Render_Object_Nodes(false, OCTREENODE_RENDER_FLAG_OBJECTS, GetSkyColor(), passCullMask, passInfo);
+			uint32 outdoorCullMask = IsOutdoorVisible() ? passCullMask : (passCullMask & ~kPassCullMainMask);
+			m_pObjectsTree->Render_Object_Nodes(false, OCTREENODE_RENDER_FLAG_OBJECTS, GetSkyColor(), outdoorCullMask, passInfo);
 		}
 
 		if (GetCVars()->e_ObjectsTreeBBoxes >= 3)
@@ -1796,14 +1790,9 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 	}
 
 	// tell the occlusion culler that no new work will be submitted
-	if (IsStatObjBufferRenderTasksAllowed() && passInfo.IsGeneralPass() && JobManager::InvokeAsJob("CheckOcclusion"))
-	{
-		GetObjManager()->PushIntoCullQueue(SCheckOcclusionJobData::CreateQuitJobData());
-	}
-
 	if (passInfo.IsGeneralPass())
 	{
-		gEnv->pSystem->DoWorkDuringOcclusionChecks();
+		GetObjManager()->m_CullThread.SetActive(false);
 	}
 
 #if defined(FEATURE_SVO_GI)
@@ -1815,7 +1804,7 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 
 	// submit non-job render nodes into render views
 	// we wait for all render jobs to finish here
-	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed() && JobManager::InvokeAsJob("CheckOcclusion"))
+	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed())
 	{
 		m_pObjManager->RenderNonJobObjects(passInfo);
 	}
@@ -1912,7 +1901,7 @@ void C3DEngine::RenderScene(const int nRenderFlags, const SRenderingPassInfo& pa
 		m_bIsInRenderScene = false;
 	}
 
-	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed() && JobManager::InvokeAsJob("CheckOcclusion"))
+	if (passInfo.IsGeneralPass() && IsStatObjBufferRenderTasksAllowed())
 		m_pObjManager->EndOcclusionCulling();
 
 	// release shadow views (from now only renderer owns it)
@@ -1997,6 +1986,7 @@ void C3DEngine::ProcessOcean(const SRenderingPassInfo& passInfo)
 void C3DEngine::RenderSkyBox(IMaterial* pMat, const SRenderingPassInfo& passInfo)
 {
 	FUNCTION_PROFILER_3DENGINE;
+	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "C3DEngine::RenderSkyBox");
 
 	const float fForceDrawLastSortOffset = 100000.0f;
 
@@ -2383,6 +2373,9 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 	case CONFIG_DURANGO:
 		AppendString(szFlagsEnd, "XboxOneSpec");
 		break;
+	case CONFIG_DURANGO_X:
+		AppendString(szFlagsEnd, "XboxOneXSpec");
+		break;
 	case CONFIG_ORBIS:
 		AppendString(szFlagsEnd, "PS4Spec");
 		break;
@@ -2568,26 +2561,6 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 		if (bOutOfMem)
 		{
 			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, DISPLAY_INFO_SCALE, bOutOfMem ? Col_Red : Col_White, "%s", szAnimString);
-		}
-	}
-
-	if (gEnv->pCharacterManager)
-	{
-		static ICVar* pAttachmentMerging = GetConsole()->GetCVar("ca_DrawAttachmentsMergedForShadows");
-		static ICVar* pAttachmentMergingBudget = GetConsole()->GetCVar("ca_AttachmentMergingMemoryBudget");
-
-		if (pAttachmentMerging && pAttachmentMergingBudget && pAttachmentMerging->GetIVal() > 0)
-		{
-			const IAttachmentMerger& pAttachmentMerger = gEnv->pCharacterManager->GetIAttachmentMerger();
-			uint nAllocatedBytes = pAttachmentMerger.GetAllocatedBytes();
-			bool bOutOfMemory = pAttachmentMerger.IsOutOfMemory();
-
-			if (bOutOfMemory || pAttachmentMerging->GetIVal() > 1)
-			{
-				char buffer[64];
-				cry_sprintf(buffer, "Character Attachment Merging (Shadows): %0.2f of %0.2f MB", nAllocatedBytes / (1024.f * 1024.f), pAttachmentMergingBudget->GetIVal() / (1024.0f * 1024.0f));
-				DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, DISPLAY_INFO_SCALE, bOutOfMemory ? Col_Red : Col_White, "%s", buffer);
-			}
 		}
 	}
 
@@ -2812,7 +2785,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 		#pragma warning( disable : 4267 )
 	#endif
 
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "DLights=%s(%d/%d)", sLightsList, m_nRealLightsNum + m_nDeferredLightsNum, m_lstDynLights.Count());
+			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "Probes=(%d) DLights=%s(%d/%d)", m_nDeferredProbesNum, sLightsList, m_nRealLightsNum + m_nDeferredLightsNum, m_lstDynLights.Count());
 		}
 		else
 		{
@@ -2844,7 +2817,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 			float nVidMemMB = (float)vidMemUsedThisFrame / (1024 * 1024);
 			int nPeakMemMB = (int)(processMemInfo.PeakPagefileUsage >> 20);
 			int nVirtMemMB = (int)(processMemInfo.PagefileUsage >> 20);
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "Vid=%.2f Mem=%d Peak=%d DLights=(%d/%d)", nVidMemMB, nVirtMemMB, nPeakMemMB, m_nRealLightsNum + m_nDeferredLightsNum, (int)m_lstDynLights.Count());
+			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "Vid=%.2f Mem=%d Peak=%d Probes=(%d) DLights=(%d/%d)", nVidMemMB, nVirtMemMB, nPeakMemMB, m_nDeferredProbesNum, m_nRealLightsNum + m_nDeferredLightsNum, (int)m_lstDynLights.Count());
 
 			if (GetCVars()->e_StreamInstances)
 			{
@@ -2914,6 +2887,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 		}
 
 		m_nDeferredLightsNum = 0;
+		m_nDeferredProbesNum = 0;
 	}
 	#if CAPTURE_REPLAY_LOG
 	{
@@ -3238,7 +3212,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 
 	if (GetCVars()->e_ParticlesDebug & AlphaBit('m'))
 	{
-		const stl::SPoolMemoryUsage memParticles = ParticleObjectAllocator().GetTotalMemory();
+		const stl::SPoolMemoryUsage memParticles = ParticleAllocator::GetTotalMemory();
 
 		ICrySizer* pSizerRE = GetSystem()->CreateSizer();
 		gEnv->pRenderer->GetMemoryUsageParticleREs(pSizerRE);
@@ -3421,7 +3395,7 @@ void C3DEngine::DisplayInfo(float& fTextPosX, float& fTextPosY, float& fTextStep
 		for (int i = 0; i < GetDynamicLightSources()->Count(); i++)
 		{
 			SRenderLight* pL = GetDynamicLightSources()->GetAt(i);
-			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "%s - %d)", pL->m_sName, pL->m_Id);
+			DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "%s - %d)",pL->m_sName, pL->m_Id);
 		}
 		DrawTextRightAligned(fTextPosX, fTextPosY += fTextStepY, "---------------------------------------");
 	}
@@ -3735,6 +3709,8 @@ void C3DEngine::FillDebugFPSInfo(SDebugFPSInfo& info)
 
 void C3DEngine::PrepareShadowPasses(const SRenderingPassInfo& passInfo, uint32& nTimeSlicedShadowsUpdatedThisFrame, std::vector<std::pair<ShadowMapFrustum*, const CLightEntity*>>& shadowFrustums, std::vector<SRenderingPassInfo>& shadowPassInfo)
 {
+	uint32 passCullMask = kPassCullMainMask; // initialize main view bit as visible
+
 	// enable collection of all accessed frustums
 	CLightEntity::SetShadowFrustumsCollector(&shadowFrustums);
 
@@ -3743,7 +3719,10 @@ void C3DEngine::PrepareShadowPasses(const SRenderingPassInfo& passInfo, uint32& 
 
 	// render outdoor point lights and collect dynamic point light frustums
 	if (IsObjectsTreeValid())
-		m_pObjectsTree->Render_LightSources(false, passInfo);
+	{
+		uint32 outdoorCullMask = IsOutdoorVisible() ? passCullMask : (passCullMask & ~kPassCullMainMask);
+		m_pObjectsTree->Render_LightSources(false, outdoorCullMask, passInfo);
+	}
 
 	// render indoor point lights and collect dynamic point light frustums
 	for (int i = 0; i < m_pVisAreaManager->m_lstVisibleAreas.Count(); ++i)
@@ -3753,7 +3732,7 @@ void C3DEngine::PrepareShadowPasses(const SRenderingPassInfo& passInfo, uint32& 
 		if (pArea->IsObjectsTreeValid())
 		{
 			for (int c = 0; c < pArea->m_lstCurCamerasLen; ++c)
-				pArea->GetObjectsTree()->Render_LightSources(false, SRenderingPassInfo::CreateTempRenderingInfo(CVisArea::s_tmpCameras[pArea->m_lstCurCamerasIdx + c], passInfo));
+				pArea->GetObjectsTree()->Render_LightSources(false, passCullMask, SRenderingPassInfo::CreateTempRenderingInfo(CVisArea::s_tmpCameras[pArea->m_lstCurCamerasIdx + c], passInfo));
 		}
 	}
 

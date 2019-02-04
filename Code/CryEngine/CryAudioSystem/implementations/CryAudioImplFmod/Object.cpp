@@ -4,17 +4,14 @@
 #include "Object.h"
 #include "BaseStandaloneFile.h"
 #include "CVars.h"
-#include "Environment.h"
 #include "Event.h"
+#include "EventInstance.h"
 #include "Listener.h"
-#include "Trigger.h"
 
-#include <Logger.h>
-
-#if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
-	#include "Debug.h"
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+	#include <DebugStyle.h>
 	#include <CryRenderer/IRenderAuxGeom.h>
-#endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -47,22 +44,11 @@ CObject::~CObject()
 //////////////////////////////////////////////////////////////////////////
 void CObject::Update(float const deltaTime)
 {
+	CBaseObject::Update(deltaTime);
+
 	if (((m_flags& EObjectFlags::MovingOrDecaying) != 0) && (deltaTime > 0.0f))
 	{
 		UpdateVelocities(deltaTime);
-	}
-
-	CBaseObject::Update(deltaTime);
-
-#if !defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
-	// Always update in production code for debug draw.
-	if ((m_flags& EObjectFlags::UpdateVirtualStates) != 0)
-#endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
-	{
-		for (auto const pEvent : m_events)
-		{
-			pEvent->UpdateVirtualState();
-		}
 	}
 }
 
@@ -99,9 +85,9 @@ void CObject::SetTransformation(CTransformation const& transformation)
 //////////////////////////////////////////////////////////////////////////
 void CObject::SetOcclusion(float const occlusion)
 {
-	for (auto const pEvent : m_events)
+	for (auto const pEventInstance : m_eventInstances)
 	{
-		pEvent->SetOcclusion(occlusion);
+		pEventInstance->SetOcclusion(occlusion);
 	}
 
 	m_occlusion = occlusion;
@@ -161,15 +147,15 @@ void CObject::ToggleFunctionality(EObjectFunctionality const type, bool const en
 //////////////////////////////////////////////////////////////////////////
 void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float posY, char const* const szTextFilter)
 {
-#if defined(INCLUDE_FMOD_IMPL_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 
 	if (((m_flags& EObjectFlags::TrackAbsoluteVelocity) != 0) || ((m_flags& EObjectFlags::TrackVelocityForDoppler) != 0))
 	{
 		bool isVirtual = true;
 
-		for (auto const pEvent : m_events)
+		for (auto const pEventInstance : m_eventInstances)
 		{
-			if (pEvent->GetState() != EEventState::Virtual)
+			if (pEventInstance->GetState() != EEventState::Virtual)
 			{
 				isVirtual = false;
 				break;
@@ -181,14 +167,14 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float pos
 			auxGeom.Draw2dLabel(
 				posX,
 				posY,
-				g_debugObjectFontSize,
-				isVirtual ? g_debugObjectColorVirtual.data() : g_debugObjectColorPhysical.data(),
+				Debug::g_objectFontSize,
+				isVirtual ? Debug::s_globalColorVirtual : Debug::s_objectColorParameter,
 				false,
 				"[Fmod] %s: %2.2f m/s\n",
-				s_szAbsoluteVelocityParameterName,
+				g_szAbsoluteVelocityParameterName,
 				m_absoluteVelocity);
 
-			posY += g_debugObjectLineHeight;
+			posY += Debug::g_objectLineHeight;
 		}
 
 		if ((m_flags& EObjectFlags::TrackVelocityForDoppler) != 0)
@@ -196,23 +182,23 @@ void CObject::DrawDebugInfo(IRenderAuxGeom& auxGeom, float const posX, float pos
 			auxGeom.Draw2dLabel(
 				posX,
 				posY,
-				g_debugObjectFontSize,
-				isVirtual ? g_debugObjectColorVirtual.data() : g_debugObjectColorPhysical.data(),
+				Debug::g_objectFontSize,
+				isVirtual ? Debug::s_globalColorVirtual : Debug::s_objectColorActive,
 				false,
 				"[Fmod] Doppler calculation enabled\n");
 		}
 	}
 
-#endif  // INCLUDE_FMOD_IMPL_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CObject::Set3DAttributes()
 {
-	for (auto const pEvent : m_events)
+	for (auto const pEventInstance : m_eventInstances)
 	{
-		FMOD_RESULT const fmodResult = pEvent->GetInstance()->set3DAttributes(&m_attributes);
-		ASSERT_FMOD_OK;
+		FMOD_RESULT const fmodResult = pEventInstance->GetFmodEventInstance()->set3DAttributes(&m_attributes);
+		CRY_AUDIO_IMPL_FMOD_ASSERT_OK;
 	}
 
 	for (auto const pFile : m_files)
@@ -265,9 +251,9 @@ void CObject::UpdateVelocities(float const deltaTime)
 //////////////////////////////////////////////////////////////////////////
 void CObject::SetAbsoluteVelocity(float const velocity)
 {
-	for (auto const pEvent : m_events)
+	for (auto const pEventInstance : m_eventInstances)
 	{
-		pEvent->SetAbsoluteVelocity(velocity);
+		pEventInstance->SetAbsoluteVelocity(velocity);
 	}
 
 	m_absoluteVelocity = velocity;

@@ -5,7 +5,6 @@
 #include <CrySystem/ISystem.h>
 #include <CryCore/Platform/CryLibrary.h>
 
-#include "MemoryFragmentationProfiler.h"
 #include "PakVars.h"
 #include "Timer.h"
 #include "FrameProfileSystem.h"
@@ -165,7 +164,6 @@ struct SSystemCVars
 	int     sys_intromoviesduringinit;
 	ICVar*  sys_splashscreen;
 
-	int     sys_deferAudioUpdateOptim;
 	int     sys_filesystemCaseSensitivity;
 
 	int     sys_reflection_natvis;
@@ -277,9 +275,6 @@ public:
 
 	virtual bool Update(CEnumFlags<ESystemUpdateFlags> updateFlags = CEnumFlags<ESystemUpdateFlags>(), int nPauseMode = 0) override;
 
-	virtual void DoWorkDuringOcclusionChecks() override;
-	virtual bool NeedDoWorkDuringOcclusionChecks() override { return m_bNeedDoWorkDuringOcclusionChecks; }
-
 	virtual void RenderPhysicsHelpers() override;
 
 	//! Update screen during loading.
@@ -297,7 +292,6 @@ public:
 	uint32       GetUsedMemory() override;
 
 	virtual void DumpMemoryUsageStatistics(bool bUseKB) override;
-	virtual void DumpMemoryCoverage() override;
 	void         CollectMemInfo(SCryEngineStatsGlobalMemInfo&);
 
 #ifndef _RELEASE
@@ -1019,8 +1013,6 @@ protected: // -------------------------------------------------------------
 
 	std::vector<std::pair<CTimeValue, float>> m_updateTimes;
 
-	CMemoryFragmentationProfiler              m_MemoryFragmentationProfiler;
-
 #if !defined(CRY_IS_MONOLITHIC_BUILD)
 	CCryLibrary m_gameLibrary;
 #endif
@@ -1035,7 +1027,6 @@ protected: // -------------------------------------------------------------
 	typedef std::list<SErrorMessage> TErrorMessages;
 	TErrorMessages                   m_ErrorMessages;
 	bool                             m_bHasRenderedErrorMessage;
-	bool                             m_bNeedDoWorkDuringOcclusionChecks;
 
 	std::unordered_map<uint32, bool> m_mapWarningOnceAlreadyPrinted;
 	CryMutex                         m_mapWarningOnceMutex;

@@ -1,7 +1,6 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#ifndef PROJECTDEFINES_H
-#define PROJECTDEFINES_H
+#pragma once
 
 #include <CryCore/BaseTypes.h>
 
@@ -57,7 +56,6 @@ typedef uint32 vtx_idx;
 #define LOG_CONST_CVAR_ACCESS 0
 
 #if CRY_PLATFORM_WINDOWS || LOG_CONST_CVAR_ACCESS
-	#define RELEASE_LOGGING
 	#if defined(_RELEASE)
 		#define CVARS_WHITELIST
 	#endif // defined(_RELEASE)
@@ -371,5 +369,3 @@ extern void SliceAndSleep(const char* pFunc, int line);
 #if defined(CRY_ENGINE_DEFINE_OVERRIDE_FILE)
 	#include CRY_ENGINE_DEFINE_OVERRIDE_FILE
 #endif
-
-#endif // PROJECTDEFINES_H

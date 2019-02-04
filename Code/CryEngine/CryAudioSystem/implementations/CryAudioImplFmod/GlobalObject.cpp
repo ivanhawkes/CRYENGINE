@@ -3,11 +3,10 @@
 #include "stdafx.h"
 #include "GlobalObject.h"
 #include "Common.h"
-#include "Environment.h"
-#include "Parameter.h"
-#include "SwitchState.h"
 
-#include <Logger.h>
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+	#include <Logger.h>
+#endif // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -20,6 +19,10 @@ CGlobalObject::CGlobalObject()
 {
 	CRY_ASSERT_MESSAGE(g_pObject == nullptr, "g_pObject is not nullptr during %s", __FUNCTION__);
 	g_pObject = this;
+
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+	m_name = "Global Object";
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -31,18 +34,23 @@ CGlobalObject::~CGlobalObject()
 //////////////////////////////////////////////////////////////////////////
 void CGlobalObject::SetOcclusion(float const occlusion)
 {
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 	Cry::Audio::Log(ELogType::Error, "Trying to set occlusion and obstruction values on the global object!");
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CGlobalObject::SetOcclusionType(EOcclusionType const occlusionType)
 {
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 	Cry::Audio::Log(ELogType::Error, "Trying to set occlusion type on the global object!");
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CGlobalObject::ToggleFunctionality(EObjectFunctionality const type, bool const enable)
 {
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
 	if (enable)
 	{
 		char const* szType = nullptr;
@@ -71,7 +79,8 @@ void CGlobalObject::ToggleFunctionality(EObjectFunctionality const type, bool co
 
 		Cry::Audio::Log(ELogType::Error, "Trying to enable %s on the global object!", szType);
 	}
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 }
-} // namespace Fmod
-} // namespace Impl
-} // namespace CryAudio
+}      // namespace Fmod
+}      // namespace Impl
+}      // namespace CryAudio

@@ -11,9 +11,9 @@
 #include "PauseAllTrigger.h"
 #include "ResumeAllTrigger.h"
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
 	#include "PreviewTrigger.h"
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 
 namespace CryAudio
 {
@@ -26,24 +26,30 @@ SwitchLookup g_switches;
 PreloadRequestLookup g_preloadRequests;
 EnvironmentLookup g_environments;
 SettingLookup g_settings;
-CObject* g_pObject = nullptr;
+TriggerInstanceIdLookup g_triggerInstanceIdToObject;
+
 CLoseFocusTrigger g_loseFocusTrigger;
 CGetFocusTrigger g_getFocusTrigger;
 CMuteAllTrigger g_muteAllTrigger;
 CUnmuteAllTrigger g_unmuteAllTrigger;
 CPauseAllTrigger g_pauseAllTrigger;
 CResumeAllTrigger g_resumeAllTrigger;
+Objects g_activeObjects;
 
 SImplInfo g_implInfo;
 CryFixedStringT<MaxFilePathLength> g_configPath = "";
 
-TriggerInstanceId g_triggerInstanceIdCounter = 0;
+TriggerInstanceId g_triggerInstanceIdCounter = 1;
 
 SPoolSizes g_poolSizes;
 
-#if defined(INCLUDE_AUDIO_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+Objects g_constructedObjects;
+CObject g_object(CTransformation::GetEmptyObject(), "Global Object");
+CObject g_previewObject(CTransformation::GetEmptyObject(), "Preview Object");
 CPreviewTrigger g_previewTrigger;
-CObject g_previewObject(CTransformation::GetEmptyObject());
 SPoolSizes g_debugPoolSizes;
-#endif // INCLUDE_AUDIO_PRODUCTION_CODE
+#else
+CObject g_object(CTransformation::GetEmptyObject());
+#endif // CRY_AUDIO_USE_PRODUCTION_CODE
 }      // namespace CryAudio

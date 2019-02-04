@@ -563,7 +563,7 @@ struct pe_simulation_params : pe_params
 	{
 		type = type_id;
 		MARK_UNUSED maxTimeStep, gravity, minEnergy, damping, iSimClass,
-		            dampingFreefall, gravityFreefall, mass, density, maxLoggedCollisions, maxRotVel, disablePreCG, maxFriction, collTypes;
+		            dampingFreefall, gravityFreefall, mass, density, maxLoggedCollisions, maxRotVel, disablePreCG, maxFriction, collTypes, noMassDecay;
 	}
 
 	int   iSimClass;
@@ -580,6 +580,7 @@ struct pe_simulation_params : pe_params
 	int   disablePreCG;        //!< Disables Pre-CG solver for the group this body is in (recommended for balls).
 	float maxFriction;         //!< Sets upper friction limit for this object and all objects it's currently in contact with.
 	int   collTypes;           //!< Collision types (a combination of ent_xxx flags).
+	int   noMassDecay;         //!< 1 disables mass decay propagation through the body (if solver mass decay is enabled)
 };
 
 struct pe_params_foreign_data : pe_params
@@ -1168,7 +1169,7 @@ struct pe_params_softbody : pe_params
 		type = type_id;
 		MARK_UNUSED thickness, maxSafeStep, ks, kdRatio, airResistance, wind, windVariance, nMaxIters,
 		            accuracy, friction, impulseScale, explosionScale, collisionImpulseScale, maxCollisionImpulse, collTypes, waterResistance, massDecay,
-		            shapeStiffnessNorm, shapeStiffnessTang, stiffnessAnim, stiffnessDecayAnim, dampingAnim, maxDistAnim, hostSpaceSim;
+		            shapeStiffnessNorm, shapeStiffnessTang, stiffnessAnim, stiffnessDecayAnim, dampingAnim, maxDistAnim, hostSpaceSim, pressure, dpressure, densityInside;
 	}
 
 	float thickness;   //!< thickness for collisions
@@ -1195,6 +1196,9 @@ struct pe_params_softbody : pe_params
 	float dampingAnim;           //!< damping for target pose pull
 	float maxDistAnim;           //!< max deviation from the target pose at the rim; uses stiffnessDecalAnim to scale down closer to attached vtx
 	float hostSpaceSim;          //!< 0 - world-space simulation, 1 - fully host-space simulation
+	float pressure; 						 //!< >0 tells that the object is closed and applies this pressure from inside in the original state (proportionally more when compressed)
+	float dpressure;             //!< pressure change speed
+	float densityInside;         //!< for closed objects (pressure>0), sets density of the medium inside; -1 to match outside air density
 };
 
 /////////// area params
@@ -2878,6 +2882,8 @@ struct SolverSettings
 	float maxMCMassRatio;
 	float maxMCVel;
 	int   maxLCPCGContacts;
+	int   massDecayPrepasses, massDecayMinLevel, massDecayMaxLevel;
+	float massDecay, massDecayHeavyThresh;
 };
 
 enum entity_out_of_bounds_flags
@@ -3509,7 +3515,8 @@ struct IPhysicalWorld
 
 	//! RasterizeEntities - builds a depth map from physical gometries in a box specified by grid; only updates area affected by offsBBox +/- sizeBBox
 	//! depth is z values, scaled and clamped so that the grid box's -size.z..+size.z is mapped to 0..255
-	virtual void RasterizeEntities(const primitives::grid3d& grid, uchar* rbuf, int objtypes, float massThreshold, const Vec3& offsBBox, const Vec3& sizeBBox, int flags) = 0;
+	virtual void RasterizeEntities(const primitives::grid3d& grid, uchar* rbuf, int objtypes, float massThreshold, 
+		const Vec3& offsBBox, const Vec3& sizeBBox, int flags, IPhysicalEntity *pentOnlyThis = nullptr) = 0;
 
 	//! DeformPhysicalEntity - applies boolean breaking for entity parts that have >=0 breakability index
 	//! r is used to scale the corresponding explosion (boolean) shape

@@ -66,6 +66,7 @@ public:
 	SUpdateRange                      GetSpawnedRange() const         { return SUpdateRange(m_firstSpawnId, m_lastSpawnId); }
 	SUpdateRange                      GetNonSpawnedRange() const      { CRY_PFX2_ASSERT(!HasNewBorns()); return SUpdateRange(0, m_firstSpawnId); }
 	uint32                            GetNextSpawnId() const          { return m_nextSpawnId; }
+	uint32                            GetSpawnIdOffset() const        { return m_nextSpawnId - m_lastId; }
 
 	void                              BeginAddParticles();
 	void                              AddParticles(uint count);
