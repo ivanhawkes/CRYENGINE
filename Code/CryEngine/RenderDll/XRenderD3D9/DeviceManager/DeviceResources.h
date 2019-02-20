@@ -117,7 +117,7 @@ public:
 		using namespace DeviceResources_Internal;
 		::SetDebugName(m_pNativeResource, name);
 	}
-
+	
 	inline D3DResource* GetNativeResource() const
 	{
 		return m_pNativeResource;

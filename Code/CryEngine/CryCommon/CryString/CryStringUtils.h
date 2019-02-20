@@ -139,7 +139,6 @@ inline bool vsprintf_with_clamp(char* const dst, size_t const dst_size_in_bytes,
 	const int n = vsnprintf(dst, dst_size_in_bytes, format, args);
 #endif
 
-
 #if CRY_COMPILER_MSVC && CRY_COMPILER_VERSION < 1900
 	if (n < 0 || n == dst_size_in_bytes)
 	{
