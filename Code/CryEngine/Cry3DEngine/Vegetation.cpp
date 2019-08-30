@@ -103,6 +103,30 @@ void CVegetation::Init()
 }
 
 //////////////////////////////////////////////////////////////////////////
+void CVegetation::Instance(bool bInstance)
+{
+	if (bInstance == IsInstanced())
+		return;
+
+	if (!bInstance)
+	{
+		// Drop instancing/temp-data even from hidden objects
+		if (m_pInstancingInfo)
+		{
+			SAFE_DELETE(m_pInstancingInfo);
+			InvalidatePermanentRenderObject();
+		}
+	}
+
+	// keep inactive objects at the end of the list
+	// keep active objects at the front of the list
+	if (!IsHidden() && m_pOcNode)
+		m_pOcNode->ReorderObject(this, !bInstance);
+
+	FlipRndFlags(ERF_STATIC_INSTANCING);
+}
+
+//////////////////////////////////////////////////////////////////////////
 void CVegetation::CalcMatrix(Matrix34A& tm, int* pFObjFlags)
 {
 	FUNCTION_PROFILER_3DENGINE;
@@ -415,14 +439,14 @@ void CVegetation::Render(const SRenderingPassInfo& passInfo, const CLodValue& lo
 	// because it can be called from the physics callback.
 	// A query for the visareastencilref is therefore issued every time it is rendered.
 	pRenderObject->m_nClipVolumeStencilRef = 0;
-	if (m_pOcNode && m_pOcNode->GetVisArea())
-		pRenderObject->m_nClipVolumeStencilRef = ((IVisArea*)m_pOcNode->GetVisArea())->GetStencilRef();
+	if (auto pVisArea = GetEntityVisArea())
+		pRenderObject->m_nClipVolumeStencilRef = pVisArea->GetStencilRef();
 	else if (userData.m_pClipVolume)
 		pRenderObject->m_nClipVolumeStencilRef = userData.m_pClipVolume->GetStencilRef();
 
 	if (m_pSpriteInfo && m_pSpriteInfo->ucAlphaTestRef < 255 && GetCVars()->e_VegetationSprites && !passInfo.IsShadowPass())
 	{
-		CThreadSafeRendererContainer<SVegetationSpriteInfo>& arrSpriteInfo = GetObjManager()->m_arrVegetationSprites[passInfo.GetRecursiveLevel()][passInfo.ThreadID()];
+		CryMT::CThreadSafePushContainer<SVegetationSpriteInfo>& arrSpriteInfo = GetObjManager()->m_arrVegetationSprites[passInfo.GetRecursiveLevel()][passInfo.ThreadID()];
 		arrSpriteInfo.push_back(*m_pSpriteInfo);
 	}
 
@@ -538,7 +562,7 @@ void CVegetation::Physicalize(bool bInstant)
 {
 	FUNCTION_PROFILER_3DENGINE;
 
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Physics, 0, "Vegetation physicalization");
+	MEMSTAT_CONTEXT(EMemStatContextType::Physics, "Vegetation physicalization");
 
 	StatInstGroup& vegetGroup = GetStatObjGroup();
 
@@ -799,7 +823,7 @@ const char* CVegetation::GetName() const
 	       GetStatObj()->GetFilePath() : "StatObjNotSet";
 }
 //////////////////////////////////////////////////////////////////////////
-IRenderMesh* CVegetation::GetRenderMesh(int nLod)
+IRenderMesh* CVegetation::GetRenderMesh(int nLod) const
 {
 	CStatObj* pStatObj(GetStatObj());
 
@@ -818,7 +842,7 @@ IRenderMesh* CVegetation::GetRenderMesh(int nLod)
 	return pStatObj->GetRenderMesh();
 }
 //////////////////////////////////////////////////////////////////////////
-IMaterial* CVegetation::GetMaterialOverride()
+IMaterial* CVegetation::GetMaterialOverride() const
 {
 	StatInstGroup& vegetGroup = GetStatObjGroup();
 
@@ -998,13 +1022,6 @@ bool CVegetation::GetLodDistances(const SFrameLodInfo& frameLodInfo, float* dist
 	return true;
 }
 
-const AABB CVegetation::GetBBox() const
-{
-	AABB aabb;
-	FillBBoxFromExtends(aabb, m_boxExtends, m_vPos);
-	return aabb;
-}
-
 void CVegetation::UpdateRndFlags()
 {
 	StatInstGroup& vegetGroup = GetStatObjGroup();
@@ -1021,17 +1038,7 @@ void CVegetation::UpdateRndFlags()
 	IRenderNode::SetViewDistRatio((int)(vegetGroup.fMaxViewDistRatio * 100.f));
 }
 
-void CVegetation::FillBBox(AABB& aabb)
-{
-	FillBBoxFromExtends(aabb, m_boxExtends, m_vPos);
-}
-
-EERType CVegetation::GetRenderNodeType()
-{
-	return eERType_Vegetation;
-}
-
-float CVegetation::GetMaxViewDist()
+float CVegetation::GetMaxViewDist() const
 {
 	StatInstGroup& group = GetStatObjGroup();
 	CStatObj* pStatObj = (CStatObj*)(IStatObj*)group.pStatObj;
@@ -1084,7 +1091,7 @@ IMaterial* CVegetation::GetMaterial(Vec3* pHitPos) const
 	return NULL;
 }
 
-bool CVegetation::CanExecuteRenderAsJob()
+bool CVegetation::CanExecuteRenderAsJob() const
 {
 	return (GetCVars()->e_ExecuteRenderAsJobMask & BIT(GetRenderNodeType())) != 0 && (m_dwRndFlags & ERF_RENDER_ALWAYS) == 0;
 }

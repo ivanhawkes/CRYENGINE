@@ -318,7 +318,6 @@ private:
 	{
 		IObjectManager* pObjectManager = GetIEditor()->GetObjectManager();
 		CBaseObject* pObject = pObjectManager->FindObject(m_objectGUID);
-		CBaseObject* pParentObject = pObjectManager->FindObject(m_linkedObjectGUID);
 
 		if (pObject)
 			pObject->UnLink();
@@ -630,7 +629,7 @@ CBaseObject::~CBaseObject()
 
 void CBaseObject::Done()
 {
-	LOADING_TIME_PROFILE_SECTION_ARGS(m_name.c_str());
+	CRY_PROFILE_FUNCTION_ARG(PROFILE_LOADING_ONLY, m_name.c_str());
 	CBaseObject* pGroup = GetGroup();
 
 	// Must unlink all objects before removing from group or prefab
@@ -792,7 +791,7 @@ bool CBaseObject::SetPos(const Vec3& pos, int flags)
 		InvalidateTM(flags | eObjectUpdateFlags_PositionChanged);
 	}
 
-	SetModified(true, false);
+	SetModified(true, true);
 
 	return true;
 }
@@ -844,7 +843,7 @@ bool CBaseObject::SetRotation(const Quat& rotate, int flags)
 		InvalidateTM(flags | eObjectUpdateFlags_RotationChanged);
 	}
 
-	SetModified(true, false);
+	SetModified(true, true);
 
 	return true;
 }
@@ -2978,7 +2977,7 @@ bool CBaseObject::IsParentAttachmentValid() const
 
 void CBaseObject::InvalidateTM(int flags)
 {
-	LOADING_TIME_PROFILE_SECTION
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)
 
 	bool bMatrixWasValid = m_bMatrixValid;
 
@@ -3441,9 +3440,6 @@ void CBaseObject::OnContextMenu(CPopupMenuItem* menu)
 
 	// Linking menu items
 	menu->AddSeparator();
-
-	ICommandManager* pCommandManager = GetIEditor()->GetICommandManager();
-
 	menu->AddCommand("tools.link_to_pick");
 	CPopupMenuItem& unlinkItem = menu->AddCommand("tools.unlink");
 
@@ -3754,7 +3750,7 @@ Matrix33 CBaseObject::GetWorldScaleTM() const
 
 void CBaseObject::SetTransformDelegate(ITransformDelegate* pTransformDelegate, bool bInvalidateTM)
 {
-	LOADING_TIME_PROFILE_SECTION
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)
 	if (m_pTransformDelegate != pTransformDelegate)
 	{
 		m_pTransformDelegate = pTransformDelegate;

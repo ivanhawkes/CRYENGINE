@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ITriggerConnection.h>
+#include "BaseTriggerConnection.h"
 #include <PoolObject.h>
 
 namespace CryAudio
@@ -11,7 +11,17 @@ namespace Impl
 {
 namespace Fmod
 {
-class CEvent final : public ITriggerConnection, public CPoolObject<CEvent, stl::PSyncNone>
+enum class EEventFlags : EnumFlagsType
+{
+	None                         = 0,
+	HasProgrammerSound           = BIT(0),
+	HasAbsoluteVelocityParameter = BIT(1),
+	HasOcclusionParameter        = BIT(2),
+	CheckedParameters            = BIT(3),
+};
+CRY_CREATE_ENUM_FLAG_OPERATORS(EEventFlags);
+
+class CEvent final : public CBaseTriggerConnection, public CPoolObject<CEvent, stl::PSyncNone>
 {
 public:
 
@@ -30,20 +40,22 @@ public:
 	CEvent& operator=(CEvent const&) = delete;
 	CEvent& operator=(CEvent&&) = delete;
 
-#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_DEBUG_CODE)
 	// For pure events.
 	explicit CEvent(
 		uint32 const id,
 		EActionType const actionType,
 		FMOD_GUID const guid,
 		char const* const szName)
-		: m_id(id)
+		: CBaseTriggerConnection(EType::Event, szName)
+		, m_id(id)
 		, m_actionType(actionType)
 		, m_guid(guid)
-		, m_hasProgrammerSound(false)
+		, m_flags(EEventFlags::None)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 		, m_key("")
 		, m_pEventDescription(nullptr)
-		, m_name(szName)
 	{}
 
 	// For keys/programmer sounds.
@@ -52,13 +64,15 @@ public:
 		FMOD_GUID const guid,
 		char const* const szKey,
 		char const* const szName)
-		: m_id(id)
+		: CBaseTriggerConnection(EType::Event, szName)
+		, m_id(id)
 		, m_actionType(EActionType::Start)
 		, m_guid(guid)
-		, m_hasProgrammerSound(true)
+		, m_flags(EEventFlags::HasProgrammerSound)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 		, m_key(szKey)
 		, m_pEventDescription(nullptr)
-		, m_name(szName)
 	{}
 #else
 	// For pure events.
@@ -66,10 +80,13 @@ public:
 		uint32 const id,
 		EActionType const actionType,
 		FMOD_GUID const guid)
-		: m_id(id)
+		: CBaseTriggerConnection(EType::Event)
+		, m_id(id)
 		, m_actionType(actionType)
 		, m_guid(guid)
-		, m_hasProgrammerSound(false)
+		, m_flags(EEventFlags::None)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 		, m_key("")
 		, m_pEventDescription(nullptr)
 	{}
@@ -79,14 +96,17 @@ public:
 		uint32 const id,
 		FMOD_GUID const guid,
 		char const* const szKey)
-		: m_id(id)
+		: CBaseTriggerConnection(EType::Event)
+		, m_id(id)
 		, m_actionType(EActionType::Start)
 		, m_guid(guid)
-		, m_hasProgrammerSound(true)
+		, m_flags(EEventFlags::HasProgrammerSound)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 		, m_key(szKey)
 		, m_pEventDescription(nullptr)
 	{}
-#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_DEBUG_CODE
 
 	virtual ~CEvent() override;
 
@@ -95,26 +115,28 @@ public:
 	virtual void           Stop(IObject* const pIObject) override;
 	// ~CryAudio::Impl::ITriggerConnection
 
-	uint32                                       GetId() const   { return m_id; }
-	FMOD_GUID                                    GetGuid() const { return m_guid; }
-	CryFixedStringT<MaxControlNameLength> const& GetKey() const  { return m_key; }
+	uint32                                       GetId() const               { return m_id; }
+	EEventFlags                                  GetFlags() const            { return m_flags; }
+	CryFixedStringT<MaxControlNameLength> const& GetKey() const              { return m_key; }
 
-#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
-	char const* GetName() const { return m_name.c_str(); }
-#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
+	FMOD::Studio::EventDescription*              GetEventDescription() const { return m_pEventDescription; }
+
+	void                                         IncrementNumInstances()     { ++m_numInstances; }
+	void                                         DecrementNumInstances();
+
+	bool                                         CanBeDestructed() const   { return m_toBeDestructed && (m_numInstances == 0); }
+	void                                         SetToBeDestructed() const { m_toBeDestructed = true; }
 
 private:
 
 	uint32 const                                m_id;
 	EActionType const                           m_actionType;
 	FMOD_GUID const                             m_guid;
-	bool const                                  m_hasProgrammerSound;
+	EEventFlags                                 m_flags;
+	uint16                                      m_numInstances;
+	mutable bool                                m_toBeDestructed;
 	CryFixedStringT<MaxControlNameLength> const m_key;
 	FMOD::Studio::EventDescription*             m_pEventDescription;
-
-#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
-	CryFixedStringT<MaxControlNameLength> const m_name;
-#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 };
 } // namespace Fmod
 } // namespace Impl

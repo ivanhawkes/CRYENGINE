@@ -22,6 +22,7 @@
 #include <CryAISystem/INavigationSystem.h>
 #include <CryAISystem/IPathfinder.h>
 #include <CryAISystem/NavigationSystem/INavMeshQueryFilter.h>
+#include <CryThreading/IJobManager.h>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -293,7 +294,7 @@ public:
 
 	void Reset()
 	{
-		const int poolSize = gAIEnv.CVars.MNMPathfinderConcurrentRequests;
+		const int poolSize = gAIEnv.CVars.pathfinder.MNMPathfinderConcurrentRequests;
 
 		m_pool.clear();
 		m_pool.reserve(poolSize);

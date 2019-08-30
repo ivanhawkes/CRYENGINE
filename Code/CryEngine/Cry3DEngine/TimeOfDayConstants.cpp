@@ -139,6 +139,25 @@ void CloudShadowsImpl::Serialize(Serialization::IArchive& ar)
 	ar(invert, "Invert", "Invert");
 }
 
+//////////////////////////////////////////////////////////////////////////
+ColorGradingImpl::ColorGradingImpl()
+{
+	ResetVariables();
+}
+
+void ColorGradingImpl::ResetVariables()
+{
+	useTexture = false;
+	texture = "";
+}
+
+void ColorGradingImpl::Serialize(Serialization::IArchive& ar)
+{
+	ar(useTexture, "UseStaticTexture", "Use Static Texture");
+	ar(Serialization::TextureFilename(texture), "Texture", useTexture ? "Texture" : "!Texture");
+}
+
+//////////////////////////////////////////////////////////////////////////
 TotalIllumImpl::TotalIllumImpl()
 {
 	ResetVariables();
@@ -263,27 +282,64 @@ void TotalIllumAdvImpl::Serialize(Serialization::IArchive& ar)
 }
 
 //////////////////////////////////////////////////////////////////////////
-CTimeOfDayConstants::CTimeOfDayConstants()
+STimeOfDayConstants::STimeOfDayConstants()
 {
-	ResetVariables();
+	Reset();
 }
 
-void CTimeOfDayConstants::ResetVariables()
+void STimeOfDayConstants::Reset()
 {
 	sun.ResetVariables();
 	moon.ResetVariables();
 	wind.ResetVariables();
 	cloudShadows.ResetVariables();
+	colorGrading.ResetVariables();
 	totalIllumination.ResetVariables();
 	totalIlluminationAdvanced.ResetVariables();
 }
 
-void CTimeOfDayConstants::Serialize(Serialization::IArchive& ar)
+void STimeOfDayConstants::Serialize(Serialization::IArchive& ar)
 {
 	ar(sun, "Sun", "Sun");
 	ar(moon, "Moon", "Moon");
 	ar(wind, "Wind", "Wind");
 	ar(cloudShadows, "CloudShadows", "Cloud Shadows");
+	ar(colorGrading, "ColorGrading", "Color Grading");
 	ar(totalIllumination, "TotalIllumination", "Total Illumination");
 	ar(totalIlluminationAdvanced, "TotalIlluminationAdv", "Total Illumination Advanced");
+}
+
+ITimeOfDay::Sun& STimeOfDayConstants::GetSunParams()
+{
+	return sun;
+}
+
+ITimeOfDay::Moon& STimeOfDayConstants::GetMoonParams()
+{
+	return moon;
+}
+
+ITimeOfDay::Wind& STimeOfDayConstants::GetWindParams()
+{
+	return wind;
+}
+
+ITimeOfDay::CloudShadows& STimeOfDayConstants::GetCloudShadowsParams()
+{
+	return cloudShadows;
+}
+
+ITimeOfDay::ColorGrading& STimeOfDayConstants::GetColorGradingParams()
+{
+	return colorGrading;
+}
+
+ITimeOfDay::TotalIllum& STimeOfDayConstants::GetTotalIlluminationParams()
+{
+	return totalIllumination;
+}
+
+ITimeOfDay::TotalIllumAdv& STimeOfDayConstants::GetTotalIlluminationAdvParams()
+{
+	return totalIlluminationAdvanced;
 }

@@ -6,7 +6,7 @@
 
 #include "../Models/EffectAssetModel.h"
 #include "IUndoObject.h"
-#include <EditorFramework/Inspector.h>
+#include <EditorFramework/InspectorLegacy.h>
 #include <EditorFramework/BroadcastManager.h>
 #include <QAdvancedPropertyTree.h>
 #include <QCollapsibleFrame.h>
@@ -298,8 +298,8 @@ public:
 
 			propertyTree->attach(serializer);
 
-			auto callback = [propertyTree](CInspector& inspector) { inspector.AddWidget(propertyTree); };
-			pBroadcastManager->Broadcast(PopulateInspectorEvent(callback, title));
+			auto callback = [propertyTree](CInspectorLegacy& inspector) { inspector.AddWidget(propertyTree); };
+			pBroadcastManager->Broadcast(PopulateLegacyInspectorEvent(callback, title));
 
 			QObject::connect(propertyTree, &QPropertyTree::signalChanged, [this]()
 			{
@@ -714,7 +714,6 @@ private:
 
 	void AddEntry(QMenu* menu, const CAbstractDictionaryEntry* entry)
 	{
-		CAbstractDictionaryEntry::EType type = (CAbstractDictionaryEntry::EType)entry->GetType();
 		QString name = entry->GetColumnValue(0).toString();
 
 		if (int num = entry->GetNumChildEntries())

@@ -89,11 +89,6 @@ void CGeomCacheRenderNode::SetBBox(const AABB& bBox)
 	m_bBox = bBox;
 }
 
-const AABB CGeomCacheRenderNode::GetBBox() const
-{
-	return m_bBox;
-}
-
 void CGeomCacheRenderNode::UpdateBBox()
 {
 	AABB newAABB;
@@ -132,7 +127,7 @@ void CGeomCacheRenderNode::UpdateBBox()
 	}
 }
 
-void CGeomCacheRenderNode::GetLocalBounds(AABB& bbox)
+void CGeomCacheRenderNode::GetLocalBounds(AABB& bbox) const
 {
 	bbox = m_currentAABB;
 }
@@ -169,7 +164,7 @@ void CGeomCacheRenderNode::Render(const struct SRendParams& rendParams, const SR
 	DBG_LOCK_TO_THREAD(this);
 
 	if (!m_bInitialized || !m_bDrawing || (m_renderMeshes.empty() && m_renderMeshUpdateContexts.empty())
-	    || !m_pGeomCache || m_dwRndFlags & ERF_HIDDEN || !passInfo.RenderGeomCaches())
+	    || !m_pGeomCache || !passInfo.RenderGeomCaches())
 	{
 		return;
 	}
@@ -351,11 +346,6 @@ IMaterial* CGeomCacheRenderNode::GetMaterial(Vec3* pHitPos) const
 	}
 
 	return NULL;
-}
-
-float CGeomCacheRenderNode::GetMaxViewDist()
-{
-	return m_maxViewDist;
 }
 
 void CGeomCacheRenderNode::GetMemoryUsage(ICrySizer* pSizer) const
@@ -1521,8 +1511,7 @@ void CGeomCacheRenderNode::PrecacheStandIn(IStatObj* pStandIn, float fImportance
 		if (pLod)
 		{
 			CObjManager* pObjManager = GetObjManager();
-			Matrix34A matrix = GetMatrix();
-			static_cast<CStatObj*>(pLod)->UpdateStreamableComponents(fImportance, matrix, bFullUpdate, nLod);
+			static_cast<CStatObj*>(pLod)->UpdateStreamableComponents(fImportance, bFullUpdate, nLod);
 			pObjManager->PrecacheStatObjMaterial(pLod->GetMaterial(), fDistance * fInvScale, pLod, bFullUpdate, bDrawNear);
 		}
 	}

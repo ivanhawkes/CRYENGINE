@@ -22,18 +22,22 @@ public:
 	CEvent& operator=(CEvent const&) = delete;
 	CEvent& operator=(CEvent&&) = delete;
 
-#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	explicit CEvent(AkUniqueID const id, float const maxAttenuation, char const* const szName)
 		: m_id(id)
 		, m_maxAttenuation(maxAttenuation)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 		, m_name(szName)
 	{}
 #else
 	explicit CEvent(AkUniqueID const id, float const maxAttenuation)
 		: m_id(id)
 		, m_maxAttenuation(maxAttenuation)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 	{}
-#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 
 	virtual ~CEvent() override = default;
 
@@ -42,18 +46,29 @@ public:
 	virtual void           Stop(IObject* const pIObject) override;
 	// ~CryAudio::Impl::ITriggerConnection
 
-#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	AkUniqueID GetId() const             { return m_id; }
+	float      GetMaxAttenuation() const { return m_maxAttenuation; }
+
+	void       IncrementNumInstances()   { ++m_numInstances; }
+	void       DecrementNumInstances();
+
+	bool       CanBeDestructed() const   { return m_toBeDestructed && (m_numInstances == 0); }
+	void       SetToBeDestructed() const { m_toBeDestructed = true; }
+
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	char const* GetName() const { return m_name.c_str(); }
-#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 
 private:
 
 	AkUniqueID const m_id;
 	float const      m_maxAttenuation;
+	uint16           m_numInstances;
+	mutable bool     m_toBeDestructed;
 
-#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	CryFixedStringT<MaxControlNameLength> const m_name;
-#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 };
 } // namespace Wwise
 } // namespace Impl

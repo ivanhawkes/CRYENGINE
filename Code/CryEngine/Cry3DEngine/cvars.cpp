@@ -216,7 +216,7 @@ void CVars::Init()
 	                   " z = freeze particle system"
 	                   " t = used by developers to debug test algorithms");
 	REGISTER_CVAR(e_ParticlesThread, 4, VF_NULL,
-	              "Enable particle threading: 1 = basic, 4 = optimal");
+	              "Enable particle threading: 1 = basic, 4 = optimal, 5 = asynchronous");
 	REGISTER_CVAR(e_ParticlesCollisions, 3,  VF_BITFIELD,
 	              "Enable collisions for non-physical particles:\n"
 	              "  1 = terrain only, 2 = static objects also, 3 = dynamic objects also");
@@ -233,6 +233,8 @@ void CVars::Init()
 	              "Enable preloading of all particle effects at the beginning");
 	REGISTER_CVAR(e_ParticlesAllowRuntimeLoad, 1, VF_NULL,
 	              "Allow loading of dynamic particle effects at runtime");
+	REGISTER_CVAR(e_ParticlesPrecacheAssets, 1, VF_NULL,
+	              "Precache particle textures and meshes instead of streaming");
 	REGISTER_CVAR(e_ParticlesConvertPfx1, 0, VF_NULL,
 	              "Convert pfx1 to pfx2 when loaded. Combinable options:\n"
 	              "  1 = Convert if pfx2 version doesn't exist.\n"
@@ -431,6 +433,8 @@ void CVars::Init()
 	              "Always render full extent of last cached shadow cascade. 0=disabled, 1=enabled");
 	REGISTER_CVAR(e_ShadowsCacheMaxNodesPerFrame, 50, VF_NULL,
 	              "Maximum number of octree nodes to visit during incremental update. default: 50");
+	REGISTER_CVAR(e_ShadowsCacheJobs, 1, VF_NULL,
+	              "Jobify gathering of shadow casters for the shadow cache");
 	REGISTER_CVAR_CB(e_DynamicDistanceShadows, 1, VF_NULL,
 	                 "Enable dynamic distance shadows, 0 = disable, 1 = enable only for movable object types, 2 = enable for all object types, -1 = don't render dynamic distance shadows", OnDynamicDistanceShadowsVarChange);
 	DefineConstIntCVar(e_ShadowsCascadesCentered, 0, VF_NULL,
@@ -655,7 +659,7 @@ void CVars::Init()
 
 	DefineConstIntCVar(e_StreamSaveStartupResultsIntoXML, 0, VF_NULL,
 	                   "Save basic information about streaming performance on level start into XML");
-	REGISTER_CVAR(e_StreamCgfPoolSize, 128, VF_NULL,
+	REGISTER_CVAR(e_StreamCgfPoolSize, 256, VF_NULL,
 	              "Render mesh cache size in MB");
 	REGISTER_CVAR(e_SQTestBegin, 0, VF_NULL,
 	              "If not zero - start streaming latency unit test");
@@ -1125,9 +1129,6 @@ void CVars::Init()
 	                   "The view frustum is drawn in write frame.\n"
 	                   " 0 = off\n"
 	                   " 1 = activated");
-
-	REGISTER_CVAR(e_GI, 0, VF_CVARGRP_IGNOREINREALVAL,
-	              "Enable/disable global illumination. Default: 1 - enabled");
 
 	REGISTER_CVAR(e_RenderMeshCollisionTolerance, 0.3f, VF_NULL,
 	              "Min distance between physics-proxy and rendermesh before collision is considered a hole");

@@ -2,11 +2,10 @@
 
 #include "stdafx.h"
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	#include "PreviewTrigger.h"
-
-	#include "Common.h"
-	#include "Object.h"
+	#include "DefaultObject.h"
+	#include "TriggerUtils.h"
 	#include "Common/IImpl.h"
 	#include "Common/IObject.h"
 	#include "Common/ITriggerConnection.h"
@@ -16,77 +15,105 @@
 namespace CryAudio
 {
 //////////////////////////////////////////////////////////////////////////
-CPreviewTrigger::CPreviewTrigger()
-	: Control(g_previewTriggerId, EDataScope::Global, g_szPreviewTriggerName)
-	, m_pConnection(nullptr)
-{
-}
-
-//////////////////////////////////////////////////////////////////////////
 CPreviewTrigger::~CPreviewTrigger()
 {
-	CRY_ASSERT_MESSAGE(m_pConnection == nullptr, "There is still a connection during %s", __FUNCTION__);
+	CRY_ASSERT_MESSAGE(m_connections.empty(), "There are still connections during %s", __FUNCTION__);
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CPreviewTrigger::Execute(Impl::ITriggerInfo const& triggerInfo)
 {
-	g_pIImpl->DestructTriggerConnection(m_pConnection);
-	m_pConnection = nullptr;
-	m_pConnection = g_pIImpl->ConstructTriggerConnection(&triggerInfo);
+	Clear();
 
-	if (m_pConnection != nullptr)
+	Impl::ITriggerConnection* const pConnection = g_pIImpl->ConstructTriggerConnection(&triggerInfo);
+
+	if (pConnection != nullptr)
 	{
-		STriggerInstanceState triggerInstanceState;
-		triggerInstanceState.triggerId = GetId();
+		m_connections.push_back(pConnection);
+		Execute();
+	}
+}
 
-		Impl::IObject* const pIObject = g_previewObject.GetImplDataPtr();
+//////////////////////////////////////////////////////////////////////////
+void CPreviewTrigger::Execute(XmlNodeRef const& node)
+{
+	Clear();
 
-		if (pIObject != nullptr)
+	int const numConnections = node->getChildCount();
+
+	for (int i = 0; i < numConnections; ++i)
+	{
+		XmlNodeRef const triggerImplNode(node->getChild(i));
+
+		if (triggerImplNode.isValid())
 		{
-			ETriggerResult const result = m_pConnection->Execute(pIObject, g_triggerInstanceIdCounter);
+			float radius = 0.0f;
+			Impl::ITriggerConnection* const pConnection = g_pIImpl->ConstructTriggerConnection(triggerImplNode, radius);
 
-			if ((result == ETriggerResult::Playing) || (result == ETriggerResult::Virtual) || (result == ETriggerResult::Pending))
+			if (pConnection != nullptr)
 			{
-				if (result != ETriggerResult::Pending)
-				{
-					++(triggerInstanceState.numPlayingInstances);
-				}
-				else
-				{
-					++(triggerInstanceState.numPendingInstances);
-				}
-			}
-			else if (result != ETriggerResult::DoNotTrack)
-			{
-				Cry::Audio::Log(ELogType::Warning, R"(Trigger "%s" failed on object "%s" during %s)", GetName(), g_previewObject.GetName(), __FUNCTION__);
+				m_connections.push_back(pConnection);
 			}
 		}
-		else
-		{
-			Cry::Audio::Log(ELogType::Error, "Invalid impl object during %s", __FUNCTION__);
-		}
+	}
 
-		if ((triggerInstanceState.numPlayingInstances > 0) || (triggerInstanceState.numPendingInstances > 0))
+	if (!m_connections.empty())
+	{
+		Execute();
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CPreviewTrigger::Execute()
+{
+	Impl::IObject* const pIObject = g_previewObject.GetImplData();
+
+	uint16 numPlayingInstances = 0;
+	uint16 numPendingInstances = 0;
+
+	for (auto const pConnection : m_connections)
+	{
+		ETriggerResult const result = pConnection->Execute(pIObject, g_triggerInstanceIdCounter);
+
+		if ((result == ETriggerResult::Playing) || (result == ETriggerResult::Virtual) || (result == ETriggerResult::Pending))
 		{
-			triggerInstanceState.flags |= ETriggerStatus::Playing;
-			g_triggerInstanceIdToObject[g_triggerInstanceIdCounter] = &g_previewObject;
-			g_previewObject.AddTriggerState(g_triggerInstanceIdCounter, triggerInstanceState);
-			IncrementTriggerInstanceIdCounter();
+			if (result != ETriggerResult::Pending)
+			{
+				++numPlayingInstances;
+			}
+			else
+			{
+				++numPendingInstances;
+			}
 		}
-		else
+		else if (result != ETriggerResult::DoNotTrack)
 		{
-			// All of the events have either finished before we got here or never started, immediately inform the user that the trigger has finished.
-			g_previewObject.SendFinishedTriggerInstanceRequest(triggerInstanceState);
+			Cry::Audio::Log(ELogType::Warning, R"(Trigger "%s" failed on object "%s" during %s)", GetName(), g_previewObject.GetName(), __FUNCTION__);
 		}
+	}
+
+	if ((numPlayingInstances > 0) || (numPendingInstances > 0))
+	{
+		g_previewObject.ConstructTriggerInstance(m_id, numPlayingInstances, numPendingInstances, ERequestFlags::None, nullptr, nullptr, nullptr);
+	}
+	else
+	{
+		// All of the events have either finished before we got here or never started, immediately inform the user that the trigger has finished.
+		SendFinishedTriggerInstanceRequest(m_id, INVALID_ENTITYID);
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CPreviewTrigger::Clear()
 {
-	g_pIImpl->DestructTriggerConnection(m_pConnection);
-	m_pConnection = nullptr;
+	CRY_ASSERT_MESSAGE(g_pIImpl != nullptr, "g_pIImpl mustn't be nullptr during %s", __FUNCTION__);
+
+	for (auto const pConnection : m_connections)
+	{
+		g_pIImpl->DestructTriggerConnection(pConnection);
+	}
+
+	m_connections.clear();
 }
 }      // namespace CryAudio
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE

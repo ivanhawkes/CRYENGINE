@@ -2,10 +2,10 @@
 #pragma once
 
 #include "AI/AIManager.h"
-#include "Commands/QCommandAction.h"
 #include "Objects/ObjectManager.h"
 #include "ViewManager.h"
 
+#include <Commands/QCommandAction.h>
 #include <Preferences/SnappingPreferences.h>
 #include <Preferences/ViewportPreferences.h>
 #include <QControls.h>
@@ -198,7 +198,6 @@ protected:
 			const size_t agentTypeCount = manager->GetNavigationAgentTypeCount();
 
 			string actionName = action->objectName().toStdString().c_str();
-			int numItems = 1;
 
 			for (size_t i = 0; i < agentTypeCount; ++i)
 			{
@@ -286,6 +285,15 @@ protected:
 		ICommandManager* pCommandManager = GetIEditorImpl()->GetICommandManager();
 		CAIManager* pManager = GetIEditorImpl()->GetAI();
 		const size_t agentTypeCount = pManager->GetNavigationAgentTypeCount();
+
+		QAction* pRegenerateIgnoredAction = pCommandManager->GetAction("ai.regenerate_ignored");
+		if (pRegenerateIgnoredAction)
+		{
+			addAction(pRegenerateIgnoredAction);
+			pRegenerateIgnoredAction->setObjectName("ignored");
+		}
+
+		addSeparator();
 
 		QAction* pRegenerateAllAction = pCommandManager->GetAction("ai.regenerate_agent_type_all");
 		if (pRegenerateAllAction)

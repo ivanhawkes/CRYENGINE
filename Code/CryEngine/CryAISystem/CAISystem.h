@@ -33,6 +33,7 @@ typedef std::vector<Vec3> ListPositions;
 #include "GlobalPerceptionScaleHandler.h"
 #include "ClusterDetector.h"
 #include "ActorLookUp.h"
+#include "Sequence/SequenceAgentAdapter.h"
 
 #ifdef CRYAISYSTEM_DEBUG
 	#include "AIDbgRecorder.h"
@@ -371,6 +372,7 @@ public:
 	virtual ICommunicationManager*              GetCommunicationManager() const override;
 	virtual ICoverSystem*                       GetCoverSystem() const override;
 	virtual INavigationSystem*                  GetNavigationSystem() const override;
+    virtual Cry::AI::CollisionAvoidance::ISystem* GetCollisionAvoidanceSystem() const override;
 	virtual BehaviorTree::IBehaviorTreeManager* GetIBehaviorTreeManager() const override;
 	virtual ITargetTrackManager*                GetTargetTrackManager() const override;
 	virtual struct IMovementSystem*             GetMovementSystem() const override;
@@ -613,6 +615,14 @@ public:
 	void SetupAIEnvironment();
 	void SetAIHacksConfiguration();
 
+	void TrySubsystemInitCommunicationSystem();
+	void TrySubsystemInitScriptBind();
+	void TrySubsystemInitFormationSystem();
+	void TrySubsystemInitTacticalPointSystem();
+	void TrySubsystemInitGroupSystem();
+	void TrySubsystemInitORCA();
+	void TrySubsystemInitTargetTrackSystem();
+
 	/// Our own internal serialisation - just serialise our state (but not the things
 	/// we own that are capable of serialising themselves)
 	void SerializeInternal(TSerialize ser);
@@ -666,6 +676,8 @@ public:
 	float      m_disabledActorsUpdateError;
 	int        m_disabledActorsHead;
 	bool       m_iteratingActorSet;
+
+	AIActionSequence::SequenceAgentAdapter m_sequenceAgentAdapter;
 
 	struct BeaconStruct
 	{
@@ -908,7 +920,6 @@ public:
 	                       const ColorB& worldColor, bool drawWorld);
 	void DebugDrawCrowdControl();
 	void DebugDrawRadar();
-	void DebugDrawDistanceLUT();
 	void DrawRadarPath(CPipeUser* pPipeUser, const Matrix34& world, const Matrix34& screen);
 	void DebugDrawRecorderRange() const;
 	void DebugDrawShooting() const;

@@ -14,6 +14,7 @@
 #include "StdAfx.h"
 #include "DebugCallStack.h"
 #include <CryThreading/IThreadManager.h>
+#include <CryInput/IInput.h>
 
 #include <mutex>
 #include <condition_variable>
@@ -21,7 +22,7 @@
 
 #if CRY_PLATFORM_WINDOWS
 
-	#include <CrySystem/IConsole.h>
+	#include <CrySystem/ConsoleRegistration.h>
 	#include <CryScriptSystem/IScriptSystem.h>
 	#include "JiraClient.h"
 	#include "System.h"
@@ -797,7 +798,6 @@ void DebugCallStack::FillStackTrace(int maxStackEntries, int skipNumFunctions, H
 
 		DWORD64 modOffset = stack_frame.AddrPC.Offset - modInfo.BaseOfImage;
 
-		void* p = (void*)(uintptr_t)stack_frame.AddrPC.Offset;
 		char str[300];
 		char* szImageNameLastPathSeparator = strrchr(modInfo.ImageName, '\\');
 		char* szImageName = szImageNameLastPathSeparator ? szImageNameLastPathSeparator + 1 : modInfo.ImageName;
@@ -993,7 +993,7 @@ int DebugCallStack::handleException(EXCEPTION_POINTERS* exception_pointer)
 	}
 
 #ifdef USE_CRY_ASSERT
-	gEnv->ignoreAllAsserts = true;
+	Cry::Assert::IgnoreAllAsserts(true);
 #endif
 
 	gEnv->pLog->FlushAndClose();
@@ -1382,8 +1382,8 @@ void DebugCallStack::MinimalExceptionReport(EXCEPTION_POINTERS* exception_pointe
 	int prev_sys_no_crash_dialog = g_cvars.sys_no_crash_dialog;
 
 #ifdef USE_CRY_ASSERT
-	gEnv->ignoreAllAsserts = true;
-	gEnv->cryAssertLevel = ECryAssertLevel::Disabled;
+	Cry::Assert::IgnoreAllAsserts(true);
+	Cry::Assert::SetAssertLevel(Cry::Assert::ELevel::Disabled);
 #endif
 
 	g_cvars.sys_no_crash_dialog = 1;
@@ -1888,7 +1888,7 @@ int DebugCallStack::CollectCallStack(HANDLE thread, void** pCallstack, int maxSt
 	#endif
 	int prev_priority = GetThreadPriority(thread);
 	SetThreadPriority(thread, THREAD_PRIORITY_TIME_CRITICAL);
-	BOOL result = GetThreadContext(thread, &context);
+	GetThreadContext(thread, &context);
 	::SetThreadPriority(thread, prev_priority);
 	return WalkStackFrames(context, pCallstack, maxStackEntries);
 }

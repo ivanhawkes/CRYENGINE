@@ -45,7 +45,8 @@ QCustomTitleBar::QCustomTitleBar(QWidget* parent)
 	}
 
 	QHBoxLayout* myLayout = new QHBoxLayout(this);
-	myLayout->setContentsMargins(4, 4, 4, 0);
+	myLayout->setContentsMargins(0, 0, 0, 0);
+	myLayout->setMargin(2);
 	myLayout->setSpacing(0);
 	m_caption = new QLabel(this);
 	
@@ -84,24 +85,15 @@ QCustomTitleBar::QCustomTitleBar(QWidget* parent)
 
 void QCustomTitleBar::updateWindowStateButtons()
 {
-	if (parentWidget()->windowState() != Qt::WindowMaximized)
-	{
-		layout()->setContentsMargins(4, 4, 4, 0);
-	}
-	else
-	{
-		layout()->setContentsMargins(0, 0, 0, 0);
-	}
-
 	if (m_maximizeButton)
 	{
-		if (parentWidget()->windowState() != Qt::WindowMaximized)
+		if (parentWidget()->windowState() & Qt::WindowMaximized)
 		{
-			m_maximizeButton->setObjectName("maximizeButton");
+			m_maximizeButton->setObjectName("restoreButton");
 		}
 		else
 		{
-			m_maximizeButton->setObjectName("restoreButton");
+			m_maximizeButton->setObjectName("maximizeButton");
 		}
 		style()->unpolish(m_maximizeButton);
 		style()->polish(m_maximizeButton);
@@ -117,7 +109,7 @@ void QCustomTitleBar::setActive(bool active)
 
 void QCustomTitleBar::toggleMaximizedParent()
 {
-	if (parentWidget()->windowState() == Qt::WindowMaximized)
+	if (parentWidget()->windowState() & Qt::WindowMaximized)
 	{
 		parentWidget()->showNormal();
 	}
@@ -479,7 +471,7 @@ bool QCustomWindowFrame::winEvent(MSG *msg, long *result)
 		return false;
 
 	QRect r = rect();
-	static const int SIZE_MARGIN = 4;
+	static const int SIZE_MARGIN = 8;
 	QPoint newPos = QCursor::pos();
 	r.moveTo(pos());
 
@@ -594,7 +586,7 @@ bool QCustomWindowFrame::winEvent(MSG *msg, long *result)
 	case WM_ACTIVATE:
 	{
 		// Enable shadow
-		MARGINS shadow_on = { 1, 1, 1, 1 };
+		MARGINS shadow_on = { 0,0,0,0 };
 		if (dwmExtendFrameIntoClientArea)
 		{
 			auto pFunc = (dwmExtendFrameIntoClientArea_t)dwmExtendFrameIntoClientArea;
@@ -779,7 +771,7 @@ void QCustomWindowFrame::updateWindowFlags()
 
 	if (dwmExtendFrameIntoClientArea)
 	{
-		MARGINS shadow_on = { 1, 1, 1, 1 };
+		MARGINS shadow_on = { 0, 0, 0, 0 };
 		auto pFunc = (dwmExtendFrameIntoClientArea_t)dwmExtendFrameIntoClientArea;
 		pFunc((HWND)winId(), &shadow_on);
 	}

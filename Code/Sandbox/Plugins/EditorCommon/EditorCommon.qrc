@@ -45,6 +45,7 @@
         <file alias="common/assets_sound.ico">icons/assets_sound.ico</file>
         <file alias="common/assets_texture.ico">icons/assets_texture.ico</file>
         <file alias="common/assets_prefab.ico">icons/assets_prefab.ico</file>
+        <file alias="common/assets_environment_settings.ico">icons/assets_environment_settings.ico</file>
 
         <file alias="CreateEditor/Add_To_Scene_AI.ico">icons/assets_ai.ico</file>
         <file alias="CreateEditor/Add_To_Scene_Archetype_Entity.ico">icons/assets_archetype_entity.ico</file>
@@ -236,6 +237,7 @@
         <file alias="common/general_view_horizonal.ico">icons/general_view_horizonal.ico</file>
         <file alias="common/general_view_folder_tree.ico">icons/general_view_folder_tree.ico</file>
         <file alias="common/general_view_recursive_view.ico">icons/general_view_recursive_view.ico</file>
+        <file alias="common/general_hide_irrelevant_folders.ico">icons/general_hide_irrelevant_folders.ico</file>      
         <file alias="common/general_icon_missing.ico">icons/general_icon_missing.ico</file>
         <file alias="common/general_dropdown_arrow.ico">icons/general_dropdown_arrow.ico</file>
         <file alias="common/general_dropdown_triangle.ico">icons/general_dropdown_triangle.ico</file>
@@ -260,7 +262,9 @@
         <file alias="General/Cut.ico">icons/general_file_cut.ico</file>
         <file alias="General/Data_Base_Letters.ico">icons/general_Data_Base_Letters.ico</file>
         <file alias="General/Debug.ico">icons/general_Debug.ico</file>
-        <file alias="General/Drag_Handle.ico">icons/general_drag_handle.ico</file>
+        <file alias="General/Drag_Handle_Horizontal.ico">icons/general_drag_handle_horizontal.ico</file>
+		<file alias="General/Drag_Handle_Vertical.ico">icons/general_drag_handle_vertical.ico</file>
+		<file alias="Spacer/Drag_Handle.ico">icons/spacer_drag_handle.ico</file>
         <file alias="General/Duplicate_Negative.ico">icons/general_Duplicate_Negative.ico</file>
         <file alias="General/Duplicate.ico">icons/general_file_duplicate.ico</file>
         <file alias="General/Delete.ico">icons/general_file_delete.ico</file>
@@ -273,6 +277,7 @@
         <file alias="General/Element_MoveUp.ico">icons/general_Element_MoveUp.ico</file>
         <file alias="General/Element_Remove.ico">icons/general_Element_Remove.ico</file>
         <file alias="General/Element_Clear.ico">icons/general_Element_Clear.ico</file>
+        <file alias="General/Error.ico">icons/general_error.ico</file>
         <file alias="General/etc.ico">icons/general_etc.ico</file>
         <file alias="General/Exit.ico">icons/general_Exit.ico</file>
         <file alias="General/Export.ico">icons/general_file_export.ico</file>
@@ -313,7 +318,6 @@
         <file alias="General/goto.ico">icons/general_goto.ico</file>
         <file alias="General/Grid_Snap.ico">icons/general_Grid_Snap.ico</file>
         <file alias="General/Group.ico">icons/general_group.ico</file>
-        <file alias="General/Instant_Editing.ico">icons/general_instant_editing.ico</file>      
         <file alias="General/History_Redo.ico">icons/general_History_Redo.ico</file>
         <file alias="General/History_Undo.ico">icons/general_History_Undo.ico</file>
         <file alias="General/History_Undo_List.ico">icons/general_History_Undo_List.ico</file>
@@ -322,13 +326,14 @@
         <file alias="General/LegacyResourceSelectorPicker.ico">icons/general_LegacyResourceSelectorPicker.ico</file>
         <file alias="General/Link_Classic.ico">icons/general_Link_Classic.ico</file>
         <file alias="General/Load_From_Disc.ico">icons/general_disc_load_from.ico</file>
-        <file alias="General/Lock_False.ico">icons/general_Lock_False.ico</file>
+		
+        <file alias="general_lock_false.ico">icons/general_lock_false.ico</file>
         <file alias="General/Lock_False_Tinted.ico">icons/general_Lock_False_Tinted.ico</file>
-        <file alias="General/Lock_True.ico">icons/general_Lock_True.ico</file>
+        <file alias="general_lock_true.ico">icons/general_lock_true.ico</file>
         <file alias="General/Lock_True_Tinted.ico">icons/general_Lock_True_Tinted.ico</file>
         <file alias="General/editable.ico">icons/general_editable.ico</file>
-        <file alias="General/editable_true.ico">icons/general_editable_true.ico</file>
-        <file alias="General/editable_false.ico">icons/general_editable_false.ico</file>
+        <file alias="levelexplorer_lock_true.ico">icons/levelexplorer_lock_true.ico</file>
+		<file alias="General/editable_true.ico">icons/general_editable_true.ico</file>
         <file alias="General/Mannequin.ico">icons/general_Mannequin.ico</file>
         <file alias="General/Negative.ico">icons/general_Negative.ico</file>
         <file alias="General/Options.ico">icons/general_Options.ico</file>
@@ -362,6 +367,7 @@
         <file alias="General/Project_Language_CSharp.ico">icons/general_project_language_subicon_csharp.ico</file>
         <file alias="General/Project_Language_Unknown.ico">icons/general_project_language_subicon_unknown.ico</file>
         <file alias="General/Project_Language_VisualScripting.ico">icons/general_project_language_subicon_visualscripting.ico</file>
+		<file alias="General/Project_Browser_startup_project_badge.ico">icons/project_browser_startup_project_badge.ico</file>
         <file alias="General/Python.ico">icons/general_Python.ico</file>
         <file alias="General/Redo_Classic.ico">icons/general_Redo_Classic.ico</file>
         <file alias="General/Reload.ico">icons/general_Reload.ico</file>
@@ -380,6 +386,7 @@
         <file alias="General/Show_Statistics_rDisplayinfo.ico">icons/general_Show_Statistics_rDisplayinfo.ico</file>
         <file alias="General/Simulate_Physics.ico">icons/general_Simulate_Physics.ico</file>
         <file alias="General/Start_Physics.ico">icons/general_Start_Physics.ico</file>
+        <file alias="General/Startup_Project.ico">icons/general_startup_project.ico</file>
         <file alias="General/Sun.ico">icons/general_Sun.ico</file>
         <file alias="General/SymLink.ico">icons/general_SymLink.ico</file>
         <file alias="General/Sync_Square.ico">icons/general_Sync_Square.ico</file>
@@ -403,6 +410,7 @@
         <file alias="General/Visibility_False_Tinted.ico">icons/general_Visibility_False_Tinted.ico</file>
         <file alias="General/Visibility_True.ico">icons/general_Visibility_True.ico</file>
         <file alias="General/Visibility_True_Tinted.ico">icons/general_Visibility_True_Tinted.ico</file>
+        <file alias="General/Warning.ico">icons/general_warning.ico</file>
         <file alias="General/Zoom_In.ico">icons/general_Zoom_In.ico</file>
         <file alias="General/Zoom_Out.ico">icons/general_Zoom_Out.ico</file>
         <file alias="General/cut_generic.ico">icons/general_cut_generic.ico</file>
@@ -697,7 +705,9 @@
         <file alias="Trackview/trackview_keys-delete.ico">icons/trackview_keys-delete.ico</file>
         <file alias="Trackview/trackview_keys-move.ico">icons/trackview_keys-move.ico</file>
         <file alias="Trackview/trackview_keys-scale.ico">icons/trackview_keys-scale.ico</file>
-        <file alias="Trackview/trackview_keys-slide.ico">icons/trackview_keys-slide.ico</file>
+        <file alias="Trackview/trackview_keys-slide_both.ico">icons/trackview_keys-slide_left_right.ico</file>
+        <file alias="Trackview/trackview_keys-slide_left.ico">icons/trackview_keys-slide_left.ico</file>
+        <file alias="Trackview/trackview_keys-slide_right.ico">icons/trackview_keys-slide_right.ico</file>
         <file alias="Trackview/trackview_search.ico">icons/trackview_search.ico</file>
         <file alias="Trackview/trackview_snapping-frame.ico">icons/trackview_snapping-frame.ico</file>
         <file alias="Trackview/trackview_time_end.ico">icons/trackview_time_end.ico</file>

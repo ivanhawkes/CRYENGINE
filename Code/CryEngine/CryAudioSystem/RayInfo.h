@@ -2,7 +2,8 @@
 
 #pragma once
 
-#include <CryPhysics/IPhysics.h>
+#if defined(CRY_AUDIO_USE_OCCLUSION)
+	#include <CryPhysics/IPhysics.h>
 
 namespace CryAudio
 {
@@ -15,7 +16,7 @@ struct SRayHitInfo
 	SRayHitInfo() = default;
 
 	float distance = 0.0f;
-	short surface_index = 0;
+	short surfaceIndex = 0;
 };
 
 class CRayInfo
@@ -32,10 +33,11 @@ public:
 	float       totalSoundOcclusion = 0.0f;
 	SRayHitInfo hits[g_maxRayHits];
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	Vec3  startPosition = ZERO;
 	Vec3  direction = ZERO;
 	float distanceToFirstObstacle = FLT_MAX;
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+	#endif // CRY_AUDIO_USE_DEBUG_CODE
 };
-} // namespace CryAudio
+}      // namespace CryAudio
+#endif // CRY_AUDIO_USE_OCCLUSION

@@ -194,7 +194,6 @@ void CRiverObject::SetMaterial(IEditorMaterial* mtl)
 //////////////////////////////////////////////////////////////////////////
 void CRiverObject::UpdateSectors()
 {
-	IWaterVolumeRenderNode* pOriginatorProxy(0);
 	if (!m_sectors.empty())
 	{
 		const Matrix34& wtm(GetWorldTM());
@@ -247,6 +246,7 @@ void CRiverObject::UpdateSector(CRoadSector& sector)
 		int renderFlags = 0;
 		if (isHidden || IsHiddenBySpec())
 			renderFlags = ERF_HIDABLE | ERF_HIDDEN;
+
 		pWaterVolumeRN->SetRndFlags(renderFlags);
 
 		pWaterVolumeRN->SetFogDensity(mv_waterFogDensity);

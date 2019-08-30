@@ -934,9 +934,6 @@ void CParticleDialog::OnLButtonUp(UINT nFlags, CPoint point)
 		else
 		{
 			// Not dropped inside tree.
-
-			CWnd* wnd = WindowFromPoint(p);
-
 			CUndo undo("Assign ParticleEffect");
 
 			CViewport* viewport = GetIEditorImpl()->GetViewManager()->GetViewportAtPoint(p);
@@ -1277,7 +1274,7 @@ SResourceSelectionResult ParticleResourceSelector(const SResourceSelectorContext
 		QString relativeFilename(szPreviousValue);
 
 		CEngineFileDialog::OpenParams dialogParams(CEngineFileDialog::OpenFile);
-		dialogParams.initialDir = QtUtil::ToQString(PathUtil::GetPathWithoutFilename(relativeFilename.toLocal8Bit()));
+		dialogParams.initialDir = QtUtil::ToQString(PathUtil::GetPathWithoutFilename(relativeFilename.toLocal8Bit().constData()));
 		if (!relativeFilename.isEmpty())
 		{
 			dialogParams.initialFile = szPreviousValue;
@@ -1294,7 +1291,7 @@ SResourceSelectionResult ParticleResourceSelector(const SResourceSelectorContext
 			result.selectedResource = files.front().toLocal8Bit().constData();
 		}
 	}
-	
+
 	return result;
 }
 
@@ -1316,10 +1313,15 @@ SResourceSelectionResult ParticleSelector(const SResourceSelectorContext& contex
 	}
 }
 
-dll_string ValidateParticlePath(const SResourceSelectorContext& context, const char* szNewValue, const char* szPreviousValue)
+SResourceValidationResult ValidateParticlePath(const SResourceSelectorContext& context, const char* szNewValue, const char* szPreviousValue)
 {
+	SResourceValidationResult result{ true, szNewValue };
 	if (!szNewValue || !*szNewValue)
-		return dll_string();
+	{
+		result.validatedResource = "";
+		result.isValid = false;
+		return result;
+	}
 
 	QString newPath(szNewValue);
 	if (newPath.indexOf(".pfx") != -1)
@@ -1329,7 +1331,10 @@ dll_string ValidateParticlePath(const SResourceSelectorContext& context, const c
 		if (!snapshot->GetFileByEnginePath(newPath))
 		{
 			if (!snapshot->GetFileByEnginePath(PathUtil::GetGameFolder() + "/" + QString(newPath)))
-				return szPreviousValue;
+			{
+				result.validatedResource = szPreviousValue;
+				result.isValid = false;
+			}
 		}
 	}
 	else
@@ -1338,10 +1343,13 @@ dll_string ValidateParticlePath(const SResourceSelectorContext& context, const c
 		IDataBaseItem* pDBItem = pParticleManager->FindItemByName(szPreviousValue);
 
 		if (!pDBItem)
-			return szPreviousValue;
+		{
+			result.validatedResource = szPreviousValue;
+			result.isValid = false;
+		}
 	}
 
-	return szNewValue;
+	return result;
 }
 
 void EditParticle(const SResourceSelectorContext& context, const char* szAssetPath)
@@ -1362,7 +1370,7 @@ void EditParticle(const SResourceSelectorContext& context, const char* szAssetPa
 	}
 	else
 	{
-		GetIEditorImpl()->ExecuteCommand(QString("particle.show_effect '%1'").arg(szAssetPath).toLocal8Bit());
+		GetIEditorImpl()->ExecuteCommand(QString("particle.show_effect '%1'").arg(szAssetPath).toLocal8Bit().constData());
 	}
 }
 

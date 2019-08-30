@@ -159,7 +159,6 @@ EDITOR_COMMON_API extern CAttributeType<int> s_intAttributeType;
 EDITOR_COMMON_API extern CAttributeType<float> s_floatAttributeType;
 EDITOR_COMMON_API extern CAttributeType<bool> s_booleanAttributeType;
 EDITOR_COMMON_API extern CAttributeType<int> s_enumAttributeType;
-EDITOR_COMMON_API extern CAttributeType<QIcon> s_iconAttributeType;
 
 //! Set of reusable and common attributes for many models.
 EDITOR_COMMON_API extern CItemModelAttribute s_nameAttribute;
@@ -187,7 +186,7 @@ struct IAttributeFilterOperator
 	virtual ~IAttributeFilterOperator() {}
 	virtual QString  GetName() = 0;
 	virtual bool     Match(const QVariant& value, const QVariant& filterValue) = 0;
-	virtual QWidget* CreateEditWidget(std::shared_ptr<CAttributeFilter> filter) = 0;
+	virtual QWidget* CreateEditWidget(std::shared_ptr<CAttributeFilter> pFilter, const QStringList* pAttributeValues) = 0;
 	//TODO : make this method be called on signal filter changed instead of explicitly right now
 	virtual void     UpdateWidget(QWidget* widget, const QVariant& value) = 0;
 	virtual void     InitFilterValue(QVariant& filterValueStorage) const            {}

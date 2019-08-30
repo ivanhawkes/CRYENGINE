@@ -1340,8 +1340,6 @@ bool CMaterial::IsBreakable2D() const
 	if ((GetFlags() & MTL_FLAG_NODRAW) != 0)
 		return false;
 
-	int result = 0;
-
 	const string& surfaceTypeName = GetSurfaceTypeName();
 	if (ISurfaceTypeManager* pSurfaceManager = GetIEditorImpl()->Get3DEngine()->GetMaterialManager()->GetSurfaceTypeManager())
 	{
@@ -1755,13 +1753,6 @@ bool CMaterial::Save(bool bSkipReadOnly)
 	XmlNodeRef mtlNode = XmlHelpers::CreateXmlNode("Material");
 	CBaseLibraryItem::SerializeContext ctx(mtlNode, false);
 	Serialize(ctx);
-
-	//CMaterialManager *pMatMan = (CMaterialManager*)GetLibrary()->GetManager();
-	// get file name from material name.
-	//string filename = pMatMan->MaterialToFilename( GetName() );
-
-	//char path[ICryPak::g_nMaxPath];
-	//filename = gEnv->pCryPak->AdjustFileName( filename,path,0 );
 
 	if (XmlHelpers::SaveXmlNode(mtlNode, GetFilename(true)))
 	{

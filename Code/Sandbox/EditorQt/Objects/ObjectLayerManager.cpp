@@ -13,7 +13,6 @@
 #include "HyperGraph/FlowGraphManager.h"
 #include "HyperGraph/FlowGraph.h"
 #include "HyperGraph/FlowGraphNode.h"
-#include "ThreadingUtils.h"
 #include "AssetSystem/FileOperationsExecutor.h"
 
 #include "Controls/QuestionDialog.h"
@@ -193,6 +192,32 @@ const std::vector<IObjectLayer*>& CObjectLayerManager::GetLayers() const
 	return m_layersCache;
 }
 
+IObjectLayer* CObjectLayerManager::GetLayerByFileIfOpened(const string& layerFile) const
+{
+	if (!IsLayerFileOfOpenedLevel(layerFile))
+	{
+		return nullptr;
+	}
+
+	const string layersFolder = PathUtil::Make(PathUtil::MakeGamePath(GetIEditor()->GetLevelPath()), "Layers");
+
+	// we skip ".lyr" on the back and "/" in front of layer's full name.
+	const auto fullName = layerFile.substr(layersFolder.size() + 1, layerFile.size() - layersFolder.size() - 5);
+	return GetIEditor()->GetObjectManager()->GetIObjectLayerManager()->FindLayerByFullName(fullName);
+}
+
+bool CObjectLayerManager::IsLayerFileOfOpenedLevel(const string& layerFile) const
+{
+	string levelPath = GetIEditor()->GetLevelPath();
+	if (levelPath.empty())
+	{
+		return false;
+	}
+	levelPath = PathUtil::MakeGamePath(levelPath);
+
+	return layerFile.compareNoCase(0, levelPath.size(), levelPath) == 0;
+}
+
 void CObjectLayerManager::ClearLayers(bool bNotify /*= true*/)
 {
 	//TODO : is this all layers ? This should notify UPDATE_ALL
@@ -200,7 +225,7 @@ void CObjectLayerManager::ClearLayers(bool bNotify /*= true*/)
 	LayersMap::iterator it, itnext;
 	for (LayersMap::iterator it = m_layersMap.begin(); it != m_layersMap.end(); it = itnext)
 	{
-		CObjectLayer* pLayer = it->second;
+		//CObjectLayer* pLayer = it->second;
 
 		//CLayerChangeEvent(CLayerChangeEvent::LE_BEFORE_REMOVE, pLayer).Send();
 
@@ -663,7 +688,7 @@ void CObjectLayerManager::Serialize(CObjectArchive& ar)
 				{
 					const string filepath = PathUtil::Make(layersFolder, filename);
 					m_bOverwriteDuplicates = true;
-					CObjectLayer* pLayer = ImportLayerFromFile(filepath.c_str(), false, &ar);
+					ImportLayerFromFile(filepath.c_str(), false, &ar);
 					m_bOverwriteDuplicates = false;
 				}
 			}
@@ -790,10 +815,7 @@ void CObjectLayerManager::DeletePendingLayers()
 
 	m_toBeDeleted.clear();
 
-	ThreadingUtils::AsyncQueue([files = std::move(filesToDelete)]() mutable
-	{
-		CFileOperationExecutor::GetExecutor()->Delete(files);
-	});
+	CFileOperationExecutor::GetExecutor()->AsyncDelete(filesToDelete);
 }
 
 void CObjectLayerManager::SaveLayer(CObjectArchive* pArchive, CObjectLayer* pLayer)
@@ -902,8 +924,6 @@ CObjectLayer* CObjectLayerManager::ImportLayer(CObjectArchive& ar, const string&
 	XmlNodeRef layerObjects = layerNode->findChild("LayerObjects");
 	if (layerObjects)
 	{
-		int numObjects = layerObjects->getChildCount();
-
 		TSmartPtr<CObjectLayer> pCurLayer = m_pCurrentLayer;
 		m_pCurrentLayer = pLayer;
 
@@ -950,6 +970,7 @@ CObjectLayer* CObjectLayerManager::ImportLayerFromFile(const string& filePath, b
 					{
 						archive->ResolveObjects();
 					}
+					pLayer->SetModified(false);
 				}
 				archive->node = prevNove;
 				return pLayer;
@@ -1042,7 +1063,7 @@ bool CObjectLayerManager::InitLayerSwitches(bool isOnlyClear)
 						if (pRenderNode)
 						{
 							pRenderNode->SetLayerId(0);
-							pRenderNode->SetRndFlags(pRenderNode->GetRndFlags() & ~ERF_NO_PHYSICS);
+							pRenderNode->SetRndFlags(ERF_NO_PHYSICS, false);
 						}
 					}
 				}
@@ -1191,7 +1212,7 @@ void CObjectLayerManager::SetupLayerSwitches(bool isOnlyClear, bool isOnlyRender
 					{
 						pRenderNode->SetLayerId(pLayer->GetLayerID());
 						if (!pLayer->HasPhysics())
-							pRenderNode->SetRndFlags(pRenderNode->GetRndFlags() | ERF_NO_PHYSICS);
+							pRenderNode->SetRndFlags(ERF_NO_PHYSICS, true);
 					}
 				}
 			}
@@ -1480,11 +1501,10 @@ XmlNodeRef CObjectLayerManager::GenerateDynTexSrcLayerInfo() const
 					CObjectLayer* pLayer = (CObjectLayer*)pObj->GetLayer();
 
 					const char* pLayerName = pLayer ? pLayer->GetName() : 0;
-					const char* pObjName = pObj->GetName();
 					const char* pMtlName = pMat->GetName();
 
 					assert(pLayerName);
-					assert(pObjName);
+					assert(pObj->GetName());
 					assert(pMtlName);
 
 					MtlSharingMap::iterator itMtl = mtlSharingMap.find(pMtlName);

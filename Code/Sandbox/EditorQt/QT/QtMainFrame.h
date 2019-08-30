@@ -7,10 +7,11 @@
 
 #include <QMainWindow>
 
+class CCommand;
 class CWaitProgress;
 class QLoading;
-class QMainToolBarManager;
 class QMenu;
+class CToolBarService;
 class QToolWindowManager;
 
 class CEditorMainFrame : public QMainWindow, public IAutoEditorNotifyListener //TODO : class name doesn't match filename
@@ -24,7 +25,6 @@ public:
 	static CEditorMainFrame* GetInstance();
 
 	QToolWindowManager*      GetToolManager();
-	QMainToolBarManager*     GetToolBarManager();
 
 	//Temporary functions to handle CWaitProgress more elegantly
 	void          AddWaitProgress(CWaitProgress* task);
@@ -35,6 +35,7 @@ public:
 	CLevelEditor* GetLevelEditor() { return m_levelEditor.get(); }
 
 private:
+	void AddCommand(CCommand* pCommand);
 	void OnIdleCallback();
 	bool OnNativeEvent(void* message, long* result);
 	void OnBackgroundUpdateTimer();
@@ -43,9 +44,13 @@ private:
 	void OnAutoSaveTimer();
 	void OnEditToolChanged();
 	void OnEditorNotifyEvent(EEditorNotifyEvent event);
+	void OnCustomizeToolBar();
+	void OnToolBarAdded(QToolBar* pToolBar);
+	void OnToolBarModified(QToolBar* pToolBar);
+	void OnToolBarRenamed(const char* szOldToolBarName, QToolBar* pToolBar);
+	void OnToolBarRemoved(const char* szToolBarName);
 	void UpdateWindowTitle(const QString& levelPath = "");
 
-	bool focusNextPrevChild(bool next) override;
 	void contextMenuEvent(QContextMenuEvent* pEvent);
 
 	void SetDefaultLayout();
@@ -75,7 +80,6 @@ public:
 private:
 	//Should not be accessible
 	QStatusBar* statusBar() const { return QMainWindow::statusBar(); }
-	QMainToolBarManager*        m_pMainToolBarManager;
 	QTimer*                     m_pAutoBackupTimer;
 	std::vector<CWaitProgress*> m_waitTasks;
 	QMetaObject::Connection     m_layoutChangedConnection;

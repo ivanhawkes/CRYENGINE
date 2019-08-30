@@ -50,7 +50,7 @@ CryCriticalSection g_cDynTexLock;
 void CD3D9Renderer::EF_PrepareShadowGenRenderList(const SRenderingPassInfo& passInfo)
 {
 	FUNCTION_PROFILER_RENDERER();
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CD3D9Renderer::EF_PrepareShadowGenRenderList");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "CD3D9Renderer::EF_PrepareShadowGenRenderList");
 
 	CRenderView* pRenderView = passInfo.GetRenderView();
 
@@ -187,9 +187,6 @@ bool CD3D9Renderer::EF_PrepareShadowGenForLight(CRenderView* pRenderView, SRende
 
 void CD3D9Renderer::PrepareShadowPool(CRenderView* pRenderView) const
 {
-	CD3D9Renderer* const __restrict rd = gcpRendD3D;
-	int nDLights = pRenderView->GetDynamicLightsCount();
-
 	const auto nRequestedPoolSize = iConsole->GetCVar("e_ShadowsPoolSize")->GetIVal();
 	auto& shadowPoolSize = CDeferredShading::Instance().m_nShadowPoolSize;
 	auto& blockPack = CDeferredShading::Instance().m_blockPack;
@@ -247,7 +244,6 @@ void CD3D9Renderer::PrepareShadowPool(CRenderView* pRenderView) const
 
 bool CD3D9Renderer::PrepareShadowGenForFrustum(CRenderView* pRenderView, ShadowMapFrustum* pCurFrustum, const SRenderLight* pLight, int nLightID, int nLOD)
 {
-	const auto nThreadID = gRenDev->GetMainThreadID();
 	const auto frameID = pRenderView->GetFrameId();
 	const auto nSides = pCurFrustum->GetNumSides();
 	const auto allSidesMask = std::bitset<OMNI_SIDES_NUM>((1 << nSides) - 1);
@@ -323,10 +319,6 @@ bool CD3D9Renderer::PrepareShadowGenForFrustum(CRenderView* pRenderView, ShadowM
 		if ((invalidatedOrOutdatedMask & pCurFrustum->nOmniFrustumMask).none())
 			return true;
 	}
-
-	//////////////////////////////////////////////////////////////////////////
-	//actual view camera position
-	Vec3 vCamOrigin = iSystem->GetViewCamera().GetPosition();
 
 	CCamera tmpCamera;
 
@@ -494,7 +486,7 @@ CShadowUtils::SShadowsSetupInfo CD3D9Renderer::ConfigShadowTexgen(CRenderView* p
 	if (bScreenToLocalBasis && CRenderer::CV_r_FogShadowsMode == 1)
 	{
 		Vec4r vWBasisX, vWBasisY, vWBasisZ, vCamPos;
-		const SRenderViewport& viewport = gcpRendD3D.GetGraphicsPipeline().GetCurrentRenderView()->GetViewport();
+		const SRenderViewport& viewport = pRenderView->GetGraphicsPipeline()->GetCurrentRenderView()->GetViewport();
 
 		CCamera Cam = pRenderView->GetCamera(CCamera::eEye_Left);
 		if (pFr->m_eFrustumType == ShadowMapFrustum::e_Nearest && m_drawNearFov > 1.0f && m_drawNearFov < 179.0f)

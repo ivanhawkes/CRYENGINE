@@ -12,7 +12,7 @@
 namespace pfx2
 {
 
-struct IModifier : public _i_reference_target_t
+struct IModifier
 {
 public:
 	bool                IsEnabled() const { return m_enabled; }
@@ -39,8 +39,18 @@ struct IFieldModifier: ITypeModifier<T, TFrom>
 	virtual IFieldModifier* VersionFixReplace() const { return nullptr; }
 };
 
+struct IParamMod
+{
+	void Serialize(Serialization::IArchive& ar)
+	{
+		CRY_PFX2_PROFILE_DETAIL;
+		SerializeImpl(ar);
+	}
+	virtual void SerializeImpl(Serialization::IArchive& ar) = 0;
+};
+
 template<EDataDomain Domain, typename T = SFloat>
-class CParamMod
+class CParamMod: public IParamMod
 {
 public:
 	typedef T TValue;
@@ -52,37 +62,37 @@ public:
 		IFieldModifier<TType, TFrom>, 
 		ITypeModifier<TType, TFrom>
 	>::type;
-	using PModifier = _smart_ptr<TModifier>;
 
 	CParamMod(TFrom defaultValue = TFrom(1))
 		: m_baseValue(defaultValue) {}
 
 	void          AddToComponent(CParticleComponent* pComponent, CParticleFeature* pFeature);
 	void          AddToComponent(CParticleComponent* pComponent, CParticleFeature* pFeature, ThisDataType dataType);
-	void          Serialize(Serialization::IArchive& ar);
+	void          SerializeImpl(Serialization::IArchive& ar) override;
 
-	void          Init(CParticleComponentRuntime& runtime, ThisDataType dataType) const;
-	void          ModifyInit(const CParticleComponentRuntime& runtime, TIOStream<TType>& stream, SUpdateRange range) const;
+	void          Init(CParticleComponentRuntime& runtime, ThisDataType dataType) const { Init(runtime, dataType, runtime.SpawnedRange(Domain)); }
+	void          Init(CParticleComponentRuntime& runtime, ThisDataType dataType, SUpdateRange range) const;
+	void          ModifyInit(const CParticleComponentRuntime& runtime, TIOStream<TType> stream, SUpdateRange range) const;
 
-	void          Update(CParticleComponentRuntime& runtime, ThisDataType dataType) const;
-	void          ModifyUpdate(const CParticleComponentRuntime& runtime, TIOStream<TType>& stream, SUpdateRange range) const;
+	void          Update(CParticleComponentRuntime& runtime, ThisDataType dataType) const { Update(runtime, dataType, runtime.FullRange(Domain)); }
+	void          Update(CParticleComponentRuntime& runtime, ThisDataType dataType, SUpdateRange range) const;
+	void          ModifyUpdate(const CParticleComponentRuntime& runtime, TIOStream<TType> stream, SUpdateRange range) const;
 
 	TRange<TFrom> GetValues(const CParticleComponentRuntime& runtime, TVarArray<TType> data, EDataDomain domain) const;
 	TRange<TFrom> GetValueRange(const CParticleComponentRuntime& runtime) const;
 	TRange<TFrom> GetValueRange() const;
 	void          Sample(TVarArray<TFrom> samples) const;
 
-	bool          HasInitModifiers() const   { return !m_modInit.empty(); }
-	bool          HasUpdateModifiers() const { return !m_modUpdate.empty(); }
-	bool          HasModifiers() const       { return !m_modifiers.empty(); }
+	uint16        HasInitModifiers() const   { return m_initMask; }
+	uint16        HasUpdateModifiers() const { return m_updateMask; }
+	uint16        HasModifiers() const       { return m_initMask | m_updateMask; }
 	TType         GetBaseValue() const       { return m_baseValue; }
 	bool          IsEnabled() const          { return crymath::valueisfinite(m_baseValue); }
 
 protected:
 	T                      m_baseValue;
-	std::vector<PModifier> m_modifiers;
-	std::vector<PModifier> m_modInit;
-	std::vector<PModifier> m_modUpdate;
+	uint16                 m_initMask = 0, m_updateMask = 0;
+	DynArray<std::unique_ptr<TModifier>, uint> m_modifiers;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -115,6 +125,12 @@ struct STempBuffer: TIStream<T>
 		, m_buffer(runtime.MemHeap())
 	{}
 
+	TIOStream<T> RawStream()
+	{
+		assert(this->IsValid());
+		return *this;
+	}
+
 protected:
 
 	THeapArray<T> m_buffer;
@@ -123,7 +139,7 @@ protected:
 	{
 		m_buffer.resize(range.size());
 		T* data = m_buffer.data() - +*range.begin();
-		static_cast<TIStream<T>&>(*this) = TIStream<T>(data);
+		new(this) TIStream<T>(data);
 	}
 };
 
@@ -131,13 +147,13 @@ template<typename T>
 struct STempInitBuffer: STempBuffer<T>
 {
 	template<typename TParamMod>
-	STempInitBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, SUpdateRange range)
+	STempInitBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, SUpdateRange range, bool alwaysAlloc = false)
 		: STempBuffer<T>(runtime, paramMod)
 	{
-		if (paramMod.HasInitModifiers())
+		if (alwaysAlloc || paramMod.HasInitModifiers())
 		{
 			this->Allocate(range);
-			paramMod.ModifyInit(runtime, *this, range);
+			paramMod.ModifyInit(runtime, this->RawStream(), range);
 		}
 	}
 
@@ -151,46 +167,45 @@ template<typename T>
 struct STempUpdateBuffer: STempBuffer<T>
 {
 	template<typename TParamMod>
-	STempUpdateBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, SUpdateRange range)
+	STempUpdateBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, SUpdateRange range, bool alwaysAlloc = false)
 		: STempBuffer<T>(runtime, paramMod)
 	{
-		if (paramMod.HasModifiers())
+		if (alwaysAlloc || paramMod.HasModifiers())
 		{
 			this->Allocate(range);
-			paramMod.ModifyInit(runtime, *this, range);
-			paramMod.ModifyUpdate(runtime, *this, range);
+			paramMod.ModifyInit(runtime, this->RawStream(), range);
+			paramMod.ModifyUpdate(runtime, this->RawStream(), range);
 		}
 	}
 };
 
 template<typename T>
-struct SInstanceUpdateBuffer: STempBuffer<T>
+struct SSpawnerUpdateBuffer: STempBuffer<T>
 {
 	template<typename TParamMod>
-	SInstanceUpdateBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, EDataDomain domain)
-		: STempBuffer<T>(runtime, paramMod), m_runtime(runtime), m_range(1, 1)
+	SSpawnerUpdateBuffer(const CParticleComponentRuntime& runtime, TParamMod& paramMod, EDataDomain domain, bool alwaysAlloc = false)
+		: STempBuffer<T>(runtime, paramMod)
+		, m_parentIds(runtime.IStream(ESDT_ParentId))
+		, m_range(1, 1)
 	{
-		if (paramMod.HasModifiers())
+		if (alwaysAlloc || paramMod.HasModifiers())
 		{
-			this->Allocate(SUpdateRange(0, runtime.GetDomainSize(domain)));
+			this->Allocate(SUpdateRange(0, runtime.DomainSize(domain)));
 			m_range = paramMod.GetValues(runtime, this->m_buffer, domain);
 		}
 	}
 
 	TRange<T> operator[](uint id) const
 	{
-		if (this->IsValid() && id < m_runtime.GetNumInstances())
-		{
-			const TParticleId parentId = m_runtime.GetInstance(id).m_parentId;
-			return m_range * this->Load(parentId);
-		}
+		if (this->IsValid())
+			return m_range * this->SafeLoad(m_parentIds[id]);
 		else
 			return this->Load(0);
 	}
 
 private:
-	const CParticleComponentRuntime& m_runtime;
-	TRange<T>                        m_range;
+	IPidStream m_parentIds;
+	TRange<T>  m_range;
 };
 
 
@@ -213,7 +228,7 @@ struct SDistribution
 	}
 
 	EDistribution m_distribution = EDistribution::Random;
-	PosInt       m_modulus[Dim];
+	PosInt        m_modulus[Dim];
 };
 
 template<uint Dim, typename T = std::array<float, Dim>>
@@ -222,7 +237,7 @@ struct SDistributor
 	SDistributor(const SDistribution<Dim, T>& dist, CParticleComponentRuntime& runtime)
 		: m_distribution(dist.m_distribution)
 		, m_chaos(runtime.Chaos())
-		, m_order(runtime.GetContainer().GetSpawnIdOffset())
+		, m_order(runtime.GetContainer().TotalSpawned() - runtime.GetContainer().NumSpawned())
 	{
 		if (m_distribution == EDistribution::Ordered)
 		{
@@ -249,8 +264,8 @@ struct SDistributor
 
 private:
 	const EDistribution m_distribution;
-	SChaosKeyN<Dim, T> m_chaos;
-	SOrderKeyN<Dim, T> m_order;
+	SChaosKeyN<Dim, T>  m_chaos;
+	SOrderKeyN<Dim, T>  m_order;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

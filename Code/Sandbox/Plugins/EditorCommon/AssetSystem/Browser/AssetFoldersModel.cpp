@@ -9,6 +9,7 @@
 #include "AssetSystem/AssetManager.h"
 
 #include "Controls/QuestionDialog.h"
+#include "EditorFramework/PersonalizationManager.h"
 #include "PathUtils.h"
 #include "QThumbnailView.h"
 #include "QtUtil.h"
@@ -33,7 +34,7 @@ bool CanMove(const std::vector<CAsset*>& assets, const string& folder)
 
 void OnMove(const std::vector<CAsset*>& assets, const QString& destinationFolder)
 {
-	const CAssetManager* const pAssetManager = CAssetManager::GetInstance();
+	CAssetManager* const pAssetManager = CAssetManager::GetInstance();
 
 	const QString question = QObject::tr("There is a possibility of undetected dependencies which can be violated after performing the operation.\n"
 		"\n"
@@ -62,6 +63,22 @@ void OnMove(const std::vector<CAsset*>& assets, const QString& destinationFolder
 	pAssetManager->MoveAssets(assets, QtUtil::ToString(destinationFolder));
 }
 
+QStringList GetAddedFoldersPersonalization()
+{
+	QStringList addedFolders;
+	QVariant addedFoldersVariant = GetIEditor()->GetPersonalizationManager()->GetProjectProperty("AssetFolderModel", "AddedFolders");
+	if (addedFoldersVariant.isValid() && addedFoldersVariant.canConvert(QVariant::StringList))
+	{
+		addedFolders = addedFoldersVariant.toStringList();
+	}
+	return addedFolders;
+}
+
+void SetAddedFoldersPersonalization(const QStringList& addedFolders)
+{
+	GetIEditor()->GetPersonalizationManager()->SetProjectProperty("AssetFolderModel", "AddedFolders", addedFolders);
+}
+
 }
 
 CAssetFoldersModel::CAssetFoldersModel(QObject* parent /*= nullptr*/)
@@ -80,26 +97,28 @@ CAssetFoldersModel::CAssetFoldersModel(QObject* parent /*= nullptr*/)
 	m_assetFolders = assetFolders.get();
 	m_root.m_subFolders.emplace_back(std::move(assetFolders));
 
-	CAssetManager::GetInstance()->signalBeforeAssetsUpdated.Connect(this, &CAssetFoldersModel::PreUpdate);
-	CAssetManager::GetInstance()->signalAfterAssetsUpdated.Connect(this, &CAssetFoldersModel::PostUpdate);
+	CAssetManager::GetInstance()->signalBeforeAssetsReset.Connect(this, &CAssetFoldersModel::PreReset);
+	CAssetManager::GetInstance()->signalAfterAssetsReset.Connect(this, &CAssetFoldersModel::PostReset);
 
 	CAssetManager::GetInstance()->signalBeforeAssetsInserted.Connect(this, &CAssetFoldersModel::PreInsert);
 
 	CAssetManager::GetInstance()->signalBeforeAssetsRemoved.Connect(this, &CAssetFoldersModel::PreRemove);
 	CAssetManager::GetInstance()->signalAfterAssetsRemoved.Connect(this, &CAssetFoldersModel::PostRemove);
 
+	m_addedFolders = Private_AssetFoldersModel::GetAddedFoldersPersonalization();
+
 	//Build initially
-	if (CAssetManager::GetInstance()->GetAssetsCount() > 0)
+	if (CAssetManager::GetInstance()->GetAssetsCount() > 0 || !m_addedFolders.empty())
 	{
-		PreUpdate();
-		PostUpdate();
+		PreReset();
+		PostReset();
 	}
 }
 
 CAssetFoldersModel::~CAssetFoldersModel()
 {
-	CAssetManager::GetInstance()->signalBeforeAssetsUpdated.DisconnectObject(this);
-	CAssetManager::GetInstance()->signalAfterAssetsUpdated.DisconnectObject(this);
+	CAssetManager::GetInstance()->signalBeforeAssetsReset.DisconnectObject(this);
+	CAssetManager::GetInstance()->signalAfterAssetsReset.DisconnectObject(this);
 
 	CAssetManager::GetInstance()->signalBeforeAssetsInserted.DisconnectObject(this);
 	CAssetManager::GetInstance()->signalAfterAssetsInserted.DisconnectObject(this);
@@ -193,6 +212,7 @@ bool CAssetFoldersModel::setData(const QModelIndex& index, const QVariant& value
 		CRY_ASSERT(m_addedFolders.removeOne(oldName));
 		folder->m_name = newName;
 		m_addedFolders.append(GetPath(folder));
+		Private_AssetFoldersModel::SetAddedFoldersPersonalization(m_addedFolders);
 		
 		//Note that due to this model only having one column but thumbnails being another column, the thumbnails will not be updated immediately.
 		//Not sure how to fix this with the current setup
@@ -391,12 +411,12 @@ QModelIndex CAssetFoldersModel::parent(const QModelIndex& index) const
 	}
 }
 
-void CAssetFoldersModel::PreUpdate()
+void CAssetFoldersModel::PreReset()
 {
 	beginResetModel();
 }
 
-void CAssetFoldersModel::PostUpdate()
+void CAssetFoldersModel::PostReset()
 {
 	Clear();
 	for (auto& asset : CAssetManager::GetInstance()->m_assets)
@@ -683,6 +703,7 @@ void CAssetFoldersModel::CreateFolder(const QString& parentPath, const QString& 
 		endInsertRows();
 
 		m_addedFolders.append(folderPath);
+		Private_AssetFoldersModel::SetAddedFoldersPersonalization(m_addedFolders);
 	}
 }
 
@@ -696,6 +717,7 @@ void CAssetFoldersModel::DeleteFolder(const QString& folderPath)
 		beginRemoveRows(folderIndex.parent(), folderIndex.row(), folderIndex.row());
 		pFolder->m_parent->m_subFolders.erase(pFolder->m_parent->m_subFolders.begin() + folderIndex.row());
 		CRY_ASSERT(m_addedFolders.removeOne(folderPath));
+		Private_AssetFoldersModel::SetAddedFoldersPersonalization(m_addedFolders);
 		endRemoveRows();
 	}
 }

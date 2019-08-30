@@ -64,7 +64,6 @@ struct UpdateAnimationSizesTask : public IBackgroundTask
 				return eTaskResult_Failed;
 			}
 
-			unsigned int newSize = 0;
 			if (FILE* f = gEnv->pCryPak->FOpen(animationPath, "rb"))
 			{
 				m_newSizes[i] = gEnv->pCryPak->FGetSize(f);
@@ -102,7 +101,7 @@ struct UpdateAnimationSizesTask : public IBackgroundTask
 			if (m_system->explorerData.get())
 			{
 				m_system->explorerData->BeginBatchChange(m_subtree);
-				size_t num = min(m_entries.size(), m_newSizes.size());
+
 				for (size_t i = 0; i < m_entries.size(); ++i)
 					m_system->explorerData->SetEntryColumn(m_entries[i], m_column, m_newSizes[i], true);
 				m_system->explorerData->EndBatchChange(m_subtree);
@@ -389,8 +388,6 @@ void AnimationList::ReloadAnimationList()
 	m_animations.Clear();
 	m_aliasToId.clear();
 
-	IAnimEvents* animEvents = gEnv->pCharacterManager->GetIAnimEvents();
-
 	std::vector<std::pair<ExplorerEntryId, unsigned int>> audioColumnValues;
 	std::vector<std::pair<ExplorerEntryId, int>> pakColumnValues;
 	std::vector<std::pair<ExplorerEntryId, int>> framesColumnValues;
@@ -621,8 +618,8 @@ bool AnimationList::ResaveAnimSettings(const char* filePath)
 		return false;
 
 	{
-		char buffer[ICryPak::g_nMaxPath] = "";
-		const char* realPath = gEnv->pCryPak->AdjustFileName(filePath, buffer, 0);
+		CryPathString realPath;
+		gEnv->pCryPak->AdjustFileName(filePath, realPath, 0);
 		DWORD attribs = GetFileAttributesA(realPath);
 		if (attribs != INVALID_FILE_ATTRIBUTES && (attribs & FILE_ATTRIBUTE_READONLY) != 0)
 			SetFileAttributesA(realPath, FILE_ATTRIBUTE_NORMAL);
@@ -808,11 +805,11 @@ bool PatchAnimEvents(ActionOutput* output, const char* animEventsFilename, const
 
 	if (needToSave)
 	{
-		char realPath[ICryPak::g_nMaxPath];
+		CryPathString realPath;
 		gEnv->pCryPak->AdjustFileName(animEventsFilename, realPath, ICryPak::FLAGS_FOR_WRITING);
 		{
-			string path;
-			string filename;
+			CryPathString path;
+			CryPathString filename;
 			PathUtil::Split(realPath, path, filename);
 			QDir().mkpath(QString::fromLocal8Bit(path.c_str()));
 		}
@@ -829,9 +826,9 @@ bool PatchAnimEvents(ActionOutput* output, const char* animEventsFilename, const
 
 static void CreateFolderForFile(const char* gameFilename)
 {
-	char buf[ICryPak::g_nMaxPath];
-	gEnv->pCryPak->AdjustFileName(gameFilename, buf, ICryPak::FLAGS_FOR_WRITING);
-	QDir().mkpath(QString::fromLocal8Bit(PathUtil::ToUnixPath(PathUtil::GetParentDirectory(buf)).c_str()));
+	CryPathString adjusted;
+	gEnv->pCryPak->AdjustFileName(gameFilename, adjusted, ICryPak::FLAGS_FOR_WRITING);
+	QDir().mkpath(QString::fromLocal8Bit(PathUtil::ToUnixPath(PathUtil::GetParentDirectory(adjusted)).c_str()));
 }
 
 bool AnimationList::SaveAnimationEntry(ActionOutput* output, unsigned int id, bool notifyOfChange)
@@ -870,8 +867,8 @@ bool AnimationList::SaveAnimationEntry(ActionOutput* output, unsigned int id, bo
 			if (entry->content.type == AnimationContent::BLEND_SPACE)
 			{
 				XmlNodeRef root = entry->content.blendSpace.SaveToXml();
-				char path[ICryPak::g_nMaxPath] = "";
-				gEnv->pCryPak->AdjustFileName(entry->path.c_str(), path, 0);
+				CryPathString path;
+				gEnv->pCryPak->AdjustFileName(entry->path, path, 0);
 				if (!root->saveToFile(path))
 				{
 					if (output)
@@ -882,8 +879,8 @@ bool AnimationList::SaveAnimationEntry(ActionOutput* output, unsigned int id, bo
 			else if (entry->content.type == AnimationContent::COMBINED_BLEND_SPACE)
 			{
 				XmlNodeRef root = entry->content.combinedBlendSpace.SaveToXml();
-				char path[ICryPak::g_nMaxPath] = "";
-				gEnv->pCryPak->AdjustFileName(entry->path.c_str(), path, 0);
+				CryPathString path;
+				gEnv->pCryPak->AdjustFileName(entry->path, path, 0);
 				if (!root->saveToFile(path))
 				{
 					if (output)

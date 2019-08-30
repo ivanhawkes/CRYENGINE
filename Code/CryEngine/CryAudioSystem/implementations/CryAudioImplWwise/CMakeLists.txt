@@ -8,16 +8,15 @@ add_sources("CryAudioImpl_uber_0.cpp"
 	SOURCE_GROUP "Header Files"
 		"AuxBus.h"
 		"AuxThread.h"
-		"BaseObject.h"
 		"Common.h"
 		"CVars.h"
 		"Event.h"
 		"EventInstance.h"
 		"FileIOHandler.h"
 		"GlobalData.h"
-		"GlobalObject.h"
 		"Impl.h"
 		"Listener.h"
+		"ListenerInfo.h"
 		"Object.h"
 		"Parameter.h"
 		"ParameterEnvironment.h"
@@ -29,14 +28,12 @@ add_sources("CryAudioImpl_uber_0.cpp"
 	SOURCE_GROUP "Source Files"
 		"AuxBus.cpp"
 		"AuxThread.cpp"
-		"BaseObject.cpp"
 		"Common.cpp"
 		"CryAudioImpl.cpp"
 		"CVars.cpp"
 		"Event.cpp"
 		"EventInstance.cpp"
 		"FileIOHandler.cpp"
-		"GlobalObject.cpp"
 		"Impl.cpp"
 		"Listener.cpp"
 		"Object.cpp"
@@ -67,7 +64,7 @@ if (AUDIO_WWISE)
 	if(WINDOWS)
 		set( WWISE_PLATFORM_PATH x64 )
 		set( WWISE_PLATFORM_PREFIX WIN )
-	elseif(LINUX64)
+	elseif(LINUX)
 		target_link_libraries(${THIS_PROJECT} PRIVATE SDL2)
 		set( WWISE_PLATFORM_PATH Linux_x64 )
 		set( WWISE_PLATFORM_PREFIX LINUX )
@@ -215,7 +212,7 @@ if (AUDIO_WWISE)
 		target_link_libraries( ${THIS_PROJECT} PRIVATE debug ${wwise_lib} )
 	endforeach()
 
-	target_compile_definitions(${THIS_PROJECT} PRIVATE $<$<NOT:$<CONFIG:Release>>:CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE>)
+	target_compile_definitions(${THIS_PROJECT} PRIVATE $<$<NOT:$<CONFIG:Release>>:CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE>)
 
 	if (DURANGO)
 		target_compile_definitions(${THIS_PROJECT} PRIVATE -DCRY_AUDIO_IMPL_WWISE_PROVIDE_SECONDARY_POOL)
@@ -225,38 +222,25 @@ else()
 endif()
 if (ORBIS OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	target_compile_options(${THIS_PROJECT} PRIVATE
-		-Wno-unknown-pragmas
-		-Wno-reorder
-		-Wno-parentheses
 		-Wno-format
-		-Wno-switch
-		-Wno-unused-value
-		-Wno-comment
-		-Wno-empty-body
-		-Wno-format-security
-		-Wno-unused-function
 		-Wno-multichar
+		-Wno-parentheses
+		-Wno-unknown-pragmas
+		-Wno-unused-function
 		-Wno-unused-private-field
 	)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(${THIS_PROJECT} PRIVATE
-		-Wno-unused-function
-		-Wno-unused-value
-		-Wno-sign-compare
-		-Wno-ignored-attributes
-		-Wno-int-in-bool-context
-		-Wno-unused-but-set-variable
-		-Wno-misleading-indentation
-		-Wno-unknown-pragmas
-		-Wno-strict-aliasing
-		-Wno-maybe-uninitialized
-		-Wno-unused-const-variable
-		-Wno-multichar
-		-Wno-char-subscripts
-		-Wno-parentheses
-		-Wno-comment
-		-Wno-address
 		-Wno-format
-		-Wno-switch
+		-Wno-maybe-uninitialized
+		-Wno-misleading-indentation
+		-Wno-multichar
+		-Wno-parentheses
+		-Wno-sign-compare
+		-Wno-strict-aliasing
+		-Wno-unknown-pragmas
+		-Wno-unused-but-set-variable
+		-Wno-unused-function
+		-Wno-stringop-overflow
 	)
 endif()

@@ -2,16 +2,14 @@
 
 #pragma once
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	#include "Entity.h"
+	#include "Common.h"
 
 namespace CryAudio
 {
-class CTriggerConnection;
-
 namespace Impl
 {
-struct ITriggerConnection;
 struct ITriggerInfo;
 } // namespace Impl
 
@@ -24,16 +22,21 @@ public:
 	CPreviewTrigger& operator=(CPreviewTrigger const&) = delete;
 	CPreviewTrigger& operator=(CPreviewTrigger&&) = delete;
 
-	CPreviewTrigger();
+	CPreviewTrigger()
+		: Control(g_previewTriggerId, GlobalContextId, g_szPreviewTriggerName)
+	{}
+
 	~CPreviewTrigger();
 
 	void Execute(Impl::ITriggerInfo const& triggerInfo);
+	void Execute(XmlNodeRef const& node);
 	void Clear();
-	bool HasConnection() const { return m_pConnection != nullptr; }
 
 private:
 
-	Impl::ITriggerConnection* m_pConnection;
+	void Execute();
+
+	TriggerConnections m_connections;
 };
 }      // namespace CryAudio
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE

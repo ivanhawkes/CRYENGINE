@@ -115,14 +115,6 @@ void CShaderResources::Cleanup()
 	}
 	SAFE_DELETE(m_pDeformInfo);
 	SAFE_DELETE(m_pDetailDecalInfo);
-	if (m_pSky)
-	{
-		for (size_t i = 0; i < sizeof(m_pSky->m_SkyBox) / sizeof(m_pSky->m_SkyBox[0]); ++i)
-		{
-			SAFE_RELEASE(m_pSky->m_SkyBox[i]);
-		}
-		SAFE_DELETE(m_pSky);
-	}
 	ReleaseConstants();
 
 	// not thread safe main thread can potentially access this destroyed entry in mfCreateShaderResources()
@@ -430,7 +422,7 @@ void CShaderResources::SetInvalid()
 
 void CShaderResources::UpdateConstants(IShader* pISH)
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CShaderResources::UpdateConstants");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "CShaderResources::UpdateConstants");
 
 	_smart_ptr<CShaderResources> pSelf(this);
 	_smart_ptr<IShader> pShader = pISH;
@@ -607,7 +599,7 @@ inline void AddShaderParamToArray(SShaderFXParams& FXParams, FixedDynArray<SFXPa
 
 void CShaderResources::RT_UpdateConstants(IShader* pISH)
 {
-	CRY_PROFILE_REGION(PROFILE_RENDERER, "CShaderResources::RT_UpdateConstants");
+	CRY_PROFILE_SECTION(PROFILE_RENDERER, "CShaderResources::RT_UpdateConstants");
 	//assert(gRenDev->m_pRT->IsRenderThread());
 
 	CShader* pSH = (CShader*)pISH;

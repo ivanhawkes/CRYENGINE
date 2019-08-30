@@ -2,36 +2,36 @@
 
 #include "StdAfx.h"
 
-#include "3dEngine.h"
 #include "3dEngineLoad.h"
-#include "terrain.h"
-#include "ObjMan.h"
-#include "VisAreas.h"
-#include <CryParticleSystem/IParticles.h>
-#include "ParticleSystem/ParticleSystem.h"
-#include "DecalManager.h"
-#include "Vegetation.h"
-#include "Brush.h"
-#include "MatMan.h"
-#include "IndexedMesh.h"
-#include "SkyLightManager.h"
-#include "ObjectsTree.h"
-#include "LightEntity.h"
-#include "WaterWaveRenderNode.h"
-#include "RoadRenderNode.h"
-#include "PhysCallbacks.h"
-#include "TimeOfDay.h"
-#include "LightEntity.h"
-#include "RenderMeshMerger.h"
-#include "FogVolumeRenderNode.h"
-#include "RopeRenderNode.h"
-#include "MergedMeshRenderNode.h"
+#include "3dEngine.h"
 #include "BreezeGenerator.h"
-#include <CryAnimation/ICryAnimation.h>
-#include <CryAction/IMaterialEffects.h>
-#include <CryEntitySystem/IEntitySystem.h>
+#include "Brush.h"
 #include "ClipVolumeManager.h"
+#include "DecalManager.h"
+#include "FogVolumeRenderNode.h"
+#include "IndexedMesh.h"
+#include "LightEntity.h"
+#include "MatMan.h"
+#include "MergedMeshRenderNode.h"
+#include "ObjectsTree.h"
+#include "ObjMan.h"
+#include "ParticleSystem/ParticleSystem.h"
+#include "PhysCallbacks.h"
+#include "RenderMeshMerger.h"
+#include "RoadRenderNode.h"
+#include "RopeRenderNode.h"
+#include "SkyLightManager.h"
 #include "StatObjFoliage.h"
+#include "terrain.h"
+#include "TimeOfDay.h"
+#include "Vegetation.h"
+#include "VisAreas.h"
+#include "WaterWaveRenderNode.h"
+
+#include <CryAction/IMaterialEffects.h>
+#include <CryAnimation/ICryAnimation.h>
+#include <CryEntitySystem/IEntitySystem.h>
+#include <CryParticleSystem/IParticles.h>
 
 #if defined(FEATURE_SVO_GI)
 	#include "SVO/SceneTreeManager.h"
@@ -97,15 +97,6 @@ void C3DEngine::LoadDefaultAssets()
 
 	if (GetRenderer())
 	{
-		if (!m_pRESky)
-		{
-			m_pRESky = (CRESky*)GetRenderer()->EF_CreateRE(eDATA_Sky); //m_pRESky->m_fAlpha = 1.f;
-		}
-		if (!m_pREHDRSky)
-		{
-			m_pREHDRSky = (CREHDRSky*)GetRenderer()->EF_CreateRE(eDATA_HDRSky);
-		}
-
 		if (!m_ptexIconLowMemoryUsage)
 		{
 			m_ptexIconLowMemoryUsage = GetRenderer()->EF_LoadTexture("%ENGINE%/EngineAssets/Icons/LowMemoryUsage.tif", FT_DONT_STREAM);
@@ -135,7 +126,7 @@ bool C3DEngine::InitLevelForEditor(const char* szFolderName, const char* szMissi
 	CRY_ASSERT_MESSAGE(0, "InitLevelForEditor not supported on consoles yet");
 	return false;
 #else
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	m_bInUnload = false;
 	m_bEditor = true;
@@ -177,9 +168,6 @@ bool C3DEngine::InitLevelForEditor(const char* szFolderName, const char* szMissi
 	m_pMergedMeshesManager->Init();
 
 	m_pBreezeGenerator->Initialize();
-
-	if (m_pSkyLightManager)
-		m_pSkyLightManager->InitSkyDomeMesh();
 
 	// recreate particles and decals
 	if (m_pPartManager)
@@ -232,13 +220,13 @@ bool C3DEngine::InitLevelForEditor(const char* szFolderName, const char* szMissi
 
 bool C3DEngine::LoadTerrain(XmlNodeRef pDoc, std::vector<struct IStatObj*>** ppStatObjTable, std::vector<IMaterial*>** ppMatTable)
 {
-	LOADING_TIME_PROFILE_SECTION;
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "C3DEngine::LoadTerrain");
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "C3DEngine::LoadTerrain");
 
 	PrintMessage("===== Loading %s =====", COMPILED_HEIGHT_MAP_FILE_NAME);
 
 	// open file
-	FILE* f = GetPak()->FOpen(GetLevelFilePath(COMPILED_HEIGHT_MAP_FILE_NAME), "rbx");
+	FILE* f = GetPak()->FOpen(GetLevelFilePath(COMPILED_HEIGHT_MAP_FILE_NAME), "rb");
 	if (!f)
 		return 0;
 
@@ -262,7 +250,7 @@ bool C3DEngine::LoadTerrain(XmlNodeRef pDoc, std::vector<struct IStatObj*>** ppS
 
 	if (header.nChunkSize)
 	{
-		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Terrain, 0, "Terrain");
+		MEMSTAT_CONTEXT(EMemStatContextType::Terrain, "Terrain");
 
 		if (!m_pTerrain)
 			m_pTerrain = (CTerrain*)CreateTerrain(header.TerrainInfo);
@@ -285,12 +273,12 @@ bool C3DEngine::LoadTerrain(XmlNodeRef pDoc, std::vector<struct IStatObj*>** ppS
 
 bool C3DEngine::LoadVisAreas(std::vector<struct IStatObj*>** ppStatObjTable, std::vector<IMaterial*>** ppMatTable)
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	PrintMessage("===== Loading %s =====", COMPILED_VISAREA_MAP_FILE_NAME);
 
 	// open file
-	FILE* f = GetPak()->FOpen(GetLevelFilePath(COMPILED_VISAREA_MAP_FILE_NAME), "rbx");
+	FILE* f = GetPak()->FOpen(GetLevelFilePath(COMPILED_VISAREA_MAP_FILE_NAME), "rb");
 	if (!f)
 		return false;
 
@@ -325,7 +313,7 @@ bool C3DEngine::LoadVisAreas(std::vector<struct IStatObj*>** ppStatObjTable, std
 //////////////////////////////////////////////////////////////////////////
 void C3DEngine::UnloadLevel()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	if (m_pLevelLoadTimeslicer)
 	{
@@ -384,9 +372,6 @@ void C3DEngine::UnloadLevel()
 
 	FreeFoliages();
 
-	if (m_pSkyLightManager)
-		m_pSkyLightManager->ReleaseSkyDomeMesh();
-
 	// free vegetation and brush CGF's
 	m_lstKilledVegetations.Reset();
 
@@ -408,7 +393,7 @@ void C3DEngine::UnloadLevel()
 
 	if (m_pTerrain)
 	{
-		CryComment("Deleting Terain");
+		CryComment("Deleting Terrain");
 		SAFE_DELETE(m_pTerrain);
 		CryComment("done");
 	}
@@ -459,22 +444,14 @@ void C3DEngine::UnloadLevel()
 
 	CleanLevelShaders();
 
-	if (m_pRESky)
-		m_pRESky->Release(true);
-	if (m_pREHDRSky)
-		m_pREHDRSky->Release(true);
-	m_pRESky = 0;
-	m_pREHDRSky = 0;
-	stl::free_container(m_skyMatName);
-	stl::free_container(m_skyLowSpecMatName);
+	stl::free_container(m_SkyDomeTextureName[0]);
+	stl::free_container(m_MoonTextureName);
+	for (int skyTypeIdx = 0; skyTypeIdx < eSkyType_NumSkyTypes; ++skyTypeIdx)
+		SAFE_RELEASE(m_pSkyMat[skyTypeIdx]);
 
-	if (m_nCloudShadowTexId)
+	if (m_pCloudShadowTex.get())
 	{
-		ITexture* tex = GetRenderer()->EF_GetTextureByID(m_nCloudShadowTexId);
-		if (tex)
-			tex->Release();
-
-		m_nCloudShadowTexId = 0;
+		m_pCloudShadowTex.reset();
 		GetRenderer()->SetCloudShadowsParams(0, Vec3(0, 0, 0), 1, false, 1);
 		SetGlobalParameter(E3DPARAM_VOLFOG_SHADOW_ENABLE, Vec3(0, 0, 0));
 	}
@@ -500,15 +477,6 @@ void C3DEngine::UnloadLevel()
 			GetRenderer()->SetVolumetricCloudParams(0);
 			GetRenderer()->SetVolumetricCloudNoiseTex(0, 0);
 		}
-	}
-
-	if (m_nNightMoonTexId)
-	{
-		ITexture* tex = GetRenderer()->EF_GetTextureByID(m_nNightMoonTexId);
-		if (tex)
-			tex->Release();
-
-		m_nNightMoonTexId = 0;
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -543,6 +511,7 @@ void C3DEngine::UnloadLevel()
 	assert(m_pObjectsTree == NULL);
 
 	COctreeNode::StaticReset();
+	m_colorGradingCtrl.Reset();
 
 	// Now that all meshes and objects are deleted we final release permanent renderobjects
 	// as they hold references to materials.
@@ -609,8 +578,8 @@ void C3DEngine::UnloadLevel()
 	m_nCustomShadowFrustumCount = 0;
 
 	Cry3DEngineBase::m_pRenderMeshMerger->Reset();
+	m_pTimeOfDay->Reset();
 
-	SAFE_DELETE(m_pTimeOfDay);
 	CLightEntity::StaticReset();
 	CVisArea::StaticReset();
 	CRoadRenderNode::FreeStaticMemoryUsage();
@@ -635,8 +604,8 @@ void C3DEngine::UnloadLevel()
 
 	//////////////////////////////////////////////////////////////////////////
 	// clear data used for SRenderingPass
-	stl::free_container(m_RenderingPassCameras[0]);
-	stl::free_container(m_RenderingPassCameras[1]);
+	m_RenderingPassCameras[0].reset_container();
+	m_RenderingPassCameras[1].reset_container();
 	stl::free_container(m_deferredRenderProxyStreamingPriorityUpdates);
 
 	for (auto& pFr : m_lstCustomShadowFrustums)
@@ -659,7 +628,7 @@ void C3DEngine::UnloadLevel()
 //////////////////////////////////////////////////////////////////////////
 void C3DEngine::LoadFlaresData()
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Flare data");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "Flare data");
 
 	string flareExportListPath = gEnv->p3DEngine->GetLevelFilePath(FLARE_EXPORT_FILE);
 	XmlNodeRef pFlareRootNode = gEnv->pSystem->LoadXmlFromFile(flareExportListPath);
@@ -726,7 +695,7 @@ C3DEngineLevelLoadTimeslicer::~C3DEngineLevelLoadTimeslicer()
 
 I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 #if !defined(SYS_ENV_AS_STRUCT)
 	PREFAST_ASSUME(gEnv);
@@ -814,9 +783,6 @@ I3DEngine::ELevelLoadStatus C3DEngineLevelLoadTimeslicer::DoStep()
 	NEXT_STEP(EStep::LoadDefaultAssets)
 	{
 		m_owner.LoadDefaultAssets();
-
-		if (m_owner.m_pSkyLightManager)
-			m_owner.m_pSkyLightManager->InitSkyDomeMesh();
 
 		// Load LevelData.xml File.
 		m_xmlLevelData = m_owner.GetSystem()->LoadXmlFromFile(m_owner.GetLevelFilePath(LEVEL_DATA_FILE));
@@ -1061,7 +1027,7 @@ bool C3DEngineLevelLoadTimeslicer::ShouldPreloadLevelObjects() const
 
 bool C3DEngine::LoadLevel(const char* szFolderName, XmlNodeRef missionXml)
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	C3DEngineLevelLoadTimeslicer slicer(*this, szFolderName, std::move(missionXml));
 	ELevelLoadStatus result;
@@ -1097,7 +1063,7 @@ I3DEngine::ELevelLoadStatus C3DEngine::UpdateLoadLevelStatus()
 		return ELevelLoadStatus::Failed;
 	}
 
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	switch (m_pLevelLoadTimeslicer->DoStep())
 	{
@@ -1246,7 +1212,7 @@ XmlNodeRef C3DEngine::OpenMissionDataXML(const char* szMissionName)
 
 void C3DEngine::LoadMissionDataFromXMLNode(const char* szMissionName)
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	if (!m_pTerrain)
 	{
@@ -1361,14 +1327,12 @@ void C3DEngine::LoadEnvironmentSettingsFromXML(XmlNodeRef pInputNode)
 	m_fTerrainDetailMaterialsViewDistRatio = fTerrainDetailMaterialsViewDistRatio;
 
 	// SkyBox
-	m_skyMatName = GetXMLAttribText(pInputNode, "SkyBox", "Material", "%ENGINE%/EngineAssets/Materials/sky/Sky");
-	m_skyLowSpecMatName = GetXMLAttribText(pInputNode, "SkyBox", "MaterialLowSpec", "%ENGINE%/EngineAssets/Materials/sky/Sky");
+	const string hdrSkyMatName = GetXMLAttribText(pInputNode, "SkyBox", "Material", "");
+	const string skyMatName = GetXMLAttribText(pInputNode, "SkyBox", "MaterialLowSpec", "");
+	m_pSkyMat[eSkyType_HDRSky] = hdrSkyMatName.empty() ? NULL : GetMatMan()->LoadMaterial(hdrSkyMatName.c_str(), false);
+	m_pSkyMat[eSkyType_Sky] = skyMatName.empty() ? NULL : GetMatMan()->LoadMaterial(skyMatName.c_str(), false);
 
-	// Forces the engine to reload the material of the skybox in the next time it renders it.
-	m_pSkyMat = NULL;
-	m_pSkyLowSpecMat = NULL;
-
-	m_fSkyBoxAngle = (float)atof(GetXMLAttribText(pInputNode, "SkyBox", "Angle", "0.0"));
+	m_fSkyBoxAngle[0] = (float)atof(GetXMLAttribText(pInputNode, "SkyBox", "Angle", "0.0"));
 	m_fSkyBoxStretching = (float)atof(GetXMLAttribText(pInputNode, "SkyBox", "Stretching", "1.0"));
 
 	// set terrain water, sun road and bottom shaders
@@ -1585,13 +1549,7 @@ void C3DEngine::UpdateMoonParams()
 	m_moonRotationLatitude = moon.latitude;
 	m_moonRotationLongitude = moon.longitude;
 	m_nightMoonSize = moon.size;
-
-	//Texture
-	ITexture* pTex = 0;
-	if (moon.texture[0] != '\0' && GetRenderer())
-		pTex = GetRenderer()->EF_LoadTexture(moon.texture, FT_DONT_STREAM);
-
-	m_nNightMoonTexId = pTex ? pTex->GetTextureID() : 0;
+	m_MoonTextureName = moon.texture;
 
 	UpdateMoonDirection();
 }
@@ -1614,18 +1572,17 @@ void C3DEngine::UpdateWindParams()
 
 void C3DEngine::UpdateCloudShadows()
 {
-	// load cloud shadow parameters
-	const auto& cloudParams = GetTimeOfDay()->GetCloudShadowsParams();
-
-	ITexture* pTex = 0;
-	if (cloudParams.texture[0] != '\0' && GetRenderer())
-		pTex = GetRenderer()->EF_LoadTexture(cloudParams.texture, FT_DONT_STREAM);
-
-	m_nCloudShadowTexId = pTex ? pTex->GetTextureID() : 0;
-
 	if (GetRenderer())
 	{
-		GetRenderer()->SetCloudShadowsParams(m_nCloudShadowTexId, cloudParams.speed, cloudParams.tiling, cloudParams.invert, cloudParams.brightness);
+		const auto& cloudParams = GetTimeOfDay()->GetCloudShadowsParams();
+
+		if (!m_pCloudShadowTex.get() && !cloudParams.texture.empty())
+		{
+			m_pCloudShadowTex.Assign_NoAddRef(GetRenderer()->EF_LoadTexture(cloudParams.texture.c_str(), FT_DONT_STREAM));
+		}
+
+		const int textureId = m_pCloudShadowTex.get() ? m_pCloudShadowTex->GetTextureID() : 0;
+		GetRenderer()->SetCloudShadowsParams(textureId, cloudParams.speed, cloudParams.tiling, cloudParams.invert, cloudParams.brightness);
 	}
 }
 
@@ -1641,7 +1598,7 @@ void C3DEngine::LoadTimeOfDaySettingsFromXML(XmlNodeRef node)
 //////////////////////////////////////////////////////////////////////////
 void C3DEngine::LoadParticleEffects(const char* szFolderName)
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	if (m_pPartManager)
 	{
@@ -1689,7 +1646,7 @@ bool C3DEngine::RestoreTerrainFromDisk()
 	{
 		m_pTerrain->ResetTerrainVertBuffers(NULL);
 
-		if (FILE* f = GetPak()->FOpen(GetLevelFilePath(COMPILED_HEIGHT_MAP_FILE_NAME), "rbx"))
+		if (FILE* f = GetPak()->FOpen(GetLevelFilePath(COMPILED_HEIGHT_MAP_FILE_NAME), "rb"))
 		{
 			GetTerrain()->ReloadModifiedHMData(f);
 			GetPak()->FClose(f);
@@ -1730,9 +1687,9 @@ void C3DEngine::ReRegisterKilledVegetationInstances()
 //////////////////////////////////////////////////////////////////////////
 bool C3DEngine::LoadUsedShadersList()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "LoadUsedShadersList");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "LoadUsedShadersList");
 
 	GetRenderer()->EF_Query(EFQ_SetShaderCombinations);
 
@@ -1742,8 +1699,8 @@ bool C3DEngine::LoadUsedShadersList()
 //////////////////////////////////////////////////////////////////////////
 bool C3DEngine::PrecreateDecals()
 {
-	LOADING_TIME_PROFILE_SECTION;
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "PrecreateDecals");
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "PrecreateDecals");
 
 	CObjManager::DecalsToPrecreate& decals(GetObjManager()->m_decalsToPrecreate);
 	// pre-create ...
@@ -1775,8 +1732,8 @@ bool C3DEngine::PrecreateDecals()
 //////////////////////////////////////////////////////////////////////////
 void C3DEngine::PostLoadLevel()
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "PostLoadLevel");
-	LOADING_TIME_PROFILE_SECTION;
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "PostLoadLevel");
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Submit water material to physics

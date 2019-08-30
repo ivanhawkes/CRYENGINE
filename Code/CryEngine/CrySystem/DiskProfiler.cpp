@@ -7,7 +7,7 @@
 #include "DiskProfiler.h"
 #include "DiskProfilerWindowsSpecific.h"
 
-#include <CrySystem/IConsole.h>
+#include <CrySystem/ConsoleRegistration.h>
 #include <CryRenderer/IRenderer.h>
 #include <CryRenderer/IRenderAuxGeom.h>
 #include <CryThreading/IThreadManager.h>
@@ -119,8 +119,6 @@ void CDiskProfiler::Render()
 	// but if the thread profiler is enabled, we move it to top
 	if (gEnv->pConsole->GetCVar("profile_threads") && gEnv->pConsole->GetCVar("profile_threads")->GetIVal())
 		m_nHeightOffset = (height - height * 9 / 16);
-
-	float timeNow = gEnv->pTimer->GetAsyncCurTime();
 
 	gEnv->pRenderer->GetIRenderAuxGeom()->SetOrthographicProjection(true, 0.0f, width, height, 0.0f);
 
@@ -337,7 +335,6 @@ void CDiskProfiler::RenderBlock(const float timeStart, const float timeEnd, cons
 	const float timeNow = gEnv->pTimer->GetAsyncCurTime();
 
 	const int width  = gEnv->pRenderer->GetOverlayWidth();
-	const int height = gEnv->pRenderer->GetOverlayHeight();
 
 	static const float halfSize = 8;  // bar thickness
 

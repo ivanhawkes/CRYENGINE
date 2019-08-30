@@ -139,11 +139,12 @@ void QToolWindowArea::addToolWindows(const QList<QWidget*>& toolWindows, int ind
 			tabBar()->setTabButton(newIndex, QTabBar::ButtonPosition::RightSide, createCloseButton());
 		}
 
-		connect(toolWindow, &QWidget::windowTitleChanged, this, [this, newIndex, toolWindow](const QString& title)
+		connect(toolWindow, &QWidget::windowTitleChanged, this, [this, toolWindow](const QString& title)
 		{
-			if (indexOf(toolWindow) >= 0)
+			int index = indexOf(toolWindow);
+			if (index >= 0)
 			{
-			  setTabText(newIndex, title);
+			  setTabText(index, title);
 			}
 			if (count() == 1)
 			{
@@ -604,6 +605,7 @@ QToolWindowSingleTabAreaFrame::QToolWindowSingleTabAreaFrame(QToolWindowManager*
 	, m_pContents(nullptr)
 {
 	m_pLayout->setContentsMargins(0, 0, 0, 0);
+	m_pLayout->setMargin(0);
 	m_pLayout->setSpacing(0);
 
 	m_pCaption->setAttribute(Qt::WA_TransparentForMouseEvents);

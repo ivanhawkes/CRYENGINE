@@ -6,9 +6,9 @@
 #include "Event.h"
 #include <CryAudio/IAudioInterfacesCommonData.h>
 
-#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
 	#include <Logger.h>
-#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
 
 #include <SDL_mixer.h>
 
@@ -20,8 +20,6 @@ namespace SDL_mixer
 {
 bool g_bMuted = false;
 CImpl* g_pImpl = nullptr;
-CListener* g_pListener = nullptr;
-CObject* g_pObject = nullptr;
 Objects g_objects;
 
 //////////////////////////////////////////////////////////////////////////
@@ -69,11 +67,11 @@ void GetDistanceAngleToObject(
 }
 
 //////////////////////////////////////////////////////////////////////////
-void SetChannelPosition(CEvent const* const pEvent, int const channelID, float const distance, float const angle)
+void SetChannelPosition(CEvent const& event, int const channelID, float const distance, float const angle)
 {
 	static const uint8 sdlMaxDistance = 255;
-	float const min = pEvent->GetAttenuationMinDistance();
-	float const max = pEvent->GetAttenuationMaxDistance();
+	float const min = event.GetAttenuationMinDistance();
+	float const max = event.GetAttenuationMaxDistance();
 
 	if (min <= max)
 	{
@@ -95,7 +93,7 @@ void SetChannelPosition(CEvent const* const pEvent, int const channelID, float c
 		//Temp code, to be reviewed during the SetChannelPosition rewrite:
 		Mix_SetDistance(channelID, nDistance);
 
-		if (pEvent->IsPanningEnabled())
+		if (event.IsPanningEnabled())
 		{
 			//Temp code, to be reviewed during the SetChannelPosition rewrite:
 			float const absAngle = fabs(angle);
@@ -107,13 +105,17 @@ void SetChannelPosition(CEvent const* const pEvent, int const channelID, float c
 			               static_cast<uint8>(255.0f * rightVolume));
 		}
 	}
-#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
 	else
 	{
-		Cry::Audio::Log(ELogType::Error, "The minimum attenuation distance (%f) is higher than the maximum (%f) of %s", min, max, pEvent->GetName());
+		Cry::Audio::Log(ELogType::Error, "The minimum attenuation distance (%f) is higher than the maximum (%f) of %s", min, max, event.GetName());
 	}
-#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
 }
-} // namespace SDL_mixer
-} // namespace Impl
-} // namespace CryAudio
+
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
+size_t g_loadedSampleSize = 0;
+#endif // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
+}      // namespace SDL_mixer
+}      // namespace Impl
+}      // namespace CryAudio

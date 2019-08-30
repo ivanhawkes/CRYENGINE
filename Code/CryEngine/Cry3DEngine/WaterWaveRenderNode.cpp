@@ -42,7 +42,7 @@ float sfrand()
 	return cry_random(-1.0f, 1.0f);
 }
 
-};
+} // unnamed namespace
 
 //////////////////////////////////////////////////////////////////////////
 CWaterWaveRenderNode::CWaterWaveRenderNode() :
@@ -204,30 +204,6 @@ void CWaterWaveRenderNode::CopySerializationParams(uint64 nID, const Vec3* pVert
 
 	m_pSerializeParams->m_pParams = m_pParams;
 
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CWaterWaveRenderNode::SetParams(const SWaterWaveParams& pParams)
-{
-	m_pParams = pParams;
-}
-
-//////////////////////////////////////////////////////////////////////////
-const SWaterWaveParams& CWaterWaveRenderNode::GetParams() const
-{
-	return m_pParams;
-}
-
-//////////////////////////////////////////////////////////////////////////
-const char* CWaterWaveRenderNode::GetEntityClassName() const
-{
-	return "CWaterWaveRenderNode";
-}
-
-//////////////////////////////////////////////////////////////////////////
-const char* CWaterWaveRenderNode::GetName() const
-{
-	return "WaterWave";
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -397,15 +373,12 @@ void CWaterWaveRenderNode::OffsetPosition(const Vec3& delta)
 //////////////////////////////////////////////////////////////////////////
 CWaterWaveManager::CWaterWaveManager()
 {
-
 }
 
 //////////////////////////////////////////////////////////////////////////
 CWaterWaveManager::~CWaterWaveManager()
 {
-
 	Release();
-
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -641,7 +614,7 @@ void CWaterWaveManager::Unregister(CWaterWaveRenderNode* pWave)
 		GlobalWavesMapIt pEnd(m_pWaves.end());
 		uint32 nInstances(0);
 
-		// todo: this is unneficient, find better solution
+		// todo: this is inefficient, find better solution
 		for (; _pItor != pEnd; ++_pItor)
 		{
 			f32 fWaveKey = _pItor->second->GetWaveKey();
@@ -698,23 +671,10 @@ void CWaterWaveManager::Update(const SRenderingPassInfo& passInfo)
 			pCurr->Update(sqrt_tpl(fDistanceSqr));
 		}
 	}
-
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void CWaterWaveRenderNode::FillBBox(AABB& aabb)
-{
-	aabb = CWaterWaveRenderNode::GetBBox();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-EERType CWaterWaveRenderNode::GetRenderNodeType()
-{
-	return eERType_WaterWave;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-float CWaterWaveRenderNode::GetMaxViewDist()
+float CWaterWaveRenderNode::GetMaxViewDist() const
 {
 	if (GetMinSpecFromRenderNodeFlags(m_dwRndFlags) == CONFIG_DETAIL_SPEC)
 		return max(GetCVars()->e_ViewDistMin, CWaterWaveRenderNode::GetBBox().GetRadius() * GetCVars()->e_ViewDistRatioDetail * GetViewDistRatioNormilized());

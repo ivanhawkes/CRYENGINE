@@ -3,6 +3,7 @@
 #pragma once
 
 #include "ParticleCommon.h"
+#include <CryThreading/IJobManager.h>
 
 class CRenderObject;
 
@@ -25,7 +26,8 @@ public:
 			, m_passInfo(renderContext.m_passInfo)
 			, m_distance(renderContext.m_distance)
 			, m_lightVolumeId(renderContext.m_lightVolumeId)
-			, m_fogVolumeId(renderContext.m_fogVolumeId) {}
+			, m_fogVolumeId(renderContext.m_fogVolumeId)
+		{}
 		CParticleEmitter*  m_pEmitter;
 		SRendParams        m_rParam;
 		SRenderingPassInfo m_passInfo;
@@ -37,7 +39,7 @@ public:
 public:
 	CParticleJobManager();
 	void AddUpdateEmitter(CParticleEmitter* pEmitter);
-	void ScheduleUpdateEmitter(CParticleEmitter* pEmitter);
+	void ScheduleUpdateEmitter(CParticleEmitter* pEmitter, JobManager::TPriorityLevel priority);
 	void AddDeferredRender(CParticleEmitter* pEmitter, const SRenderContext& renderContext);
 	void ScheduleComputeVertices(CParticleComponentRuntime& runtime, CRenderObject* pRenderObject, const SRenderContext& renderContext);
 	void ScheduleUpdates();
@@ -45,9 +47,15 @@ public:
 	void DeferredRender();
 
 private:
+	enum Update_Type
+	{
+		Update_Deferred,
+		Update_Visible,
+		Update_Invisible
+	};
 
-	void Job_ScheduleUpdates();
-	void ScheduleUpdateEmitters(TDynArray<CParticleEmitter*>& emitters, JobManager::TPriorityLevel priority);
+	template<Update_Type type> void Job_ScheduleUpdates();
+	template<bool scheduleJobs> void ScheduleUpdateEmitters(TDynArray<CParticleEmitter*>& emitters, JobManager::TPriorityLevel priority);
 
 	TDynArray<CParticleEmitter*> m_emittersDeferred;
 	TDynArray<CParticleEmitter*> m_emittersVisible;

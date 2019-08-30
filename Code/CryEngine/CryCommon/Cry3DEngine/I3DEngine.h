@@ -17,29 +17,21 @@
 class CContentCGF;
 class CRenderView;
 class ICrySizer;
-class IOpticsManager;
 
-struct AnimTexInfo;
 struct bop_meshupdate;
 struct CryEngineDecalInfo;
-struct CVars;
 struct IBreezeGenerator;
 struct IBSPTree3D;
 struct ICharacterInstance;
+struct IColorGradingCtrl;
 struct IDeferredPhysicsEventManager;
 struct IGeometry;
-struct IMaterial;
+struct IOpticsManager;
 struct IParticleManager;
 struct IRenderView;
 struct IShadowCaster;
-struct ISplineInterpolator;
 struct ISurfaceType;
-struct ISystem;
 struct ITimeOfDay;
-struct pe_params_particle;
-struct RenderLMData;
-struct SpawnParams;
-struct SRenderNodeTempData;
 
 enum EERType;
 
@@ -139,6 +131,8 @@ enum E3DEngineParameter
 
 	E3DPARAM_SKY_SKYBOX_ANGLE,
 	E3DPARAM_SKY_SKYBOX_STRETCHING,
+	E3DPARAM_SKY_SKYBOX_EXPOSURE,
+	E3DPARAM_SKY_SKYBOX_OPACITY,
 
 	EPARAM_SUN_SHAFTS_VISIBILITY,
 
@@ -461,7 +455,7 @@ struct IVisArea : public IClipVolume
 	//! \param nMaxConnNum          - The maximum of IVisArea to write in pAreas
 	//! \param bSkipDisabledPortals - Ignore portals which are disabled
 	//! \return An integer which hold the amount of VisArea found to be connected.
-	virtual int GetVisAreaConnections(IVisArea** pAreas, int nMaxConnNum, bool bSkipDisabledPortals = false) = 0;
+	virtual int GetVisAreaConnections(IVisArea** pAreas, int nMaxConnNum, bool bSkipDisabledPortals = false) const = 0;
 
 	//! Determines if it's connected to an outdoor area.
 	//! \return True if the VisArea is connected to an outdoor area.
@@ -506,11 +500,11 @@ struct IVisArea : public IClipVolume
 
 	//! Determines if the sphere can be affect the VisArea.
 	//! \return Returns true if the VisArea can be affected by the sphere, else false will be returned.
-	virtual bool IsSphereInsideVisArea(const Vec3& vPos, const f32 fRadius) = 0;
+	virtual bool IsSphereInsideVisArea(const Vec3& vPos, const f32 fRadius) const = 0;
 
 	//! Clips geometry inside or outside a vis area.
 	//! \return true if geom was clipped.
-	virtual bool ClipToVisArea(bool bInside, Sphere& sphere, Vec3 const& vNormal) = 0;
+	virtual bool ClipToVisArea(bool bInside, Sphere& sphere, Vec3 const& vNormal) const = 0;
 
 	//! Gives back the axis aligned bounding box of VisArea.
 	//! \return the pointer of an AABB.
@@ -526,7 +520,7 @@ struct IVisArea : public IClipVolume
 	virtual bool IsPointInsideVisArea(const Vec3& vPos) const = 0;
 
 	//! \return vis area final ambient color (ambient color depends on factors, like if connected to outdoor, is affected by skycolor - etc)
-	virtual const Vec3 GetFinalAmbientColor() = 0;
+	virtual const Vec3 GetFinalAmbientColor() const = 0;
 
 	virtual void       GetShapePoints(const Vec3*& pPoints, size_t& nPoints) = 0;
 	virtual float      GetHeight() = 0;
@@ -1039,6 +1033,16 @@ struct IFoliage
 	// </interfuscator:shuffle>
 };
 
+//////////////////////////////////////////////////////////////////////
+//! Sky rendering
+enum eSkyType // Maps to "e_SkyType" CVar
+{
+	eSkyType_Sky    = 0,
+	eSkyType_HDRSky = 1,
+
+	eSkyType_NumSkyTypes,
+};
+
 struct SSkyLightRenderParams
 {
 	static constexpr int skyDomeTextureWidth = 64;
@@ -1050,8 +1054,7 @@ struct SSkyLightRenderParams
 	static constexpr int skyDomeTextureHeightBy2Log = 4;  //!< = log2(32/2).
 
 	SSkyLightRenderParams()
-		: m_pSkyDomeMesh(0)
-		, m_pSkyDomeTextureDataMie(0)
+		: m_pSkyDomeTextureDataMie(0)
 		, m_pSkyDomeTextureDataRayleigh(0)
 		, m_skyDomeTexturePitch(0)
 		, m_skyDomeTextureTimeStamp(-1)
@@ -1069,9 +1072,6 @@ struct SSkyLightRenderParams
 		, m_skyColorWest(0.0f, 0.0f, 0.0f)
 	{
 	}
-
-	//! Sky dome mesh.
-	_smart_ptr<IRenderMesh> m_pSkyDomeMesh;
 
 	// temporarily add padding bytes to prevent fetching Vec4 constants below from wrong offset
 	uint32 dummy0;
@@ -1324,7 +1324,7 @@ struct I3DEngine : public IProcess
 	//! \param szFolderName Should contains the folder to be used.
 	virtual void SetLevelPath(const char* szFolderName) = 0;
 
-	virtual void PrepareOcclusion(const CCamera& rCamera) = 0;
+	virtual void PrepareOcclusion(const CCamera& rCamera, const SGraphicsPipelineKey& cullGraphicsContextKey) = 0;
 	virtual void EndOcclusion() = 0;
 
 	//! Load a level.
@@ -1923,13 +1923,13 @@ struct I3DEngine : public IProcess
 
 	//! Gets the VisArea which is present at a specified point.
 	//! \return VisArea containing point, if any, 0 otherwise.
-	virtual IVisArea* GetVisAreaFromPos(const Vec3& vPos) = 0;
+	virtual IVisArea* GetVisAreaFromPos(const Vec3& vPos) const = 0;
 
 	//! Tests for intersection against Vis Areas.
 	//! \param[in] box Volume to test for intersection.
 	//! \param[out] pNodeCache Optional, set to a cached pointer for quicker calls to ClipToVisAreas.
 	//! \return Whether box intersects any vis areas.
-	virtual bool IntersectsVisAreas(const AABB& box, void** pNodeCache = 0) = 0;
+	virtual bool IntersectsVisAreas(const AABB& box, void** pNodeCache = 0) const = 0;
 
 	//! Clips geometry against the boundaries of VisAreas.
 	//! \param pInside: Vis Area to clip inside of. If 0, clip outside all Vis Areas.
@@ -2091,11 +2091,23 @@ struct I3DEngine : public IProcess
 	//! \return TOD interface.
 	virtual ITimeOfDay* GetTimeOfDay() = 0;
 
-	//! \return SkyBox material.
-	virtual IMaterial* GetSkyMaterial() = 0;
+	virtual IColorGradingCtrl* GetColorGradingCtrl() = 0;
 
-	//! Sets SkyBox Material.
-	virtual void SetSkyMaterial(IMaterial* pSkyMat) = 0;
+	//////////////////////////////////////////////////////////////////////////
+	// Sky
+	virtual bool IsSkyVisible() = 0;
+	virtual eSkyType GetSkyType() const = 0;
+
+	virtual const SSkyLightRenderParams* GetSkyLightRenderParams() const = 0;
+	
+	virtual string GetSkyDomeTextureName() const = 0;
+	virtual void   SetSkyDomeTextureName(string name) = 0;
+
+	virtual string GetMoonTextureName() const = 0;
+	virtual void   SetMoonTextureName(string name) = 0;
+
+	//! Updates sky parameters from specified material
+	virtual void SetSkyMaterial(IMaterial* pSkyMat, eSkyType type) = 0;
 
 	//! Sets global 3d engine parameter.
 	virtual void SetGlobalParameter(E3DEngineParameter param, const Vec3& v) = 0;
@@ -2296,11 +2308,11 @@ struct I3DEngine : public IProcess
 
 	struct SLightTI
 	{
-		Vec4            vPosR;
-		Vec4            vDirF;
-		Vec4            vCol;
-		float           fSortVal;
-		class ITexture* pCM;
+		Vec4      vPosR;
+		Vec4      vDirF;
+		Vec4      vCol;
+		float     fSortVal;
+		ITexture* pCM;
 	};
 
 	virtual bool GetSvoStaticTextures(I3DEngine::SSvoStaticTexInfo& svoInfo, PodArray<I3DEngine::SLightTI>* pLightsTI_S, PodArray<I3DEngine::SLightTI>* pLightsTI_D) = 0;
@@ -2351,7 +2363,7 @@ enum EFileTypes
 //! Common header for binary files used by 3dengine.
 struct SCommonFileHeader
 {
-	void Set(uint16 t, uint16 v)   { cry_strcpy(signature, "CRY"); file_type = (uint8)t; version = v; }
+	void Set(uint16 t, uint16 v)   { cry_fixed_size_strcpy(signature, "CRY"); file_type = (uint8)t; version = v; }
 	bool Check(uint16 t, uint16 v) { return strcmp(signature, "CRY") == 0 && t == file_type && v == version; }
 
 	char   signature[4];                //!< File signature, should be "CRY ".
@@ -2509,10 +2521,10 @@ struct SRenderingPassInfo
 	};
 
 	//! Creating function for RenderingPassInfo, the create functions will fetch all other necessary information like thread id/frame id, etc.
-	static SRenderingPassInfo CreateGeneralPassRenderingInfo(const CCamera& rCamera, uint32 nRenderingFlags = DEFAULT_FLAGS, bool bAuxWindow = false, SDisplayContextKey displayContextKey = {});
-	static SRenderingPassInfo CreateRecursivePassRenderingInfo(const CCamera& rCamera, uint32 nRenderingFlags = DEFAULT_RECURSIVE_FLAGS);
-	static SRenderingPassInfo CreateShadowPassRenderingInfo(IRenderViewPtr pRenderView, const CCamera& rCamera, int nLightFlags, int nShadowMapLod, int nShadowCacheLod, bool bExtendedLod, bool bIsMGPUCopy, uint32 nSide, uint32 nRenderingFlags = DEFAULT_SHADOWS_FLAGS);
-	static SRenderingPassInfo CreateBillBoardGenPassRenderingInfo(const CCamera& rCamera, uint32 nRenderingFlags = DEFAULT_FLAGS);
+	static SRenderingPassInfo CreateGeneralPassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, const CCamera& rCamera, uint32 nRenderingFlags = DEFAULT_FLAGS, bool bAuxWindow = false, SDisplayContextKey displayContextKey = {});
+	static SRenderingPassInfo CreateRecursivePassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, const CCamera& rCamera, uint32 nRenderingFlags = DEFAULT_RECURSIVE_FLAGS);
+	static SRenderingPassInfo CreateShadowPassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, IRenderViewPtr pRenderView, const CCamera& rCamera, int nLightFlags, int nShadowMapLod, int nShadowCacheLod, bool bExtendedLod, bool bIsMGPUCopy, uint32 nSide, uint32 nRenderingFlags = DEFAULT_SHADOWS_FLAGS);
+	static SRenderingPassInfo CreateBillBoardGenPassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, const CCamera& rCamera, uint32 nRenderingFlags = DEFAULT_FLAGS);
 	static SRenderingPassInfo CreateTempRenderingInfo(const CCamera& rCamera, const SRenderingPassInfo& rPassInfo);
 	static SRenderingPassInfo CreateTempRenderingInfo(uint32 nRenderingFlags, const SRenderingPassInfo& rPassInfo);
 	static SRenderingPassInfo CreateTempRenderingInfo(SRendItemSorter s, const SRenderingPassInfo& rPassInfo);
@@ -2574,6 +2586,7 @@ struct SRenderingPassInfo
 	void                             OverrideRenderItemSorter(SRendItemSorter s)               { m_renderItemSorter = s; }
 
 	const SDisplayContextKey&        GetDisplayContextKey() const                              { return m_displayContextKey; }
+	const SGraphicsPipelineKey&      GetGraphicsPipelineKey() const                            { return m_graphicsPipelineKey; }
 
 	void                             SetShadowPasses(class std::vector<SRenderingPassInfo>* p) { m_pShadowPasses = p; }
 	std::vector<SRenderingPassInfo>* GetShadowPasses() const                                   { return m_pShadowPasses; }
@@ -2596,9 +2609,9 @@ private:
 	void InitRenderingFlags(uint32 nRenderingFlags);
 	void SetCamera(const CCamera& cam);
 
-	void SetRenderView(int nThreadID, IRenderView::EViewType Type = IRenderView::eViewType_Default);
-	void SetRenderView(IRenderViewPtr pRenderView);
-	void SetRenderView(IRenderView* pRenderView);
+	void SetRenderView(int nThreadID, IRenderView::EViewType Type = IRenderView::eViewType_Default, const SGraphicsPipelineKey& graphicsPipelineKey = SGraphicsPipelineKey::BaseGraphicsPipelineKey);
+	void SetRenderView(IRenderViewPtr pRenderView, const SGraphicsPipelineKey& graphicsPipelineKey = SGraphicsPipelineKey::BaseGraphicsPipelineKey);
+	void SetRenderView(IRenderView* pRenderView, const SGraphicsPipelineKey& graphicsPipelineKey = SGraphicsPipelineKey::BaseGraphicsPipelineKey);
 
 	uint8  m_nThreadID = 0;
 	uint8  m_nRenderStackLevel = 0;
@@ -2629,6 +2642,9 @@ private:
 
 	// Windows handle of the target Display Context in the multi-context rendering (in Editor)
 	SDisplayContextKey m_displayContextKey;
+
+	// Key to access current graphics pipeline
+	SGraphicsPipelineKey m_graphicsPipelineKey;
 
 	// Optional render target clear color.
 	ColorB m_clearColor = { 0, 0, 0, 0 };
@@ -2933,28 +2949,30 @@ inline void SRenderingPassInfo::InitRenderingFlags(uint32 nRenderingFlags)
 
 //////////////////////////////////////////////////////////////////////////
 
-inline void SRenderingPassInfo::SetRenderView(int nThreadID, IRenderView::EViewType Type)
+inline void SRenderingPassInfo::SetRenderView(int nThreadID, IRenderView::EViewType Type, const SGraphicsPipelineKey& graphicsPipelineKey)
 {
 	m_pRenderView = reinterpret_cast<IRenderView*>(gEnv->pRenderer->GetOrCreateRenderView(Type));
-	SetRenderView(m_pRenderView.get());
+	SetRenderView(m_pRenderView.get(), graphicsPipelineKey);
 }
 
-inline void SRenderingPassInfo::SetRenderView(IRenderViewPtr pRenderView)
+inline void SRenderingPassInfo::SetRenderView(IRenderViewPtr pRenderView, const SGraphicsPipelineKey& graphicsPipelineKey)
 {
-	SetRenderView(pRenderView.get());
+	SetRenderView(pRenderView.get(), graphicsPipelineKey);
 	m_pRenderView = std::move(pRenderView);
 }
 
-inline void SRenderingPassInfo::SetRenderView(IRenderView* pRenderView)
+inline void SRenderingPassInfo::SetRenderView(IRenderView* pRenderView, const SGraphicsPipelineKey& graphicsPipelineKey)
 {
 	pRenderView->SetSkipRenderingFlags(m_nRenderingFlags);
 	pRenderView->SetFrameId(GetFrameID());
 	pRenderView->SetFrameTime(gEnv->pTimer->GetFrameStartTime(ITimer::ETIMER_UI));
 	pRenderView->SetViewport(SRenderViewport(0, 0, m_pCamera->GetViewSurfaceX(), m_pCamera->GetViewSurfaceZ()));
+	pRenderView->SetGraphicsPipeline(gEnv->pRenderer->FindGraphicsPipeline(graphicsPipelineKey));
+	m_graphicsPipelineKey = graphicsPipelineKey;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-inline SRenderingPassInfo SRenderingPassInfo::CreateBillBoardGenPassRenderingInfo(const CCamera& rCamera, uint32 nRenderingFlags)
+inline SRenderingPassInfo SRenderingPassInfo::CreateBillBoardGenPassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, const CCamera& rCamera, uint32 nRenderingFlags)
 {
 	const CCamera& rCameraToSet = rCamera;
 
@@ -2962,7 +2980,7 @@ inline SRenderingPassInfo SRenderingPassInfo::CreateBillBoardGenPassRenderingInf
 
 	passInfo.SetCamera(rCameraToSet);
 	passInfo.InitRenderingFlags(nRenderingFlags);
-	passInfo.SetRenderView(passInfo.ThreadID(), IRenderView::eViewType_BillboardGen);
+	passInfo.SetRenderView(passInfo.ThreadID(), IRenderView::eViewType_BillboardGen, graphicsPipelineKey);
 
 	passInfo.m_bAuxWindow = false;
 	passInfo.m_displayContextKey = {};
@@ -2972,7 +2990,8 @@ inline SRenderingPassInfo SRenderingPassInfo::CreateBillBoardGenPassRenderingInf
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-inline SRenderingPassInfo SRenderingPassInfo::CreateGeneralPassRenderingInfo(const CCamera& rCamera, uint32 nRenderingFlags, bool bAuxWindow, SDisplayContextKey displayContextKey)
+inline SRenderingPassInfo SRenderingPassInfo::CreateGeneralPassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, const CCamera& rCamera,
+                                                                             uint32 nRenderingFlags, bool bAuxWindow, SDisplayContextKey displayContextKey)
 {
 	static ICVar* pCameraFreeze = gEnv->pConsole->GetCVar("e_CameraFreeze");
 
@@ -2983,7 +3002,7 @@ inline SRenderingPassInfo SRenderingPassInfo::CreateGeneralPassRenderingInfo(con
 
 	passInfo.SetCamera(rCameraToSet);
 	passInfo.InitRenderingFlags(nRenderingFlags);
-	passInfo.SetRenderView(passInfo.ThreadID(), IRenderView::eViewType_Default);
+	passInfo.SetRenderView(passInfo.ThreadID(), IRenderView::eViewType_Default, graphicsPipelineKey);
 
 	passInfo.m_bAuxWindow = bAuxWindow;
 	passInfo.m_displayContextKey = displayContextKey;
@@ -3012,7 +3031,7 @@ inline SRenderingPassInfo SRenderingPassInfo::CreateGeneralPassRenderingInfo(con
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-inline SRenderingPassInfo SRenderingPassInfo::CreateRecursivePassRenderingInfo(const CCamera& rCamera, uint32 nRenderingFlags)
+inline SRenderingPassInfo SRenderingPassInfo::CreateRecursivePassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, const CCamera& rCamera, uint32 nRenderingFlags)
 {
 	static ICVar* pRecursionViewDistRatio = gEnv->pConsole->GetCVar("e_RecursionViewDistRatio");
 
@@ -3020,7 +3039,7 @@ inline SRenderingPassInfo SRenderingPassInfo::CreateRecursivePassRenderingInfo(c
 
 	passInfo.SetCamera(rCamera);
 	passInfo.InitRenderingFlags(nRenderingFlags);
-	passInfo.SetRenderView(passInfo.ThreadID(), IRenderView::eViewType_Recursive);
+	passInfo.SetRenderView(passInfo.ThreadID(), IRenderView::eViewType_Recursive, graphicsPipelineKey);
 
 	//	passInfo.m_bAuxWindow = bAuxWindow;
 	passInfo.m_renderItemSorter.nValue = SRendItemSorter::eRecursivePassMask;
@@ -3033,13 +3052,15 @@ inline SRenderingPassInfo SRenderingPassInfo::CreateRecursivePassRenderingInfo(c
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-inline SRenderingPassInfo SRenderingPassInfo::CreateShadowPassRenderingInfo(IRenderViewPtr pRenderView, const CCamera& rCamera, int nLightFlags, int nShadowMapLod, int nShadowCacheLod, bool bExtendedLod, bool bIsMGPUCopy, uint32 nSide, uint32 nRenderingFlags)
+inline SRenderingPassInfo SRenderingPassInfo::CreateShadowPassRenderingInfo(const SGraphicsPipelineKey graphicsPipelineKey, IRenderViewPtr pRenderView, const CCamera& rCamera, int nLightFlags, int nShadowMapLod,
+                                                                            int nShadowCacheLod, bool bExtendedLod, bool bIsMGPUCopy, uint32 nSide,
+                                                                            uint32 nRenderingFlags)
 {
 	SRenderingPassInfo passInfo;
 
 	passInfo.SetCamera(rCamera);
 	passInfo.InitRenderingFlags(nRenderingFlags);
-	passInfo.SetRenderView(pRenderView);
+	passInfo.SetRenderView(pRenderView, graphicsPipelineKey);
 
 	// set correct shadow map type
 	if (nLightFlags & DLF_SUN)

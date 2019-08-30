@@ -14,8 +14,6 @@ class CRayInfo;
 enum class EObjectRequestType : EnumFlagsType
 {
 	None,
-	PlayFile,
-	StopFile,
 	ExecuteTrigger,
 	StopTrigger,
 	StopAllTriggers,
@@ -29,11 +27,13 @@ enum class EObjectRequestType : EnumFlagsType
 	SetCurrentEnvironments,
 	SetEnvironment,
 	ProcessPhysicsRay,
+	AddListener,
+	RemoveListener,
 	ToggleAbsoluteVelocityTracking,
 	ToggleRelativeVelocityTracking,
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	SetName,
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -68,69 +68,24 @@ struct SObjectRequestData final : public SObjectRequestDataBase
 
 //////////////////////////////////////////////////////////////////////////
 template<>
-struct SObjectRequestData<EObjectRequestType::PlayFile> final : public SObjectRequestDataBase
-{
-	explicit SObjectRequestData(
-		CObject* const pObject_,
-		CryFixedStringT<MaxFilePathLength> const& file_,
-		ControlId const usedTriggerId_,
-		bool const bLocalized_)
-		: SObjectRequestDataBase(EObjectRequestType::PlayFile, pObject_)
-		, file(file_)
-		, usedTriggerId(usedTriggerId_)
-		, bLocalized(bLocalized_)
-	{}
-
-	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::PlayFile> const* const pORData)
-		: SObjectRequestDataBase(EObjectRequestType::PlayFile, pORData->pObject)
-		, file(pORData->file)
-		, usedTriggerId(pORData->usedTriggerId)
-		, bLocalized(pORData->bLocalized)
-	{}
-
-	virtual ~SObjectRequestData() override = default;
-
-	CryFixedStringT<MaxFilePathLength> const file;
-	ControlId const                          usedTriggerId;
-	bool const                               bLocalized;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
-struct SObjectRequestData<EObjectRequestType::StopFile> final : public SObjectRequestDataBase
-{
-	explicit SObjectRequestData(CObject* const pObject_, CryFixedStringT<MaxFilePathLength> const& file_)
-		: SObjectRequestDataBase(EObjectRequestType::StopFile, pObject_)
-		, file(file_)
-	{}
-
-	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::StopFile> const* const pORData)
-		: SObjectRequestDataBase(EObjectRequestType::StopFile, pORData->pObject)
-		, file(pORData->file)
-	{}
-
-	virtual ~SObjectRequestData() override = default;
-
-	CryFixedStringT<MaxFilePathLength> const file;
-};
-
-//////////////////////////////////////////////////////////////////////////
-template<>
 struct SObjectRequestData<EObjectRequestType::ExecuteTrigger> final : public SObjectRequestDataBase, public CPoolObject<SObjectRequestData<EObjectRequestType::ExecuteTrigger>, stl::PSyncMultiThread>
 {
-	explicit SObjectRequestData(CObject* const pObject_, ControlId const triggerId_)
+	explicit SObjectRequestData(CObject* const pObject_, ControlId const triggerId_, EntityId const entityId_)
 		: SObjectRequestDataBase(EObjectRequestType::ExecuteTrigger, pObject_)
 		, triggerId(triggerId_)
+		, entityId(entityId_)
 	{}
 
 	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::ExecuteTrigger> const* const pORData)
 		: SObjectRequestDataBase(EObjectRequestType::ExecuteTrigger, pORData->pObject)
 		, triggerId(pORData->triggerId)
+		, entityId(pORData->entityId)
 	{}
 
 	virtual ~SObjectRequestData() override = default;
 
 	ControlId const triggerId;
+	EntityId const  entityId;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -317,6 +272,44 @@ struct SObjectRequestData<EObjectRequestType::ProcessPhysicsRay> final : public 
 
 //////////////////////////////////////////////////////////////////////////
 template<>
+struct SObjectRequestData<EObjectRequestType::AddListener> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(CObject* const pObject_, ListenerId const listenerId_)
+		: SObjectRequestDataBase(EObjectRequestType::AddListener, pObject_)
+		, listenerId(listenerId_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::AddListener> const* const pORData)
+		: SObjectRequestDataBase(EObjectRequestType::AddListener, pORData->pObject)
+		, listenerId(pORData->listenerId)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	ListenerId const listenerId;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
+struct SObjectRequestData<EObjectRequestType::RemoveListener> final : public SObjectRequestDataBase
+{
+	explicit SObjectRequestData(CObject* const pObject_, ListenerId const listenerId_)
+		: SObjectRequestDataBase(EObjectRequestType::RemoveListener, pObject_)
+		, listenerId(listenerId_)
+	{}
+
+	explicit SObjectRequestData(SObjectRequestData<EObjectRequestType::RemoveListener> const* const pORData)
+		: SObjectRequestDataBase(EObjectRequestType::RemoveListener, pORData->pObject)
+		, listenerId(pORData->listenerId)
+	{}
+
+	virtual ~SObjectRequestData() override = default;
+
+	ListenerId const listenerId;
+};
+
+//////////////////////////////////////////////////////////////////////////
+template<>
 struct SObjectRequestData<EObjectRequestType::ToggleAbsoluteVelocityTracking> final : public SObjectRequestDataBase
 {
 	explicit SObjectRequestData(CObject* const pObject_, bool const isEnabled_)
@@ -353,7 +346,7 @@ struct SObjectRequestData<EObjectRequestType::ToggleRelativeVelocityTracking> fi
 	bool const isEnabled;
 };
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 //////////////////////////////////////////////////////////////////////////
 template<>
 struct SObjectRequestData<EObjectRequestType::SetName> final : public SObjectRequestDataBase
@@ -372,5 +365,5 @@ struct SObjectRequestData<EObjectRequestType::SetName> final : public SObjectReq
 
 	CryFixedStringT<MaxObjectNameLength> const name;
 };
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 }      // namespace CryAudio

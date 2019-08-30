@@ -8,8 +8,8 @@
 #include <initializer_list>
 
 struct ICVar;
+struct ITexture;
 class ICrySizer;
-class ITexture;
 
 enum class ECVarType
 {
@@ -33,11 +33,6 @@ enum class ECVarType
 #else
 #define CONST_CVAR_FLAGS (VF_CHEAT)
 #endif
-
-// Defines for backwards compatibility
-#define CVAR_INT    ECVarType::Int
-#define CVAR_FLOAT  ECVarType::Float
-#define CVAR_STRING ECVarType::String
 
 #if defined(_RELEASE)
 	#define ALLOW_AUDIT_CVARS    0
@@ -699,7 +694,3 @@ private:
 	IConsole*              m_pConsole;
 	ELoadConfigurationType m_prevType;
 };
-
-// Inclusion for backwards compatibility
-// Ideally to be removed to reduce header dependencies
-#include "ConsoleRegistration.h"

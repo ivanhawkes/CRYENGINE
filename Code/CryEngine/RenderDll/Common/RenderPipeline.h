@@ -1,30 +1,14 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*=============================================================================
-   RenderPipeline.h : Shaders pipeline declarations.
-
-   Revision history:
-* Created by Honich Andrey
-
-   =============================================================================*/
-
-#ifndef __RENDERPIPELINE_H__
-#define __RENDERPIPELINE_H__
-
 #pragma  once
 
-#include <CryThreading/CryThreadSafeRendererContainer.h>
-#include <CryThreading/CryThreadSafeWorkerContainer.h>
 #include "Shadow_Renderer.h"
 
 #include "LightVolumeBuffer.h"
 #include "ParticleBuffer.h"
 
-#include "Common/Shaders/CShader.h"         // CShaderMan
-#include "Common/Shaders/ShaderResources.h" // CShaderResources
-//====================================================================
-
-
+#include "Common/Shaders/CShader.h"
+#include "Common/Shaders/ShaderResources.h"
 
 class CRenderView;
 struct IRenderNode;
@@ -68,7 +52,7 @@ struct CRY_ALIGN(32) SRendItem
 
 	static float EncodeCustomDistanceSortingValue(CRenderObject* pObj, float fDistance)
 	{
-		int nRenderAlways = pObj->m_pRenderNode->GetRndFlags() & ERF_RENDER_ALWAYS;
+		int nRenderAlways = (pObj->m_pRenderNode) ? pObj->m_pRenderNode->GetRndFlags() & ERF_RENDER_ALWAYS : 1;
 		float comp = fDistance + pObj->m_fSort;
 		return nRenderAlways ? std::numeric_limits<float>::lowest() + comp : comp;
 	}
@@ -145,7 +129,7 @@ struct CRY_ALIGN(32) SRendItem
 
 struct CMotionBlurPredicate
 {
-	bool operator() (SRendItem& item)
+	bool operator()(SRendItem& item)
 	{
 		// Assumes not set flags in order before set flags
 		return SRendItem::TestIndividualObjFlag(item.ObjSort, FOB_HAS_PREVMATRIX) == 0;
@@ -154,7 +138,7 @@ struct CMotionBlurPredicate
 
 struct CZPrePassPredicate
 {
-	bool operator() (SRendItem& item)
+	bool operator()(SRendItem& item)
 	{
 		// Assumes not set flags in order before set flags
 		return SRendItem::TestIndividualObjFlag(item.ObjSort, FOB_ZPREPASS) == 0;
@@ -179,30 +163,30 @@ enum EStencilStateFunction
 	FSS_STENCFUNC_MASK     = 0x7
 };
 
-#define FSS_STENCIL_TWOSIDED   0x8
+#define FSS_STENCIL_TWOSIDED 0x8
 
-#define FSS_CCW_SHIFT          16
+#define FSS_CCW_SHIFT        16
 
 enum EStencilStateOp
 {
-	FSS_STENCOP_KEEP       = 0x0,
-	FSS_STENCOP_REPLACE    = 0x1,
-	FSS_STENCOP_INCR       = 0x2,
-	FSS_STENCOP_DECR       = 0x3,
-	FSS_STENCOP_ZERO       = 0x4,
-	FSS_STENCOP_INCR_WRAP  = 0x5,
-	FSS_STENCOP_DECR_WRAP  = 0x6,
-	FSS_STENCOP_INVERT     = 0x7
+	FSS_STENCOP_KEEP      = 0x0,
+	FSS_STENCOP_REPLACE   = 0x1,
+	FSS_STENCOP_INCR      = 0x2,
+	FSS_STENCOP_DECR      = 0x3,
+	FSS_STENCOP_ZERO      = 0x4,
+	FSS_STENCOP_INCR_WRAP = 0x5,
+	FSS_STENCOP_DECR_WRAP = 0x6,
+	FSS_STENCOP_INVERT    = 0x7
 };
 
-#define FSS_STENCFAIL_SHIFT    4
-#define FSS_STENCFAIL_MASK     (0x7 << FSS_STENCFAIL_SHIFT)
+#define FSS_STENCFAIL_SHIFT  4
+#define FSS_STENCFAIL_MASK   (0x7 << FSS_STENCFAIL_SHIFT)
 
-#define FSS_STENCZFAIL_SHIFT   8
-#define FSS_STENCZFAIL_MASK    (0x7 << FSS_STENCZFAIL_SHIFT)
+#define FSS_STENCZFAIL_SHIFT 8
+#define FSS_STENCZFAIL_MASK  (0x7 << FSS_STENCZFAIL_SHIFT)
 
-#define FSS_STENCPASS_SHIFT    12
-#define FSS_STENCPASS_MASK     (0x7 << FSS_STENCPASS_SHIFT)
+#define FSS_STENCPASS_SHIFT  12
+#define FSS_STENCPASS_MASK   (0x7 << FSS_STENCPASS_SHIFT)
 
 #define STENC_FUNC(op)        (op)
 #define STENC_CCW_FUNC(op)    (op << FSS_CCW_SHIFT)
@@ -214,14 +198,14 @@ enum EStencilStateOp
 #define STENCOP_CCW_PASS(op)  (op << (FSS_STENCPASS_SHIFT + FSS_CCW_SHIFT))
 
 //Stencil masks
-#define BIT_STENCIL_RESERVED                 0x80
-#define BIT_STENCIL_INSIDE_CLIPVOLUME        0x40
-#define BIT_STENCIL_ALLOW_TERRAINLAYERBLEND  0x20
-#define BIT_STENCIL_ALLOW_DECALBLEND         0x10
-#define STENCIL_VALUE_OUTDOORS               0x0
+#define BIT_STENCIL_RESERVED                0x80
+#define BIT_STENCIL_INSIDE_CLIPVOLUME       0x40
+#define BIT_STENCIL_ALLOW_TERRAINLAYERBLEND 0x20
+#define BIT_STENCIL_ALLOW_DECALBLEND        0x10
+#define STENCIL_VALUE_OUTDOORS              0x0
 
-#define STENC_VALID_BITS_NUM          7
-#define STENC_MAX_REF                 ((1 << STENC_VALID_BITS_NUM) - 1)
+#define STENC_VALID_BITS_NUM                7
+#define STENC_MAX_REF                       ((1 << STENC_VALID_BITS_NUM) - 1)
 
 //Batch flags.
 enum EBatchFlags
@@ -252,8 +236,8 @@ enum EBatchFlags
 
 enum SRenderShaderLightMaskFlags
 {
-	SLMF_DIRECT = 0,
-	SLMF_POINT = 1,
+	SLMF_DIRECT    = 0,
+	SLMF_POINT     = 1,
 	SLMF_PROJECTED = 2,
 	SLMF_TYPE_MASK = (SLMF_POINT | SLMF_PROJECTED)
 };
@@ -274,6 +258,3 @@ enum EShapeMeshType
 	SHAPE_BOX,
 	SHAPE_MAX,
 };
-
-
-#endif  // __RENDERPIPELINE_H__

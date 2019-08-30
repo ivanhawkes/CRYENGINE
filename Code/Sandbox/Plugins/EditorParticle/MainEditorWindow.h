@@ -23,7 +23,6 @@ class QDockWidget;
 class QPropertyTree;
 class QToolBar;
 
-class CInspector;
 class CCurveEditorPanel;
 
 namespace pfx2
@@ -47,8 +46,6 @@ public:
 
 	// CEditor
 	virtual const char* GetEditorName() const override { return "Particle Editor"; }
-	virtual void        SetLayout(const QVariantMap& state) override;
-	virtual QVariantMap GetLayout() const override;
 	// ~CEditor
 
 	// IEditorNotifyListener
@@ -60,17 +57,13 @@ public:
 protected:
 	// CAssetEditor
 	virtual bool                                  OnOpenAsset(CAsset* pAsset) override;
-	virtual bool                                  OnSaveAsset(CEditableAsset& editAsset) override;
 	virtual void                                  OnDiscardAssetChanges(CEditableAsset& editAsset) override;
 	virtual bool                                  OnAboutToCloseAsset(string& reason) const override;
 	virtual void                                  OnCloseAsset() override;
 	virtual std::unique_ptr<IAssetEditingSession> CreateEditingSession() override;
-	virtual bool                                  AllowsInstantEditing() const override { return true; }
+	virtual void                                  OnCreateDefaultLayout(CDockableContainer* pSender, QWidget* pAssetBrowser) override;
+	virtual void                                  OnInitialize() override;
 	// ~CAssetEditor
-
-	// CEditor
-	virtual void CreateDefaultLayout(CDockableContainer* pSender) override;
-	// ~CEditor
 
 	void AssignToEntity(CBaseObject* pObject, const string& newAssetName);
 	bool AssetSaveDialog(string* pOutputName);
@@ -79,15 +72,16 @@ protected:
 
 private:
 	void         InitMenu();
-	void         InitToolbar(QVBoxLayout* pWindowLayout);
-	void         RegisterDockingWidgets();
+
+	// CEditor
+	bool OnReload();
+	bool OnImport();
 
 	virtual bool OnUndo() override;
 	virtual bool OnRedo() override;
+	// ~CEditor
 
 protected Q_SLOTS:
-	void OnReloadEffect();
-	void OnImportPfx1();
 	void OnLoadFromSelectedEntity();
 	void OnApplyToSelectedEntity();
 
@@ -99,11 +93,10 @@ private:
 	std::unique_ptr<CEffectAssetModel> m_pEffectAssetModel;
 
 	//
-	QToolBar*   m_pEffectToolBar;
-	CInspector* m_pInspector;
+	CInspectorLegacy* m_pInspector;
 
-	QAction*    m_pReloadEffectMenuAction;
-	QAction*    m_pShowEffectOptionsMenuAction;
+	QAction*          m_pReloadEffectMenuAction;
+	QAction*          m_pShowEffectOptionsMenuAction;
 };
 
 }

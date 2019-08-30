@@ -442,8 +442,6 @@ void CMaterialManager::EnumerateShaders()
 		if (!renderer)
 			return;
 
-		int numShaders = 0;
-
 		m_shaderList.clear();
 		m_shaderList.reserve(100);
 
@@ -579,7 +577,7 @@ void CMaterialManager::OnEditorNotifyEvent(EEditorNotifyEvent event)
 
 CMaterial* CMaterialManager::LoadMaterial(const string& sMaterialName, bool bMakeIfNotFound)
 {
-	LOADING_TIME_PROFILE_SECTION(GetISystem());
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)(GetISystem());
 
 	string sMaterialNameClear(sMaterialName);
 	int nExtLen = strlen(MATERIAL_FILE_EXT);
@@ -783,7 +781,7 @@ void CMaterialManager::OnRequestMaterial(IMaterial* pMatInfo)
 	if (pMaterial)
 	{
 		IMaterial* pNewMatInfo = pMaterial->GetMatInfo(true);
-		assert(pNewMatInfo == pMatInfo);
+		CRY_ASSERT(pNewMatInfo == pMatInfo);
 
 		// RegisterItem() can be called through multiple request of the same materials or through a cascade
 		// of calls (see above), thus prevent warning messages by calling it conditionally.
@@ -1127,7 +1125,6 @@ void CMaterialManager::Command_CreateTerrainLayer()
 
 	CLayer* pLayer = 0;
 	string sMaterialPath = pMaterial ? pMaterial->GetName() : "";
-	bool bFound = false;
 	CTerrainManager* terrainManager = GetIEditorImpl()->GetTerrainManager();
 
 	for (int i = 0, n = terrainManager->GetLayerCount(); i < n; ++i)
@@ -1689,7 +1686,6 @@ void CMaterialManager::CreateTerrainLayerFromMaterial(CMaterial* pMaterial)
 
 	CLayer* pLayer = 0;
 	string sMaterialPath = pMaterial ? pMaterial->GetName() : "";
-	bool bFound = false;
 	CTerrainManager* terrainManager = GetIEditorImpl()->GetTerrainManager();
 
 	for (int i = 0, n = terrainManager->GetLayerCount(); i < n; ++i)

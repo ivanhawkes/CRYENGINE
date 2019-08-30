@@ -222,70 +222,10 @@ void CEntityComponentAudio::GameSerialize(TSerialize ser)
 }
 
 //////////////////////////////////////////////////////////////////////////
-bool CEntityComponentAudio::PlayFile(CryAudio::SPlayFileInfo const& playbackInfo, CryAudio::AuxObjectId const audioAuxObjectId /* = DefaultAuxObjectId */, CryAudio::SRequestUserData const& userData /* = SAudioRequestUserData::GetEmptyObject() */)
-{
-	if (m_pEntity != nullptr)
-	{
-		if (audioAuxObjectId != CryAudio::InvalidAuxObjectId)
-		{
-			AuxObjectPair const& audioObjectPair = GetAudioAuxObjectPair(audioAuxObjectId);
-
-			if (audioObjectPair.first != CryAudio::InvalidAuxObjectId)
-			{
-				(SPlayFile(playbackInfo, userData))(audioObjectPair);
-				return true;
-			}
-#if defined(INCLUDE_ENTITYSYSTEM_PRODUCTION_CODE)
-			else
-			{
-				gEnv->pSystem->Warning(VALIDATOR_MODULE_ENTITYSYSTEM, VALIDATOR_WARNING, VALIDATOR_FLAG_AUDIO, nullptr, "<Audio> Could not find AuxAudioProxy with id '%u' on entity '%s' to PlayFile '%s'", audioAuxObjectId, m_pEntity->GetEntityTextDescription().c_str(), playbackInfo.szFile);
-			}
-#endif  // INCLUDE_ENTITYSYSTEM_PRODUCTION_CODE
-		}
-		else
-		{
-			std::for_each(m_mapAuxObjects.begin(), m_mapAuxObjects.end(), SPlayFile(playbackInfo, userData));
-			return !m_mapAuxObjects.empty();
-		}
-	}
-	else
-	{
-		gEnv->pSystem->Warning(VALIDATOR_MODULE_ENTITYSYSTEM, VALIDATOR_WARNING, VALIDATOR_FLAG_AUDIO, nullptr, "<Audio> Trying to play an audio file on an EntityAudioProxy without a valid entity!");
-	}
-	return false;
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CEntityComponentAudio::StopFile(
-	char const* const szFile,
-	CryAudio::AuxObjectId const audioAuxObjectId /*= DefaultAuxObjectId*/)
-{
-	if (m_pEntity != nullptr)
-	{
-		if (audioAuxObjectId != CryAudio::InvalidAuxObjectId)
-		{
-			AuxObjectPair const& audioObjectPair = GetAudioAuxObjectPair(audioAuxObjectId);
-
-			if (audioObjectPair.first != CryAudio::InvalidAuxObjectId)
-			{
-				(SStopFile(szFile))(audioObjectPair);
-			}
-		}
-		else
-		{
-			std::for_each(m_mapAuxObjects.begin(), m_mapAuxObjects.end(), SStopFile(szFile));
-		}
-	}
-	else
-	{
-		gEnv->pSystem->Warning(VALIDATOR_MODULE_ENTITYSYSTEM, VALIDATOR_WARNING, VALIDATOR_FLAG_AUDIO, nullptr, "<Audio> Trying to stop an audio file on an EntityAudioProxy without a valid entity!");
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////
 bool CEntityComponentAudio::ExecuteTrigger(
 	CryAudio::ControlId const audioTriggerId,
 	CryAudio::AuxObjectId const audioAuxObjectId /* = DefaultAuxObjectId */,
+	EntityId const entityId /*= INVALID_ENTITYID*/,
 	CryAudio::SRequestUserData const& userData /* = SAudioRequestUserData::GetEmptyObject() */)
 {
 	if (m_pEntity != nullptr)
@@ -296,7 +236,7 @@ bool CEntityComponentAudio::ExecuteTrigger(
 
 			if (audioObjectPair.first != CryAudio::InvalidAuxObjectId)
 			{
-				audioObjectPair.second.pIObject->ExecuteTrigger(audioTriggerId, userData);
+				audioObjectPair.second.pIObject->ExecuteTrigger(audioTriggerId, entityId, userData);
 				return true;
 			}
 #if defined(INCLUDE_ENTITYSYSTEM_PRODUCTION_CODE)
@@ -310,7 +250,7 @@ bool CEntityComponentAudio::ExecuteTrigger(
 		{
 			for (auto const& auxObjectPair : m_mapAuxObjects)
 			{
-				auxObjectPair.second.pIObject->ExecuteTrigger(audioTriggerId, userData);
+				auxObjectPair.second.pIObject->ExecuteTrigger(audioTriggerId, entityId, userData);
 			}
 			return !m_mapAuxObjects.empty();
 		}
@@ -553,7 +493,7 @@ CryAudio::AuxObjectId CEntityComponentAudio::CreateAudioAuxObject()
 	szName = name.c_str();
 #endif // INCLUDE_ENTITYSYSTEM_PRODUCTION_CODE
 
-	CryAudio::SCreateObjectData const objectData(szName, CryAudio::EOcclusionType::Ignore, m_pEntity->GetWorldTM(), m_pEntity->GetId(), true);
+	CryAudio::SCreateObjectData const objectData(szName, CryAudio::EOcclusionType::Ignore, m_pEntity->GetWorldTM(), true);
 	CryAudio::IObject* const pIObject = gEnv->pAudioSystem->CreateObject(objectData);
 	m_mapAuxObjects.insert(AuxObjectPair(++m_auxObjectIdCounter, SAuxObjectWrapper(pIObject)));
 	return m_auxObjectIdCounter;
@@ -654,5 +594,23 @@ void CEntityComponentAudio::ToggleRelativeVelocityTracking(bool const enable, Cr
 	else
 	{
 		std::for_each(m_mapAuxObjects.begin(), m_mapAuxObjects.end(), SToggleRelativeVelocityTracking(enable));
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CEntityComponentAudio::AddListener(CryAudio::ListenerId const listenerId)
+{
+	for (auto const& objectPair : m_mapAuxObjects)
+	{
+		objectPair.second.pIObject->AddListener(listenerId);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CEntityComponentAudio::RemoveListener(CryAudio::ListenerId const listenerId)
+{
+	for (auto const& objectPair : m_mapAuxObjects)
+	{
+		objectPair.second.pIObject->RemoveListener(listenerId);
 	}
 }

@@ -19,6 +19,7 @@
 #include <Controls/QuestionDialog.h>
 #include <Util/FileUtil.h>
 #include <Util/XmlArchive.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 #include <CryPhysics/IPhysics.h>
 
@@ -416,7 +417,7 @@ CVegetationMap::~CVegetationMap()
 
 void CVegetationMap::ClearObjects()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	ClearSectors();
 	m_objects.clear();
 }
@@ -470,10 +471,9 @@ void CVegetationMap::UpdateGroundDecal(CVegetationInstance* pInst)
 	{
 		pInst->pRenderNodeGroundDecal = (IDecalRenderNode*)GetIEditorImpl()->Get3DEngine()->CreateRenderNode(eERType_Decal);
 
-		bool boIsSelected = false;
-
 		// update basic entity render flags
 		unsigned int renderFlags = 0;
+
 		pInst->pRenderNodeGroundDecal->SetRndFlags(renderFlags);
 
 		// set properties
@@ -1302,10 +1302,6 @@ void CVegetationMap::ClearBrush(CRect& rc, bool bCircle, CVegetationObject* pObj
 
 	Vec3 p(0, 0, 0);
 
-	float unitSize = GetIEditorImpl()->GetHeightmap()->GetUnitSize();
-
-	int mapSize = m_numSectors * m_sectorSize;
-
 	// Intersect with map rectangle.
 	// Offset by 1 from each side.
 	float brushRadius2 = (rc.right - rc.left) * (rc.right - rc.left) / 4;
@@ -1327,7 +1323,6 @@ void CVegetationMap::ClearBrush(CRect& rc, bool bCircle, CVegetationObject* pObj
 	sy1 = max(sy1, 0);
 	sy2 = min(sy2, m_numSectors - 1);
 
-	CVegetationInstance* next = 0;
 	for (int y = sy1; y <= sy2; y++)
 	{
 		for (int x = sx1; x <= sx2; x++)
@@ -1477,7 +1472,7 @@ void CVegetationMap::SetAIRadius(IStatObj* pObj, float radius)
 	if (!pObj)
 		return;
 	pObj->SetAIVegetationRadius(radius);
-	for (unsigned i = m_objects.size(); i-- != 0; )
+	for (unsigned i = m_objects.size(); i-- != 0;)
 	{
 		CVegetationObject* object = m_objects[i];
 		IStatObj* pSO = object->GetObject();
@@ -1670,7 +1665,6 @@ void CVegetationMap::ClearRotateInstances(CVegetationObject* object)
 
 void CVegetationMap::DistributeVegetationObject(CVegetationObject* object)
 {
-	auto numInstances = object->GetNumInstances();
 	CRect rc(0, 0, GetSize(), GetSize());
 	// emits signalVegetationObjectChanged
 	PaintBrush(rc, false, object);
@@ -1678,7 +1672,6 @@ void CVegetationMap::DistributeVegetationObject(CVegetationObject* object)
 
 void CVegetationMap::ClearVegetationObject(CVegetationObject* object)
 {
-	auto numInstances = object->GetNumInstances();
 	CRect rc(0, 0, GetSize(), GetSize());
 	// emits signalVegetationObjectChanged
 	ClearBrush(rc, false, object);
@@ -2162,7 +2155,6 @@ void CVegetationMap::LoadOldStuff(CXmlArchive& xmlAr)
 		if (nSize != 2048 * 2048)
 			return;
 
-		int numObjects = m_objects.size();
 		CVegetationObject* usedObjects[256];
 		ZeroStruct(usedObjects);
 
@@ -2206,7 +2198,6 @@ void CVegetationMap::GenerateShadowMap(CByteImage& shadowmap, float shadowAmmoun
 	CHeightmap* pHeightmap = GetIEditorImpl()->GetHeightmap();
 
 	int width = shadowmap.GetWidth();
-	int height = shadowmap.GetHeight();
 
 	//@FIXME: Hardcoded.
 	int sectorSizeInMeters = 64;
@@ -2288,7 +2279,7 @@ int CVegetationMap::ExportObject(CVegetationObject* object, XmlNodeRef& node, CR
 				{
 					if (saveRect)
 					{
-						if (pInst->pos.x < saveRect->left || pInst->pos.x > saveRect->right || pInst->pos.y <  saveRect->top || pInst->pos.y > saveRect->bottom)
+						if (pInst->pos.x < saveRect->left || pInst->pos.x > saveRect->right || pInst->pos.y < saveRect->top || pInst->pos.y > saveRect->bottom)
 							continue;
 					}
 					numSaved++;
@@ -2587,7 +2578,6 @@ void CVegetationMap::RepositionArea(const AABB& box, const Vec3& offset, int nRo
 						newPos.z = GetIEditorImpl()->Get3DEngine()->GetTerrainElevation(newPos.x, newPos.y);
 					}
 
-
 					if (isCopy)
 					{
 						// Keep this instance in same position in tempArea
@@ -2727,7 +2717,7 @@ void CVegetationMap::UpdateConfigSpec()
 void CVegetationMap::Save(bool bBackup)
 {
 	using namespace Private_VegetationMap;
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	CTempFileHelper helper(GetIEditorImpl()->GetLevelDataFolder() + kVegetationMapFile);
 
 	CXmlArchive xmlAr;
@@ -2740,7 +2730,7 @@ void CVegetationMap::Save(bool bBackup)
 bool CVegetationMap::Load()
 {
 	using namespace Private_VegetationMap;
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	string filename = GetIEditorImpl()->GetLevelDataFolder() + kVegetationMapFile;
 	CXmlArchive xmlAr;
 	xmlAr.bLoading = true;
@@ -2803,8 +2793,6 @@ void CVegetationMap::GenerateBillboards(IConsoleCmdArgs*)
 	const Vec3 vAt(-1, 0, 0);
 	const Vec3 vUp(0, 0, 1);
 
-	float fCustomDistRatio = 1;
-
 	int nSpriteResFinal = 128;
 	int nSpriteResInt = nSpriteResFinal << 1;
 	int nLine = (int)sqrtf(FAR_TEX_COUNT);
@@ -2828,6 +2816,7 @@ void CVegetationMap::GenerateBillboards(IConsoleCmdArgs*)
 			float fRadiusVert = pObj->GetRadiusVert();
 			float fAngle = FAR_TEX_ANGLE * (float)j + 90.f;
 
+			//float fCustomDistRatio = 1.0f;
 			float fGenDist = 18.f; // *max(0.5f, BI.fDistRatio * fCustomDistRatio);
 
 			float fFOV = 0.565f / fGenDist * 200.f * (gf_PI / 180.0f);
@@ -2837,11 +2826,14 @@ void CVegetationMap::GenerateBillboards(IConsoleCmdArgs*)
 			tmpCam.SetMatrix(Matrix34(matRot, Vec3(0, 0, 0)));
 			tmpCam.SetFrustum(nSpriteResInt, nSpriteResInt, fFOV, max(0.1f, fDrawDist - fRadiusHors), fDrawDist + fRadiusHors);
 
-			SRenderingPassInfo passInfo = SRenderingPassInfo::CreateBillBoardGenPassRenderingInfo(tmpCam, nRenderingFlags);
+			IRenderer::SGraphicsPipelineDescription pipelineDesc;
+			pipelineDesc.type = EGraphicsPipelineType::Standard;
+			pipelineDesc.shaderFlags = nRenderingFlags;
+
+			SRenderingPassInfo passInfo = SRenderingPassInfo::CreateBillBoardGenPassRenderingInfo(passInfo.GetGraphicsPipelineKey(), tmpCam, nRenderingFlags);
 			IRenderView* pView = passInfo.GetIRenderView();
 			pView->SetCameras(&tmpCam, 1);
 
-			passInfo.GetIRenderView()->SetShaderRenderingFlags(nRenderingFlags | SHDF_NOASYNC | SHDF_BILLBOARDS);
 			gEnv->pRenderer->EF_StartEf(passInfo);
 
 			Matrix34A matTrans;
@@ -2865,14 +2857,16 @@ void CVegetationMap::GenerateBillboards(IConsoleCmdArgs*)
 
 			pView->SwitchUsageMode(IRenderView::eUsageModeWritingDone);
 
-			gEnv->pRenderer->EF_EndEf3D(0, 0, passInfo);
+			gEnv->pRenderer->EF_EndEf3D(0, 0, passInfo, nRenderingFlags);
 
 			RectI rcDst;
 			rcDst.x = (j % nLine) * nSpriteResFinal;
 			rcDst.y = (j / nLine) * nSpriteResFinal;
 			rcDst.w = nSpriteResFinal;
 			rcDst.h = nSpriteResFinal;
-			if (!gEnv->pRenderer->StoreGBufferToAtlas(rcDst, nSpriteResInt, nSpriteResInt, nSpriteResFinal, nSpriteResFinal, pAtlasD, pAtlasN))
+
+			std::shared_ptr<CGraphicsPipeline> pGraphicsPipeline = gEnv->pRenderer->FindGraphicsPipeline(passInfo.GetGraphicsPipelineKey());
+			if (!gEnv->pRenderer->StoreGBufferToAtlas(rcDst, nSpriteResInt, nSpriteResInt, nSpriteResFinal, nSpriteResFinal, pAtlasD, pAtlasN, pGraphicsPipeline.get()))
 			{
 				assert(0);
 			}

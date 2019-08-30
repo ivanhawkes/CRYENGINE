@@ -96,7 +96,6 @@ enum EAnimParamType : uint32
 	eAnimParamType_Animation           = 7,
 	eAnimParamType_AudioSwitch         = 9,
 	eAnimParamType_AudioTrigger        = 10,
-	eAnimParamType_AudioFile           = 11,
 	eAnimParamType_AudioParameter      = 12,
 	eAnimParamType_Sequence            = 13,
 	eAnimParamType_Expression          = 14,
@@ -434,6 +433,8 @@ struct IMovieCallback
 	virtual void OnSetCamera(const SCameraParams& Params) = 0;
 };
 
+using AnimTrackKeysIndices = std::vector<size_t>;
+
 /**	Interface of Animation Track.
  */
 struct IAnimTrack : public _i_reference_target_t
@@ -461,7 +462,7 @@ struct IAnimTrack : public _i_reference_target_t
 	//! Get count of sub tracks.
 	virtual int GetSubTrackCount() const = 0;
 
-	//! Retrieve pointer the specfied sub track.
+	//! Retrieve pointer the specified sub track.
 	virtual IAnimTrack* GetSubTrack(int nIndex) const = 0;
 	virtual const char* GetSubTrackName(int nIndex) const = 0;
 	virtual void        SetSubTrackName(int nIndex, const char* name) = 0;
@@ -543,10 +544,10 @@ struct IAnimTrack : public _i_reference_target_t
 	virtual bool Serialize(XmlNodeRef& xmlNode, bool bLoading, bool bLoadEmptyTracks = true) = 0;
 
 	//! Serialize the keys on this track to XML
-	virtual bool SerializeKeys(XmlNodeRef& xmlNode, bool bLoading, std::vector<SAnimTime>& keys, const SAnimTime time = SAnimTime(0)) = 0;
+	virtual bool SerializeKeys(XmlNodeRef& xmlNode, bool bLoading, AnimTrackKeysIndices& keysIndices, const SAnimTime time = SAnimTime(0)) = 0;
 
 	//! For custom track animate parameters.
-	virtual void Animate(SAnimContext& animContext) {};
+	virtual void Animate(SAnimContext& animContext) {}
 
 	//! Return the index of the key which lies right after the given key in time.
 	//! In the case of sorted keys, it's just 'key+1', but if not sorted, it can be another value.
@@ -562,7 +563,7 @@ struct IAnimTrack : public _i_reference_target_t
 
 	// </interfuscator:shuffle>
 protected:
-	virtual ~IAnimTrack() {};
+	virtual ~IAnimTrack() {}
 };
 
 //! Callback called by animation node when its animated.
@@ -572,7 +573,7 @@ struct IAnimNodeOwner
 	virtual ~IAnimNodeOwner() {}
 	virtual void OnNodeAnimated(IAnimNode* pNode) = 0;
 	virtual void OnNodeVisibilityChanged(IAnimNode* pNode, const bool bHidden) = 0;
-	virtual void OnNodeReset(IAnimNode* pNode) {}
+	virtual bool OnNodeReset(IAnimNode* pNode) { return true; }
 	// </interfuscator:shuffle>
 };
 

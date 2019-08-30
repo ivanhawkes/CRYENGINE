@@ -69,7 +69,7 @@
 #include <QtViewPane.h>
 #include <CryIcon.h>
 #include "Controls/QuestionDialog.h"
-#include <ICommandManager.h>
+#include <Commands/ICommandManager.h>
 #include "Preferences/ViewportPreferences.h"
 
 extern CharacterTool::System* g_pCharacterToolSystem;
@@ -146,8 +146,6 @@ CharacterToolForm::CharacterToolForm(QWidget* parent)
 	m_displayParametersSplitterWidths[0] = 400;
 	m_displayParametersSplitterWidths[1] = 200;
 
-	Initialize();
-
 	setFocusPolicy(Qt::ClickFocus);
 
 	CBroadcastManager* const pGlobalBroadcastManager = GetIEditor()->GetGlobalBroadcastManager();
@@ -202,9 +200,15 @@ void CharacterToolForm::UpdatePanesMenu()
 
 void CharacterToolForm::Initialize()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	if (m_private)
+	{
+		CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_ERROR, "Character Tool is being initialized twice! skipping second initialization.");
+		return;
+	}
+	
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	m_private.reset(new SPrivate(this, m_system->document.get()));
-
+ 
 	m_modeCharacter.reset(new ModeCharacter());
 
 	setDockNestingEnabled(true);
@@ -751,7 +755,7 @@ void CharacterToolForm::UpdateLayoutMenu()
 	vector<string> layouts = FindLayoutNames();
 	for (size_t i = 0; i < layouts.size(); ++i)
 	{
-		QAction* action = addToLayout(layouts[i].c_str(), SLOT(OnLayoutSet()), QVariant(layouts[i].c_str()));
+		addToLayout(layouts[i].c_str(), SLOT(OnLayoutSet()), QVariant(layouts[i].c_str()));
 	}
 	if (!layouts.empty())
 		m_menuLayout->addSeparator();
@@ -887,8 +891,6 @@ void CharacterToolForm::OnRenderOriginal(const SRenderContext& context)
 
 void CharacterToolForm::OnCharacterLoaded()
 {
-	ICharacterInstance* character = m_system->document->CompressedCharacter();
-
 	const char* filename = m_system->document->LoadedCharacterFilename();
 	for (size_t i = 0; i < m_recentCharacters.size(); ++i)
 		if (stricmp(m_recentCharacters[i].c_str(), filename) == 0)

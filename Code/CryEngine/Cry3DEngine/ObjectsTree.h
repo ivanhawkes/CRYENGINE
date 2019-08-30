@@ -1,8 +1,5 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#ifndef __INCLUDE_CRY3DENGINE_OBJECTTREE_H
-#define __INCLUDE_CRY3DENGINE_OBJECTTREE_H
-
 #pragma once
 
 #define OCTREENODE_RENDER_FLAG_OBJECTS               1
@@ -326,7 +323,7 @@ struct SOctreeLoadObjectsData
 	byte*                    pEndObjPtr;
 };
 
-class COctreeNode : public IOctreeNode, Cry3DEngineBase, IStreamCallback
+class COctreeNode final : public IOctreeNode, Cry3DEngineBase, IStreamCallback
 {
 public:
 
@@ -368,7 +365,7 @@ public:
 	void                     InvalidateCachedShadowData();
 	void                     ActivateObjectsLayer(uint16 nLayerId, bool bActivate, bool bPhys, IGeneralMemoryHeap* pHeap, const AABB& layerBox);
 	void                     GetLayerMemoryUsage(uint16 nLayerId, ICrySizer* pSizer, int* pNumBrushes, int* pNumDecals);
-	virtual void             MarkAsUncompiled(const ERNListType eListType)       { SetCompiled(eListType, false); }
+	virtual void             MarkAsUncompiled(const ERNListType eListType) override { SetCompiled(eListType, false); }
 	void                     MarkAsUncompiled();
 	inline bool              IsCompiled(ERNListType eRNListType) const           { return (m_compiledFlag & (1 << eRNListType)) != 0; }
 	void                     SetCompiled(ERNListType eRNListType, bool compiled) { m_compiledFlag = (compiled ? (1 << eRNListType) : 0) | (m_compiledFlag & ~(1 << eRNListType)); }
@@ -427,7 +424,7 @@ public:
 	float                  GetNodeStreamingDistance(const SObjManPrecacheCamera* pPrecacheCams, AABB objectsBox, size_t nPrecacheCams, const SRenderingPassInfo& passInfo);
 	void                   ReleaseStreamableContent();
 	bool                   CheckStartStreaming(bool bFullUpdate);
-	virtual void           StreamOnComplete(IReadStream* pStream, unsigned nError);
+	virtual void           StreamOnComplete(IReadStream* pStream, unsigned nError) override;
 	template<class T> void StreamOnCompleteReadObjects(T* f, int nDataSize);
 	void                   StartStreaming(bool bFinishNow, IReadStream_AutoPtr* ppStream);
 	template<class T> int  ReadObjects(T*& f, int& nDataSize, EEndian eEndian, std::vector<IStatObj*>* pStatObjTable, std::vector<IMaterial*>* pMatTable, const SLayerVisibility* pLayerVisibilityMask, SOcTreeNodeChunk& chunk, ELoadObjectsMode eLoadMode);
@@ -461,8 +458,9 @@ protected:
 	// Check if min spec specified in render node passes current server config spec.
 	static bool CheckRenderFlagsMinSpec(uint32 dwRndFlags);
 
-	void        LinkObject(IRenderNode* pObj, EERType eERType, bool bPushFront = true);
-	void        UnlinkObject(IRenderNode* pObj);
+	void         LinkObject(IRenderNode* pObj, EERType eERType, bool bPushFront = true);
+	void         UnlinkObject(IRenderNode* pObj);
+	virtual void ReorderObject(IRenderNode* pObj, bool bPushFront) final;
 
 	static int  Cmp_OctreeNodeSize(const void* v1, const void* v2);
 
@@ -503,6 +501,7 @@ private:
 	static_assert(eERType_TypesNum + eRNListType_ListsNum <= 32, "Sum of type-bits plus listtype-bits should be 32");
 
 	uint8                            m_bNodeCompletelyInFrustum : 1;
+	uint8                            m_bStaticInstancingApplied : 1;
 	uint8                            m_bStaticInstancingIsDirty : 1;
 
 	// used for streaming
@@ -536,5 +535,3 @@ public:
 	volatile int                  m_updateStaticInstancingLock;
 	uint32                        m_onePassTraversalFrameId = 0; // Used to request visiting of the node during one-pass traversal
 };
-
-#endif

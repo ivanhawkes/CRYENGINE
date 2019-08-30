@@ -82,14 +82,14 @@ const char* CLightEntity::GetName(void) const
 	return GetOwnerEntity() ? GetOwnerEntity()->GetName() : (m_light.m_sName ? m_light.m_sName : "LightEntity");
 }
 
-void CLightEntity::GetLocalBounds(AABB& bbox)
+void CLightEntity::GetLocalBounds(AABB& bbox) const
 {
 	bbox = m_WSBBox;
 	bbox.min -= m_light.m_Origin;
 	bbox.max -= m_light.m_Origin;
 }
 
-bool CLightEntity::IsLightAreasVisible()
+bool CLightEntity::IsLightAreasVisible() const
 {
 	IVisArea* pArea = GetEntityVisArea();
 
@@ -648,7 +648,6 @@ void CLightEntity::InitShadowFrustum_SUN_Conserv(ShadowMapFrustum* pFr, int dwAl
 
 	//if(pFr->isUpdateRequested(-1))
 	pFr->vProjTranslation = passInfo.GetCamera().GetPosition() + fDistance * vViewDir;
-	;
 
 	// local jitter amount depends on frustum size
 	pFr->fFrustrumSize = 1.0f / (fGSMBoxSize * (float)Get3DEngine()->m_fGsmRange);
@@ -1303,7 +1302,6 @@ bool CLightEntity::CheckFrustumsIntersect(CLightEntity* lightEnt)
 		{
 			CCamera shadowFrust1 = pFr1->FrustumPlanes[nS1];
 			CCamera shadowFrust2 = pFr2->FrustumPlanes[nS2];
-			;
 
 			if (FrustumIntersection(shadowFrust1, shadowFrust2))
 			{
@@ -1758,7 +1756,7 @@ void CLightEntity::SetupShadowFrustumCamera_OMNI(ShadowMapFrustum* pFr, int dwAl
 	}
 }
 
-ShadowMapFrustum* CLightEntity::GetShadowFrustum(int nId)
+ShadowMapFrustum* CLightEntity::GetShadowFrustum(int nId) const
 {
 	if (m_pShadowMapInfo && nId < MAX_GSM_LODS_NUM)
 		return m_pShadowMapInfo->pGSM[nId];
@@ -1815,6 +1813,8 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 
 	DBG_LOCK_TO_THREAD(this);
 
+	CRY_ASSERT(!(m_light.m_Flags & DLF_DISABLED));
+
 #if defined(FEATURE_SVO_GI)
 	if (GetCVars()->e_svoTI_SkipNonGILights && GetCVars()->e_svoTI_Apply && !GetGIMode())
 		return;
@@ -1822,7 +1822,7 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 		return;
 #endif
 
-	if (m_layerId != uint16(~0) && m_dwRndFlags & ERF_HIDDEN)
+	if (m_layerId != uint16(~0))
 		return;
 
 	if (!(m_light.m_Flags & DLF_DEFERRED_LIGHT) || passInfo.IsRecursivePass())
@@ -1873,9 +1873,6 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 		return;
 
 	//assert(m_light.IsOk());
-
-	if ((m_light.m_Flags & DLF_DISABLED) || (!GetCVars()->e_DynamicLights))
-		return;
 
 	if ((m_light.m_Flags & DLF_PROJECT) && (m_light.m_fLightFrustumAngle < 90.f) && (m_light.m_pLightImage || m_light.m_pLightDynTexSource))
 #if defined(FEATURE_SVO_GI)
@@ -2037,8 +2034,7 @@ void CLightEntity::Render(const SRendParams& rParams, const SRenderingPassInfo& 
 
 void CLightEntity::Hide(bool bHide)
 {
-	SetRndFlags(ERF_HIDDEN, bHide);
-
+	ILightSource::Hide(bHide);
 	if (bHide)
 	{
 		m_light.m_Flags |= DLF_DISABLED;
@@ -2060,7 +2056,7 @@ IRenderNode::EGIMode CLightEntity::GetGIMode() const
 {
 	if (IRenderNode::GetGIMode() == eGM_StaticVoxelization || IRenderNode::GetGIMode() == eGM_DynamicVoxelization || m_light.m_Flags & DLF_SUN)
 	{
-		if (!(m_light.m_Flags & (DLF_DISABLED | DLF_FAKE | DLF_VOLUMETRIC_FOG_ONLY | DLF_AMBIENT | DLF_DEFERRED_CUBEMAPS)) && !(m_dwRndFlags & ERF_HIDDEN))
+		if (!(m_light.m_Flags & (DLF_DISABLED | DLF_FAKE | DLF_VOLUMETRIC_FOG_ONLY | DLF_AMBIENT | DLF_DEFERRED_CUBEMAPS)) && !IsHidden())
 		{
 			if (m_light.m_BaseColor.Luminance() > .01f && m_light.m_fRadius > 0.5f)
 			{
@@ -2114,8 +2110,7 @@ void CLightEntity::ProcessPerObjectFrustum(ShadowMapFrustum* pFr, struct SPerObj
 	COctreeNode::SetTraversalFrameId((IRenderNode*)pPerObjectShadow->pCaster, passInfo.GetMainFrameID(), ~0);
 
 	// get caster's bounding box and scale
-	AABB objectBBox;
-	pPerObjectShadow->pCaster->FillBBox(objectBBox);
+	const AABB objectBBox = pPerObjectShadow->pCaster->GetBBox();
 	Vec3 vExtents = 0.5f * objectBBox.GetSize().CompMul(pPerObjectShadow->vBBoxScale);
 	pFr->aabbCasters = AABB(objectBBox.GetCenter() - vExtents, objectBBox.GetCenter() + vExtents);
 
@@ -2156,17 +2151,7 @@ void CLightEntity::ProcessPerObjectFrustum(ShadowMapFrustum* pFr, struct SPerObj
 	}
 }
 
-void CLightEntity::FillBBox(AABB& aabb)
-{
-	aabb = CLightEntity::GetBBox();
-}
-
-EERType CLightEntity::GetRenderNodeType()
-{
-	return eERType_Light;
-}
-
-float CLightEntity::GetMaxViewDist()
+float CLightEntity::GetMaxViewDist() const
 {
 	if (m_light.m_Flags & DLF_SUN)
 		return 10.f * DISTANCE_TO_THE_SUN;

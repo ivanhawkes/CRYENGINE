@@ -10,7 +10,7 @@
 #include <CrySystem/ISystem.h>
 #include <CrySystem/ITimer.h>
 #include <CrySystem/IValidator.h>
-#include <CrySystem/IConsole.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 // these should all be in sync - so testing one for 0 should be the same for all
 ISystem* pSystem = 0;
@@ -49,12 +49,6 @@ void AIInitLog(ISystem* system)
 	// NOTE Mrz 4, 2008: <pvl> this is the editor, let's assume devmode instead
 	// of trying to access the function that lives in a different dll and isn't
 	// exported
-	bool inDevMode = true; //::IsAIInDevMode();
-#ifdef _DEBUG
-	int isDebug = 1;
-#else
-	int isDebug = 0;
-#endif
 
 	if (console)
 	{

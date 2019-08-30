@@ -31,12 +31,12 @@ CActorCollisionAvoidance::CActorCollisionAvoidance(CAIActor* pActor)
 	: m_pActor(pActor)
 	, m_radiusIncrement(0.0f)
 {
-	gAIEnv.pCollisionAvoidanceSystem->RegisterAgent(this);
+	gEnv->pAISystem->GetCollisionAvoidanceSystem()->RegisterAgent(this);
 }
 
 CActorCollisionAvoidance::~CActorCollisionAvoidance()
 {
-	gAIEnv.pCollisionAvoidanceSystem->UnregisterAgent(this);
+    gEnv->pAISystem->GetCollisionAvoidanceSystem()->UnregisterAgent(this);
 }
 
 void CActorCollisionAvoidance::Reset()
@@ -63,71 +63,83 @@ const INavMeshQueryFilter* CActorCollisionAvoidance::GetNavigationQueryFilter() 
 	return nullptr;
 }
 
-const char* CActorCollisionAvoidance::GetName() const
+const char* CActorCollisionAvoidance::GetDebugName() const
 {
 	return m_pActor->GetName();
 }
 
-ICollisionAvoidanceAgent::TreatType CActorCollisionAvoidance::GetTreatmentType() const
+Cry::AI::CollisionAvoidance::ETreatType CActorCollisionAvoidance::GetTreatmentDuringUpdateTick(Cry::AI::CollisionAvoidance::SAgentParams& outAgent, Cry::AI::CollisionAvoidance::SObstacleParams& outObstacle) const
 {
 	if (!m_pActor->IsEnabled() || !m_pActor->GetMovementAbility().collisionAvoidanceParticipation)
-		return ICollisionAvoidanceAgent::TreatType::None;
+		return Cry::AI::CollisionAvoidance::ETreatType::None;
+
+    Cry::AI::CollisionAvoidance::ETreatType treatType = Cry::AI::CollisionAvoidance::ETreatType::None;
 
 	uint16 aiType = m_pActor->GetAIType();
 	if (aiType == AIOBJECT_PLAYER)
 	{
 		// player is always treated only as obstacle
-		return ICollisionAvoidanceAgent::TreatType::Obstacle;
+		treatType = Cry::AI::CollisionAvoidance::ETreatType::Obstacle;
 	}
-
-	if ((aiType == AIOBJECT_ALIENTICK) || (aiType == AIOBJECT_ACTOR) || (aiType == AIOBJECT_INFECTED))
+	else if ((aiType == AIOBJECT_ALIENTICK) || (aiType == AIOBJECT_ACTOR) || (aiType == AIOBJECT_INFECTED))
 	{
-		const float targetCutoff = gAIEnv.CVars.CollisionAvoidanceTargetCutoffRange;
-		const float pathEndCutoff = gAIEnv.CVars.CollisionAvoidancePathEndCutoffRange;
-		const float smartObjectCutoff = gAIEnv.CVars.CollisionAvoidanceSmartObjectCutoffRange;
+		const float targetCutoff = gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceTargetCutoffRange;
+		const float pathEndCutoff = gAIEnv.CVars.collisionAvoidance.CollisionAvoidancePathEndCutoffRange;
+		const float smartObjectCutoff = gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceSmartObjectCutoffRange;
 
-		CPipeUser* pPipeUser = m_pActor->CastToCPipeUser();
+		const CPipeUser* pPipeUser = m_pActor->CastToCPipeUser();
 
-		bool bIsMoving = (fabs_tpl(m_pActor->m_State.fDesiredSpeed) > 0.0001f);
-		bool bCuttoff = (m_pActor->m_State.fDistanceFromTarget < targetCutoff)
+		const bool bIsMoving = (fabs_tpl(m_pActor->m_State.fDesiredSpeed) > 0.0001f);
+		const bool bCuttoff = (m_pActor->m_State.fDistanceFromTarget < targetCutoff)
 			|| (m_pActor->m_State.fDistanceToPathEnd < pathEndCutoff)
 			|| (pPipeUser && pPipeUser->GetPendingSmartObjectID() && (m_pActor->m_State.fDistanceToPathEnd < smartObjectCutoff));
 
-		return (bIsMoving && !bCuttoff) ? ICollisionAvoidanceAgent::TreatType::Agent : ICollisionAvoidanceAgent::TreatType::Obstacle;
+		treatType = (bIsMoving && !bCuttoff) ? Cry::AI::CollisionAvoidance::ETreatType::Agent : Cry::AI::CollisionAvoidance::ETreatType::Obstacle;
 	}
-	return ICollisionAvoidanceAgent::TreatType::None;
+
+	static_assert(int(Cry::AI::CollisionAvoidance::ETreatType::Count) == 3, "Unexpected enum count!");
+	switch (treatType)
+	{
+	case Cry::AI::CollisionAvoidance::ETreatType::Agent:
+	{
+		const float forcedSpeed = gAIEnv.CVars.collisionAvoidance.DebugCollisionAvoidanceForceSpeed;
+		const bool bUseForcedSpeed = fabs_tpl(forcedSpeed) > 0.0001f;
+
+		float minSpeed;
+		float maxSpeed;
+		float normalSpeed;
+
+		m_pActor->GetMovementSpeedRange(m_pActor->m_State.fMovementUrgency, false, normalSpeed, minSpeed, maxSpeed);
+
+		outAgent.radius = m_pActor->m_Parameters.m_fPassRadius + gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceAgentExtraFat;
+		if (gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceEnableRadiusIncrement)
+			outAgent.radius += m_radiusIncrement;
+		outAgent.height = m_pActor->GetBodyInfo().stanceSize.GetSize().z;
+		outAgent.maxSpeed = min(m_pActor->m_State.fDesiredSpeed, maxSpeed);
+		outAgent.maxAcceleration = min(outAgent.maxAcceleration, m_pActor->m_movementAbility.maxAccel);
+		outAgent.currentLocation = m_pActor->GetPhysicsPos();
+		outAgent.currentVelocity = m_pActor->GetVelocity();
+
+		outAgent.desiredVelocity = bUseForcedSpeed ? m_pActor->GetMoveDir() * forcedSpeed : m_pActor->m_State.vMoveDir * m_pActor->m_State.fDesiredSpeed;
+		break;
+	}
+	case Cry::AI::CollisionAvoidance::ETreatType::Obstacle:
+	{
+		outObstacle.currentLocation = m_pActor->GetPhysicsPos();
+		outObstacle.currentVelocity = m_pActor->GetVelocity();
+		outObstacle.radius = m_pActor->m_Parameters.m_fPassRadius + gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceAgentExtraFat;
+		outObstacle.height = m_pActor->GetBodyInfo().stanceSize.GetSize().z;
+		break;
+	}
+	case Cry::AI::CollisionAvoidance::ETreatType::None:
+		break;
+	default:
+		CRY_ASSERT(false);
+		break;
+	}
+
+	return treatType;
 }
-
-void CActorCollisionAvoidance::InitializeCollisionAgent(CCollisionAvoidanceSystem::SAgentParams& agent) const
-{
-	const float forcedSpeed = gAIEnv.CVars.DebugCollisionAvoidanceForceSpeed;
-	const bool bUseForcedSpeed = fabs_tpl(forcedSpeed) > 0.0001f;
-
-	float minSpeed;
-	float maxSpeed;
-	float normalSpeed;
-
-	m_pActor->GetMovementSpeedRange(m_pActor->m_State.fMovementUrgency, false, normalSpeed, minSpeed, maxSpeed);
-
-	agent.radius = m_pActor->m_Parameters.m_fPassRadius + gAIEnv.CVars.CollisionAvoidanceAgentExtraFat;
-	if (gAIEnv.CVars.CollisionAvoidanceEnableRadiusIncrement)
-		agent.radius += m_radiusIncrement;
-	agent.maxSpeed = min(m_pActor->m_State.fDesiredSpeed, maxSpeed);
-	agent.maxAcceleration = min(agent.maxAcceleration, m_pActor->m_movementAbility.maxAccel);
-	agent.currentLocation = m_pActor->GetPhysicsPos();
-	agent.currentVelocity = Vec2(m_pActor->GetVelocity());
-
-	agent.desiredVelocity = bUseForcedSpeed ? Vec2(m_pActor->GetMoveDir() * forcedSpeed) : Vec2(m_pActor->m_State.vMoveDir * m_pActor->m_State.fDesiredSpeed);
-	agent.currentLookDirection = Vec2(agent.desiredVelocity);
-}
-
-void CActorCollisionAvoidance::InitializeCollisionObstacle(CCollisionAvoidanceSystem::SObstacleParams& obstacle) const
-{
-	obstacle.currentLocation = m_pActor->GetPhysicsPos();
-	obstacle.currentVelocity = Vec2(m_pActor->GetVelocity());
-	obstacle.radius = m_pActor->m_Parameters.m_fPassRadius + gAIEnv.CVars.CollisionAvoidanceAgentExtraFat;
-}
-	
 
 void CActorCollisionAvoidance::ApplyComputedVelocity(const Vec2& avoidanceVelocity, float updateTime)
 {
@@ -163,19 +175,19 @@ void CActorCollisionAvoidance::ApplyComputedVelocity(const Vec2& avoidanceVeloci
 		m_pActor->m_State.vMoveTarget.zero();
 	}
 
-	if (gAIEnv.CVars.CollisionAvoidanceEnableRadiusIncrement)
+	if (gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceEnableRadiusIncrement)
 	{
 		if (m_pActor->m_State.fDesiredSpeed > 0.5f)
 		{
 			m_radiusIncrement = min(
-				m_radiusIncrement + (m_pActor->m_movementAbility.collisionAvoidanceRadiusIncrement * gAIEnv.CVars.CollisionAvoidanceRadiusIncrementIncreaseRate * updateTime),
+				m_radiusIncrement + (m_pActor->m_movementAbility.collisionAvoidanceRadiusIncrement * gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceRadiusIncrementIncreaseRate * updateTime),
 				m_pActor->m_movementAbility.collisionAvoidanceRadiusIncrement
 			);
 		}
 		else
 		{
 			m_radiusIncrement = max(
-				m_radiusIncrement - (m_pActor->m_movementAbility.collisionAvoidanceRadiusIncrement * gAIEnv.CVars.CollisionAvoidanceRadiusIncrementDecreaseRate * updateTime),
+				m_radiusIncrement - (m_pActor->m_movementAbility.collisionAvoidanceRadiusIncrement * gAIEnv.CVars.collisionAvoidance.CollisionAvoidanceRadiusIncrementDecreaseRate * updateTime),
 				0.0f
 			);
 		}
@@ -302,7 +314,7 @@ void CAIActor::ResetModularBehaviorTree(EObjectResetType type)
 
 					if (properties->GetValue("esModularBehaviorTree", behaviorTreeName) && behaviorTreeName && behaviorTreeName[0])
 					{
-						MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Modular Behavior Tree Runtime");
+						MEMSTAT_CONTEXT(EMemStatContextType::Other, "Modular Behavior Tree Runtime");
 
 						StartBehaviorTree(behaviorTreeName);
 					}
@@ -809,7 +821,7 @@ void CAIActor::OnAIHandlerSentSignal(const AISignals::SignalSharedPtr& pSignal)
 {
 	CRY_ASSERT(!pSignal->GetSignalDescription().IsNone());
 
-	if (gAIEnv.CVars.LogSignals)
+	if (gAIEnv.CVars.LegacyLogSignals)
 		gEnv->pLog->Log("OnAIHandlerSentSignal: '%s' [%s].", pSignal->GetSignalDescription().GetName(), GetName());
 
 	if (IsRunningBehaviorTree())
@@ -1942,7 +1954,7 @@ void CAIActor::HandleVisualStimulus(SAIEVENT* pAIEvent)
 
 	const float fGlobalVisualPerceptionScale = gEnv->pAISystem->GetGlobalVisualScale(this);
 	const float fVisualPerceptionScale = m_Parameters.m_PerceptionParams.perceptionScale.visual * fGlobalVisualPerceptionScale;
-	if (gAIEnv.CVars.IgnoreVisualStimulus != 0 || m_Parameters.m_bAiIgnoreFgNode || fVisualPerceptionScale <= 0.0f)
+	if (gAIEnv.CVars.legacyPerception.IgnoreVisualStimulus != 0 || m_Parameters.m_bAiIgnoreFgNode || fVisualPerceptionScale <= 0.0f)
 		return;
 
 	if (gAIEnv.pTargetTrackManager->IsEnabled())
@@ -1984,7 +1996,7 @@ void CAIActor::HandleSoundEvent(SAIEVENT* pAIEvent)
 
 	const float fGlobalAudioPerceptionScale = gEnv->pAISystem->GetGlobalAudioScale(this);
 	const float fAudioPerceptionScale = m_Parameters.m_PerceptionParams.perceptionScale.audio * fGlobalAudioPerceptionScale;
-	if (gAIEnv.CVars.IgnoreSoundStimulus != 0 || m_Parameters.m_bAiIgnoreFgNode || fAudioPerceptionScale <= 0.0f)
+	if (gAIEnv.CVars.legacyPerception.IgnoreSoundStimulus != 0 || m_Parameters.m_bAiIgnoreFgNode || fAudioPerceptionScale <= 0.0f)
 		return;
 
 	if (gAIEnv.pTargetTrackManager->IsEnabled())
@@ -2026,7 +2038,7 @@ void CAIActor::HandleBulletRain(SAIEVENT* pAIEvent)
 {
 	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
-	if (gAIEnv.CVars.IgnoreBulletRainStimulus || m_Parameters.m_bAiIgnoreFgNode)
+	if (gAIEnv.CVars.legacyPerception.IgnoreBulletRainStimulus || m_Parameters.m_bAiIgnoreFgNode)
 		return;
 
 	AISignals::IAISignalExtraData* pData = GetAISystem()->CreateSignalExtraData();
@@ -2035,7 +2047,7 @@ void CAIActor::HandleBulletRain(SAIEVENT* pAIEvent)
 	pData->nID = pAIEvent->sourceId;
 	pData->fValue = pAIEvent->fThreat; // pressureMultiplier
 
-	SetSignal(GetAISystem()->GetSignalManager()->CreateSignal(AISIGNAL_INCLUDE_DISABLED, GetAISystem()->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnBulletRain(),GetAIObjectID(), pData));
+	SetSignal(GetAISystem()->GetSignalManager()->CreateSignal(AISIGNAL_INCLUDE_DISABLED, GetAISystem()->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnBulletRain(), GetEntityID(), pData));
 
 	if (gAIEnv.pTargetTrackManager->IsEnabled())
 		gAIEnv.pTargetTrackManager->HandleStimulusFromAIEvent(GetAIObjectID(), pAIEvent, TargetTrackHelpers::eEST_BulletRain);

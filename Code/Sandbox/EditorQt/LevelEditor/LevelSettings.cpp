@@ -3,21 +3,24 @@
 #include <StdAfx.h>
 #include "LevelEditor/LevelSettings.h"
 
+#include "CryEditDoc.h"
+#include "EnvironmentPresetsWidget.h"
+#include "FileDialogs/SystemFileDialog.h"
+#include "GameEngine.h"
+#include "Mission.h"
+#include "QT/QtMainFrame.h"
+#include "RecursionLoopGuard.h"
+
+#include <Commands/QCommandAction.h>
+#include <CrySerialization/IArchiveHost.h>
+#include <IUndoObject.h>
+#include <QtUtil.h>
+#include <Serialization/QPropertyTree/QPropertyTree.h>
+#include <Util/MFCUtil.h>
+
 #include <QMenuBar>
 #include <QLayout>
 #include <QDir>
-
-#include <Serialization/QPropertyTree/QPropertyTree.h>
-#include <QtUtil.h>
-#include <CrySerialization/IArchiveHost.h>
-#include "GameEngine.h"
-#include "Mission.h"
-#include "FileDialogs/SystemFileDialog.h"
-#include "QT/QtMainFrame.h"
-#include "RecursionLoopGuard.h"
-#include "CryEditDoc.h"
-#include "Util/MFCUtil.h"
-#include <IUndoObject.h>
 
 namespace Private_LevelSettings
 {
@@ -234,110 +237,154 @@ void CreateItems(XmlNodeRef& node, CVarBlockPtr& outBlockPtr, IVariable::OnSetCa
 	}
 }
 
-REGISTER_VIEWPANE_FACTORY_AND_MENU(CLevelSettingsEditor, "Level Settings", "Tools", true, "Level Editor")
+class CSettingsWidget : public QWidget, public ISystemEventListener
+{
+public:
+	CSettingsWidget(QWidget* pParent = nullptr)
+		: QWidget(pParent)
+	{
+		m_pPropertyTree = new QPropertyTree(this);
 
-// Level Settings commands
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PyLoadLevelSettings, general, import_level_settings,
-                                     "Loads and sets the global level settings.",
-                                     "general.import_level_settings()");
-REGISTER_EDITOR_COMMAND_TEXT(general, import_level_settings, "Import Settings...");
+		connect(m_pPropertyTree, &QPropertyTree::signalAboutToSerialize, this, &CSettingsWidget::BeforeSerialization);
+		connect(m_pPropertyTree, &QPropertyTree::signalSerialized, this, &CSettingsWidget::AfterSerialization);
+		connect(m_pPropertyTree, &QPropertyTree::signalBeginUndo, this, &CSettingsWidget::OnBeginUndo);
+		connect(m_pPropertyTree, &QPropertyTree::signalEndUndo, this, &CSettingsWidget::OnEndUndo);
 
-REGISTER_PYTHON_COMMAND_WITH_EXAMPLE(PySaveLevelSettings, general, export_level_settings,
-                                     "Saves the global level settings.",
-                                     "general.export_level_settings()");
-REGISTER_EDITOR_COMMAND_TEXT(general, export_level_settings, "Export Settings...");
+		m_pPropertyTree->setExpandLevels(2);
+		m_pPropertyTree->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
+		ReloadFromTemplate();
+		
+		setLayout(new QVBoxLayout());
+		layout()->setContentsMargins(0, 0, 0, 0);
+		layout()->addWidget(m_pPropertyTree);
 
+		if (GetISystem()->GetISystemEventDispatcher())
+			GetISystem()->GetISystemEventDispatcher()->RegisterListener(this, "CLevelSettingsEditor");
+	}
+
+	virtual ~CSettingsWidget()
+	{
+		if (GetISystem()->GetISystemEventDispatcher())
+			GetISystem()->GetISystemEventDispatcher()->RemoveListener(this);
+	}
+
+	void OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam)
+	{
+		if (ESYSTEM_EVENT_ENVIRONMENT_SETTINGS_CHANGED == event)
+		{
+			ReloadFromTemplate();
+		}
+	}
+
+private:
+	void OnBeginUndo()
+	{
+		GetIEditor()->GetIUndoManager()->Begin();
+		GetIEditor()->GetIUndoManager()->RecordUndo(new Private_LevelSettings::CUndoLevelSettings());
+	}
+
+	void OnEndUndo(bool acceptUndo)
+	{
+		QString name(m_pPropertyTree->selectedRow()->label());
+		name = "Modify " + name;
+		if (acceptUndo)
+		{
+			GetIEditor()->GetIUndoManager()->Accept(name.toStdString().c_str());
+		}
+		else
+		{
+			GetIEditor()->GetIUndoManager()->Cancel();
+		}
+	}
+
+	void BeforeSerialization(Serialization::IArchive& ar)
+	{
+		m_bIgnoreEvent = true;
+	}
+
+	void AfterSerialization(Serialization::IArchive& ar)
+	{
+		m_bIgnoreEvent = false;
+	}
+
+	void ReloadFromTemplate()
+	{
+		if (!m_pPropertyTree)
+			return;
+
+		RECURSION_GUARD(m_bIgnoreEvent)
+
+		m_pPropertyTree->detach();
+
+		if (!GetIEditorImpl()->GetDocument())
+			return;
+
+		XmlNodeRef node = GetIEditorImpl()->GetDocument()->GetEnvironmentTemplate();
+		Private_LevelSettings::CreateItems(node, m_varBlock, functor(*GetIEditorImpl()->GetDocument(), &CCryEditDoc::OnEnvironmentPropertyChanged));
+		Serialization::SStructs structs;
+		structs.push_back(Serialization::SStruct(*m_varBlock));
+		m_pPropertyTree->attach(structs);
+	}
+
+private:
+	CVarBlockPtr   m_varBlock;
+	QPropertyTree* m_pPropertyTree = nullptr;
+	bool           m_bIgnoreEvent = false;
 };
+
+REGISTER_VIEWPANE_FACTORY_AND_MENU(CLevelSettingsEditor, "Level Settings", "Tools", true, "Level Editor")
+}
 
 CLevelSettingsEditor::CLevelSettingsEditor(QWidget* parent)
 	: CDockableEditor(parent)
-	, m_pPropertyTree(nullptr)
-	, m_bIgnoreEvent(false)
 {
 	setAttribute(Qt::WA_DeleteOnClose);
-	InitMenu();
-	m_pPropertyTree = new QPropertyTree(this);
-
-	connect(m_pPropertyTree, &QPropertyTree::signalAboutToSerialize, this, &CLevelSettingsEditor::BeforeSerialization);
-	connect(m_pPropertyTree, &QPropertyTree::signalSerialized, this, &CLevelSettingsEditor::AfterSerialization);
-	connect(m_pPropertyTree, &QPropertyTree::signalBeginUndo, this, &CLevelSettingsEditor::OnBeginUndo);
-	connect(m_pPropertyTree, &QPropertyTree::signalEndUndo, this, &CLevelSettingsEditor::OnEndUndo);
-
-	m_pPropertyTree->setExpandLevels(2);
-	m_pPropertyTree->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
-	ReloadFromTemplate();
-	layout()->addWidget(m_pPropertyTree);
-
-	if (GetISystem()->GetISystemEventDispatcher())
-		GetISystem()->GetISystemEventDispatcher()->RegisterListener(this, "CLevelSettingsEditor");
 }
 
-CLevelSettingsEditor::~CLevelSettingsEditor()
+void CLevelSettingsEditor::Initialize()
 {
-	if (GetISystem()->GetISystemEventDispatcher())
-		GetISystem()->GetISystemEventDispatcher()->RemoveListener(this);
+	CDockableEditor::Initialize();
+
+	RegisterDockingWidgets();
+	RegisterActions();
+	CreateMenu();
 }
 
-void CLevelSettingsEditor::InitMenu()
+bool CLevelSettingsEditor::OnImport()
+{
+	Private_LevelSettings::PyLoadLevelSettings();
+	return true;
+}
+
+void CLevelSettingsEditor::RegisterActions()
+{
+	SetActionText("general.import", "Import Settings...");
+
+	RegisterAction("general.export", &Private_LevelSettings::PySaveLevelSettings);
+	SetActionText("general.export", "Export Settings...");
+}
+
+void CLevelSettingsEditor::CreateMenu()
 {
 	AddToMenu(CEditor::MenuItems::FileMenu);
 
 	auto fileMenu = GetMenu("File");
-	AddToMenu(fileMenu, "general.import_level_settings");
-	AddToMenu(fileMenu, "general.export_level_settings");
+	AddToMenu(fileMenu, "general.import");
+	AddToMenu(fileMenu, "general.export");
 }
 
-void CLevelSettingsEditor::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam)
+void CLevelSettingsEditor::RegisterDockingWidgets()
 {
-	if (ESYSTEM_EVENT_ENVIRONMENT_SETTINGS_CHANGED == event)
-		ReloadFromTemplate();
+	using namespace Private_LevelSettings;
+
+	EnableDockingSystem();
+	RegisterDockableWidget("Settings", [] { return new CSettingsWidget(); }, true, false);
+	RegisterDockableWidget("Environment Presets", [] { return new CEnvironmentPresetsWidget(); }, true, false);
 }
 
-void CLevelSettingsEditor::OnBeginUndo()
+void CLevelSettingsEditor::CreateDefaultLayout(CDockableContainer* pSender)
 {
-	GetIEditor()->GetIUndoManager()->Begin();
-	GetIEditor()->GetIUndoManager()->RecordUndo(new Private_LevelSettings::CUndoLevelSettings());
-}
-
-void CLevelSettingsEditor::OnEndUndo(bool acceptUndo)
-{
-	QString name(m_pPropertyTree->selectedRow()->label());
-	name = "Modify " + name;
-	if (acceptUndo)
-	{
-		GetIEditor()->GetIUndoManager()->Accept(name.toStdString().c_str());
-	}
-	else
-	{
-		GetIEditor()->GetIUndoManager()->Cancel();
-	}
-}
-
-void CLevelSettingsEditor::BeforeSerialization(Serialization::IArchive& ar)
-{
-	m_bIgnoreEvent = true;
-}
-
-void CLevelSettingsEditor::AfterSerialization(Serialization::IArchive& ar)
-{
-	m_bIgnoreEvent = false;
-}
-
-void CLevelSettingsEditor::ReloadFromTemplate()
-{
-	if (!m_pPropertyTree)
-		return;
-
-	RECURSION_GUARD(m_bIgnoreEvent)
-
-	m_pPropertyTree->detach();
-
-	if (!GetIEditorImpl()->GetDocument())
-		return;
-
-	XmlNodeRef node = GetIEditorImpl()->GetDocument()->GetEnvironmentTemplate();
-	Private_LevelSettings::CreateItems(node, m_varBlock, functor(*GetIEditorImpl()->GetDocument(), &CCryEditDoc::OnEnvironmentPropertyChanged));
-	Serialization::SStructs structs;
-	structs.push_back(Serialization::SStruct(*m_varBlock));
-	m_pPropertyTree->attach(structs);
+	CRY_ASSERT(pSender);
+	pSender->SpawnWidget("Settings");
+	pSender->SpawnWidget("Environment Presets");
 }

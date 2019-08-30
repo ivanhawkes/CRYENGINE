@@ -7,7 +7,6 @@
 
 #include "PakVars.h"
 #include "Timer.h"
-#include "FrameProfileSystem.h"
 #include <CrySystem/IWindowMessageHandler.h>
 #include <CrySystem/CryVersion.h>
 #include <CryMath/Cry_Camera.h>
@@ -141,7 +140,6 @@ struct SSystemCVars
 	int    sys_entitysystem;
 	int    sys_trackview;
 	int    sys_livecreate;
-	int    sys_vtune;
 	float  sys_update_profile_time;
 	int    sys_limit_phys_thread_count;
 	int    sys_usePlatformSavingAPI;
@@ -156,7 +154,6 @@ struct SSystemCVars
 	int sys_simple_http_base_port;
 #endif
 
-	int     sys_log_asserts;
 	int     sys_error_debugbreak;
 
 	int     sys_enable_crash_handler;
@@ -213,20 +210,6 @@ struct SCryEngineStatsGlobalMemInfo
 	std::vector<SCryEngineStatsModuleInfo> modules;
 };
 
-struct CProfilingSystem : public IProfilingSystem
-{
-	//////////////////////////////////////////////////////////////////////////
-	// VTune Profiling interface.
-
-	// Summary:
-	//	 Resumes vtune data collection.
-	virtual void VTuneResume();
-	// Summary:
-	//	 Pauses vtune data collection.
-	virtual void VTunePause();
-	//////////////////////////////////////////////////////////////////////////
-};
-
 IThreadManager* CreateThreadManager();
 
 /*
@@ -257,19 +240,22 @@ public:
 	///////////////////////////////////////////////////////////////////////////
 	//! @name ISystem implementation
 	//@{
-	virtual SSystemGlobalEnvironment*   GetGlobalEnvironment() override { return &m_env; }
+	virtual SSystemGlobalEnvironment* GetGlobalEnvironment() override { return &m_env; }
 
-	const char*                         GetRootFolder() const override  { return m_root.c_str(); }
+	const char*                       GetRootFolder() const override  { return m_root.c_str(); }
 
-	virtual bool                        DoFrame(const SDisplayContextKey& displayContextKey = SDisplayContextKey{}, CEnumFlags<ESystemUpdateFlags> updateFlags = CEnumFlags<ESystemUpdateFlags>()) override;
+	virtual bool                      DoFrame(const SDisplayContextKey& displayContextKey = SDisplayContextKey{},
+	                                          const SGraphicsPipelineKey& graphicsPipelineKey = SGraphicsPipelineKey::BaseGraphicsPipelineKey,
+	                                          CEnumFlags<ESystemUpdateFlags> updateFlags = CEnumFlags<ESystemUpdateFlags>()) override;
+
 	virtual IManualFrameStepController* GetManualFrameStepController() const override;
 
 	virtual bool                        UpdateLoadtime() override;
 
 	//! Begin rendering frame.
-	virtual void RenderBegin(const SDisplayContextKey& displayContextKey) override;
+	virtual void RenderBegin(const SDisplayContextKey& displayContextKey, const SGraphicsPipelineKey& graphicsPipelineKey) override;
 	//! Render subsystems.
-	void         Render();
+	void         Render(const SGraphicsPipelineKey& graphicsPipelineKey);
 	//! End rendering frame and swap back buffer.
 	virtual void RenderEnd(bool bRenderStats = true) override;
 
@@ -342,7 +328,8 @@ public:
 	IValidator*                  GetIValidator() override { return m_pValidator; }
 	IPhysicsDebugRenderer*       GetIPhysicsDebugRenderer() override;
 	IPhysRenderer*               GetIPhysRenderer() override;
-	IFrameProfileSystem*         GetIProfileSystem() override         { return &m_FrameProfileSystem; }
+	ICryProfilingSystem*         GetProfilingSystem() override;
+	ILegacyProfiler*             GetLegacyProfilerInterface() override;
 	virtual IDiskProfiler*       GetIDiskProfiler() override          { return m_pDiskProfiler; }
 	INameTable*                  GetINameTable() override             { return m_env.pNameTable; }
 	IBudgetingSystem*            GetIBudgetingSystem() override       { return(m_pIBudgetingSystem); }
@@ -362,7 +349,6 @@ public:
 	ITextModeConsole*            GetITextModeConsole() override;
 	IFileChangeMonitor*          GetIFileChangeMonitor() override   { return m_env.pFileChangeMonitor; }
 	INotificationNetwork*        GetINotificationNetwork() override { return m_pNotificationNetwork; }
-	IProfilingSystem*            GetIProfilingSystem() override     { return &m_ProfilingSystem; }
 	IPlatformOS*                 GetPlatformOS() override           { return m_pPlatformOS.get(); }
 	ICryPerfHUD*                 GetPerfHUD() override              { return m_pPerfHUD; }
 	minigui::IMiniGUI*           GetMiniGUI() override              { return m_pMiniGUI; }
@@ -423,6 +409,9 @@ public:
 	void           SetIProcess(IProcess* process) override;
 	IProcess*      GetIProcess() override { return m_pProcess; }
 	//@}
+
+	void StartBootProfilerSession(const char* szName) override;
+	void EndBootProfilerSession() override;
 
 	void         SleepIfNeeded();
 
@@ -591,6 +580,7 @@ private:
 	void        RenderJobStats();
 	void        RenderMemStats();
 	void        RenderThreadInfo();
+	void        RenderMemoryInfo();
 	void        FreeLib(WIN_HMODULE hLibModule);
 	void        QueryVersionInfo();
 	void        LogVersion();
@@ -804,6 +794,8 @@ private: // ------------------------------------------------------
 	ICVar* m_rDriver;
 	ICVar* m_pPhysicsLibrary;
 	ICVar* m_rDisplayInfo;
+	ICVar* m_rDisplayInfoTargetPolygons;
+	ICVar* m_rDisplayInfoTargetDrawCalls;
 	ICVar* m_rDisplayInfoTargetFPS;
 	ICVar* m_rOverscanBordersDrawDebugView;
 	ICVar* m_sysNoUpdate;
@@ -812,6 +804,8 @@ private: // ------------------------------------------------------
 	ICVar* m_cvMemStats;
 	ICVar* m_cvMemStatsThreshold;
 	ICVar* m_cvMemStatsMaxDepth;
+	int profile_meminfo;
+	bool m_logMemoryInfo;
 	ICVar* m_sysKeyboard;
 	ICVar* m_sysWarnings;                   //!< might be 0, "sys_warnings" - Treat warning as errors.
 	ICVar* m_cvSSInfo;                      //!< might be 0, "sys_SSInfo" 0/1 - get file sourcesafe info
@@ -857,14 +851,12 @@ private: // ------------------------------------------------------
 
 	CRY_HWND m_hWnd = nullptr;
 	CRY_HWND m_hWndActive = nullptr;
-	bool m_throttleFPS = false;
+	bool     m_throttleFPS = false;
 
 	// this is the memory statistics that is retained in memory between frames
 	// in which it's not gathered
 	CrySizerStats*               m_pMemStats;
 	CrySizerImpl*                m_pSizer;
-
-	CFrameProfileSystem          m_FrameProfileSystem;
 
 	IDiskProfiler*               m_pDiskProfiler;
 
@@ -890,7 +882,9 @@ private: // ------------------------------------------------------
 
 	std::unique_ptr<CServerThrottle> m_pServerThrottle;
 
-	CProfilingSystem                 m_ProfilingSystem;
+	class CCryProfilingSystemImpl*   m_pProfilingSystem;
+	class CCryProfilingSystem*       m_pLegacyProfiler;
+	class CProfilingRenderer*        m_pProfileRenderer;
 	sUpdateTimes                     m_UpdateTimes[NUM_UPDATE_TIMES];
 	uint32                           m_UpdateTimesIdx;
 
@@ -911,13 +905,7 @@ private: // ------------------------------------------------------
 public:
 	//! Pointer to the download manager
 	CDownloadManager* m_pDownloadManager;
-
-#ifdef USE_FRAME_PROFILER
-	void SetFrameProfiler(bool on, bool display, char* prefix) override { m_FrameProfileSystem.SetProfiling(on, display, prefix, this); }
-#else
-	void SetFrameProfiler(bool on, bool display, char* prefix) override {}
-#endif
-
+	
 	//////////////////////////////////////////////////////////////////////////
 	// File version.
 	//////////////////////////////////////////////////////////////////////////
@@ -940,13 +928,6 @@ public:
 	void                        UpdateMovieSystem(const int updateFlags, const float fFrameTime, const bool bPreUpdate);
 
 	//////////////////////////////////////////////////////////////////////////
-	virtual CBootProfilerRecord* StartBootSectionProfiler(const char* name, const char* args, EProfileDescription type) override;
-	virtual void                 StopBootSectionProfiler(CBootProfilerRecord* record) override;
-	virtual void                 StartBootProfilerSession(const char* szName) override;
-	virtual void                 StopBootProfilerSession(const char* szName) override;
-	virtual void                 OnFrameStart(const char* szName) override;
-	virtual void                 OnFrameEnd() override;
-	//////////////////////////////////////////////////////////////////////////
 	// CryAssert and error related.
 	virtual bool RegisterErrorObserver(IErrorObserver* errorObserver) override;
 	bool         UnregisterErrorObserver(IErrorObserver* errorObserver) override;
@@ -955,12 +936,6 @@ public:
 
 #if defined(USE_CRY_ASSERT)
 	virtual void OnAssert(const char* condition, const char* message, const char* fileName, unsigned int fileLineNumber) override;
-
-	virtual bool IsAssertDialogVisible() const override;
-	virtual bool AreAssertsEnabledForModule(uint32 moduleId) override;
-	virtual void DisableAssertionsForModule(uint32 moduleId) override;
-
-	virtual void SetAssertVisible(bool bAssertVisble) override;
 #endif
 
 	virtual void ClearErrorMessages() override
@@ -1030,12 +1005,6 @@ protected: // -------------------------------------------------------------
 
 	std::unordered_map<uint32, bool> m_mapWarningOnceAlreadyPrinted;
 	CryMutex                         m_mapWarningOnceMutex;
-
-#if defined(USE_CRY_ASSERT)
-	bool                   m_isAsserting = false;
-	// Used to check if CryAssert is enabled for a specific module
-	std::bitset<eCryM_Num> m_disabledAssertModules;
-#endif
 
 	friend struct SDefaultValidator;
 	friend struct SCryEngineFoldersLoader;

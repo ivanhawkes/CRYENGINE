@@ -4,6 +4,10 @@
 #include "EventInstance.h"
 #include "Event.h"
 
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
+	#include <CrySystem/ITimer.h>
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
+
 #include <SDL_mixer.h>
 
 namespace CryAudio
@@ -18,7 +22,7 @@ void CEventInstance::Stop()
 	// need to make a copy because the callback
 	// registered with Mix_ChannelFinished can edit the list
 	ChannelList const channels = m_channels;
-	int const fadeOutTime = m_pEvent->GetFadeOutTime();
+	int const fadeOutTime = m_event.GetFadeOutTime();
 
 	for (int const channel : channels)
 	{
@@ -28,6 +32,14 @@ void CEventInstance::Stop()
 		}
 		else
 		{
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
+			if (!m_isFadingOut)
+			{
+				m_isFadingOut = true;
+				m_timeFadeOutStarted = gEnv->pTimer->GetAsyncTime().GetSeconds();
+			}
+#endif      // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
+
 			Mix_FadeOutChannel(channel, fadeOutTime);
 		}
 	}

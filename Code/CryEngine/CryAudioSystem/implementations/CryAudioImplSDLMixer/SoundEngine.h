@@ -8,8 +8,6 @@
 
 namespace CryAudio
 {
-class CStandaloneFile;
-
 namespace Impl
 {
 namespace SDL_mixer
@@ -18,13 +16,10 @@ static string s_localizedAssetsPath = "";
 
 class CEventInstance;
 class CObject;
-class CStandaloneFile;
 class CEvent;
 
 namespace SoundEngine
 {
-using FnStandaloneFileCallback = void (*)(CryAudio::CStandaloneFile&, char const*);
-
 // Global events
 bool Init();
 void Release();
@@ -44,11 +39,7 @@ const SampleId LoadSampleFromMemory(void* pMemory, const size_t size, const stri
 void           UnloadSample(const SampleId id);
 
 // Events
-ETriggerResult ExecuteEvent(CObject* const pObject, CEvent const* const pEvent, TriggerInstanceId const triggerInstanceId);
-ERequestStatus PlayFile(CObject* const pObject, CStandaloneFile* const pStandaloneFile);
-
-// Callbacks
-void RegisterStandaloneFileFinishedCallback(FnStandaloneFileCallback pCallbackFunction);
+ETriggerResult ExecuteEvent(CObject* const pObject, CEvent* const pEvent, TriggerInstanceId const triggerInstanceId);
 } // namespace SoundEngine
 } // namespace SDL_mixer
 } // namespace Impl

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <PoolObject.h>
+#include <CryAudio/IAudioInterfacesCommonData.h>
 #include <atomic>
 #include <cri_atom_ex.h>
 
@@ -12,10 +13,8 @@ namespace Impl
 {
 namespace Adx2
 {
-#if defined(CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE)
-class CBaseObject;
+class CObject;
 class CCue;
-#endif  // CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE
 
 enum class ECueInstanceFlags : EnumFlagsType
 {
@@ -25,6 +24,9 @@ enum class ECueInstanceFlags : EnumFlagsType
 	HasAbsoluteVelocity = BIT(2),
 	HasDoppler          = BIT(3),
 	ToBeRemoved         = BIT(4),
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
+	IsStopping          = BIT(5),
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
 };
 CRY_CREATE_ENUM_FLAG_OPERATORS(ECueInstanceFlags);
 
@@ -38,67 +40,65 @@ public:
 	CCueInstance& operator=(CCueInstance const&) = delete;
 	CCueInstance& operator=(CCueInstance&&) = delete;
 
-#if defined(CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
 	explicit CCueInstance(
 		TriggerInstanceId const triggerInstanceId,
-		uint32 const cueId,
 		CriAtomExPlaybackId const playbackId,
-		CCue const* const pCue,
-		CBaseObject const* const pBaseObject)
+		CCue& cue,
+		CObject const& object)
 		: m_triggerInstanceId(triggerInstanceId)
-		, m_cueId(cueId)
 		, m_playbackId(playbackId)
-		, m_pCue(pCue)
-		, m_flags(ECueInstanceFlags::IsVirtual) // Voices always start in virtual state.
-		, m_pBaseObject(pBaseObject)
+		, m_cue(cue)
+		, m_flags(ECueInstanceFlags::IsVirtual | ECueInstanceFlags::IsPending) // Voices always start in virtual state.
+		, m_timeFadeOutStarted(0.0f)
+		, m_object(object)
 	{}
 #else
 	explicit CCueInstance(
 		TriggerInstanceId const triggerInstanceId,
-		uint32 const cueId,
 		CriAtomExPlaybackId const playbackId,
-		CCue const* const pCue)
+		CCue& cue)
 		: m_triggerInstanceId(triggerInstanceId)
-		, m_cueId(cueId)
 		, m_playbackId(playbackId)
-		, m_pCue(pCue)
+		, m_cue(cue)
 		, m_flags(ECueInstanceFlags::None)
 	{}
-#endif  // CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
 
 	~CCueInstance() = default;
 
 	TriggerInstanceId   GetTriggerInstanceId() const             { return m_triggerInstanceId; }
 
-	uint32              GetCueId() const                         { return m_cueId; }
+	CCue&               GetCue() const                           { return m_cue; }
 	CriAtomExPlaybackId GetPlaybackId() const                    { return m_playbackId; }
 
 	ECueInstanceFlags   GetFlags() const                         { return m_flags; }
 	void                SetFlag(ECueInstanceFlags const flag)    { m_flags = m_flags | flag; }
 	void                RemoveFlag(ECueInstanceFlags const flag) { m_flags = m_flags & ~flag; }
 
-	bool                PrepareForPlayback();
+	bool                PrepareForPlayback(CObject& object);
 
 	void                Stop();
 	void                Pause();
 	void                Resume();
 
-#if defined(CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE)
-	CBaseObject const* GetObject() const { return m_pBaseObject; }
-	CCue const*        GetCue() const    { return m_pCue; }
-#endif  // CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
+	void           StartFadeOut();
+	float          GetTimeFadeOutStarted() const { return m_timeFadeOutStarted; }
+	CObject const& GetObject() const             { return m_object; }
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
 
 private:
 
 	TriggerInstanceId const        m_triggerInstanceId;
-	uint32 const                   m_cueId;
 	CriAtomExPlaybackId const      m_playbackId;
 	std::atomic<ECueInstanceFlags> m_flags;
-	CCue const* const              m_pCue;
+	CCue&                          m_cue;
 
-#if defined(CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE)
-	CBaseObject const* const m_pBaseObject;
-#endif  // CRY_AUDIO_IMPL_ADX2_USE_PRODUCTION_CODE
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
+	float          m_timeFadeOutStarted;
+	CObject const& m_object;
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
 };
 } // namespace Adx2
 } // namespace Impl

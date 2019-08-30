@@ -274,8 +274,6 @@ enum EKeyId : uint32
 	eKI_XI_ThumbRRight,
 	eKI_XI_TriggerLBtn,
 	eKI_XI_TriggerRBtn,
-	eKI_XI_Connect,    //!< Should be deprecated because all devices can be connected, use eKI_SYS_ConnectDevice instead.
-	eKI_XI_Disconnect, //!< Should be deprecated because all devices can be disconnected, use eKI_SYS_DisconnectDevice instead.
 
 	// Orbis controller.
 	eKI_Orbis_Options = KI_ORBIS_BASE,

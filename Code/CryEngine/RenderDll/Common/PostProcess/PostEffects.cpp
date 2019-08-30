@@ -12,6 +12,7 @@
 #include <Cry3DEngine/I3DEngine.h>
 #include "PostEffects.h"
 #include "PostProcessUtils.h"
+#include "GraphicsPipeline/PostEffects.h"
 
 #include <DriverD3D.h>
 
@@ -289,8 +290,6 @@ bool CUnderwaterGodRays::Preprocess(const SRenderViewInfo& viewInfo)
 	bool bQualityCheck = CPostEffectsMgr::CheckPostProcessQuality(eRQ_Medium, eSQ_Medium);
 	if (!bQualityCheck)
 		return false;
-
-	static ICVar* pVar = iConsole->GetCVar("e_WaterOcean");
 
 	//bool bOceanVolumeVisible = (gEnv->p3DEngine->GetOceanRenderFlags() & OCR_OCEANVOLUME_VISIBLE) != 0;
 
@@ -615,7 +614,7 @@ bool CHudSilhouettes::Preprocess(const SRenderViewInfo& viewInfo)
 			return false;
 		}
 
-		CRenderView *pRenderView = gcpRendD3D->GetGraphicsPipeline().GetCurrentRenderView();
+		CRenderView* pRenderView = m_pCurrentContext->GetRenderView();
 		// no need to proceed
 		float fType = m_pType->GetParam();
 		uint32 nBatchMask = pRenderView->GetBatchFlags(EFSLIST_GENERAL) | pRenderView->GetBatchFlags(EFSLIST_TRANSP_BW) | pRenderView->GetBatchFlags(EFSLIST_TRANSP_AW);
@@ -856,17 +855,6 @@ void CPost3DRenderer::Reset(bool bOnSpecChange)
 	// Let game code fully control its active status, otherwise in some situations
 	// the post effect system will get reset between menus and game and thus this
 	// will get turned off when undesired
-}
-
-bool CPost3DRenderer::HasModelsToRender() const
-{
-	CRenderView* pRenderView = gcpRendD3D->GetGraphicsPipeline().GetCurrentRenderView();
-	const uint32 batchMask = 
-		  pRenderView->GetBatchFlags(EFSLIST_GENERAL)
-		| pRenderView->GetBatchFlags(EFSLIST_DECAL)
-		| pRenderView->GetBatchFlags(EFSLIST_TRANSP_BW)
-		| pRenderView->GetBatchFlags(EFSLIST_TRANSP_AW);
-	return (batchMask & FB_POST_3D_RENDER) ? true : false;
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -155,7 +155,7 @@ void CDatabaseFrameWnd::InitTreeCtrl()
 
 void CDatabaseFrameWnd::ReloadLibs()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	if (!m_pItemManager)
 		return;
 
@@ -167,7 +167,7 @@ void CDatabaseFrameWnd::ReloadLibs()
 		m_LibraryListComboBox.ResetContent();
 		m_LibraryListComboBox.SetDroppedWidth(LIBRARY_CB_WIDTH);
 	}
-	bool bFound = false;
+
 	for (int i = 0; i < m_pItemManager->GetLibraryCount(); i++)
 	{
 		CString library = m_pItemManager->GetLibrary(i)->GetName();
@@ -258,7 +258,7 @@ void CDatabaseFrameWnd::ReloadItems()
 				hRoot = hParentItem;
 		}
 
-		HTREEITEM hNewItem = InsertItemToTree(pItem, hRoot);
+		InsertItemToTree(pItem, hRoot);
 	}
 
 	SortItems(m_sortRecursionType);

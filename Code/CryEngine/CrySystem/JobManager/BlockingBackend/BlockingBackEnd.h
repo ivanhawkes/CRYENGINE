@@ -57,9 +57,13 @@ private:
 	uint32                   m_nRegularWorkerThreads;
 };
 
+bool   IsBlockingWorkerId(uint32 workerId);
+// maps the workerId of a blocking worker to a unique index in [0, GetNumWorkerThreads()[
+uint32 GetIndexFromWorkerId(uint32 workerId);
+
 // the implementation of the PC backend
 // has n-worker threads which use atomic operations to pull from the job queue
-// and uses a semaphore to signal the workers if there is work requiered
+// and uses a semaphore to signal the workers if there is work required
 class CBlockingBackEnd final : public IBackend
 {
 public:
@@ -81,7 +85,7 @@ public:
 	virtual bool KickTempWorker() { return false; }
 	virtual bool StopTempWorker() { return false; }
 
-#if defined(JOBMANAGER_SUPPORT_FRAMEPROFILER)
+#if defined(JOBMANAGER_SUPPORT_STATOSCOPE)
 	JobManager::IWorkerBackEndProfiler* GetBackEndWorkerProfiler() const { return m_pBackEndWorkerProfiler; }
 #endif
 
@@ -98,7 +102,7 @@ private:
 	uint32                   m_nRegularWorkerThreads;
 
 	// members required for profiling jobs in the frame profiler
-#if defined(JOBMANAGER_SUPPORT_FRAMEPROFILER)
+#if defined(JOBMANAGER_SUPPORT_STATOSCOPE)
 	JobManager::IWorkerBackEndProfiler* m_pBackEndWorkerProfiler;
 #endif
 };

@@ -11,6 +11,7 @@
 #include "StdAfx.h"
 #include "PostEffects.h"
 #include <Cry3DEngine/I3DEngine.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 void CParamBool::SetParam(float fParam, bool bForceValue)
 {
@@ -595,7 +596,7 @@ uint32 CPostEffectsMgr::GetCRC(const char* pszName)
 {
 	if (!pszName)
 	{
-		assert(false && "CPostEffectsMgr::GetCRC() invalid string passed");
+		CRY_ASSERT_MESSAGE(false, "CPostEffectsMgr::GetCRC() invalid string passed");
 		return 0;
 	}
 

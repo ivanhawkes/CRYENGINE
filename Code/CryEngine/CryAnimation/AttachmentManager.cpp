@@ -213,6 +213,15 @@ uint32 CAttachmentManager::ParseXMLAttachmentList(CharacterAttachment* parrAttac
 			}
 		}
 
+		if (isPendulum == SimulationParams::PENDULUM_CONE || isPendulum == SimulationParams::PENDULUM_HINGE_PLANE || isPendulum == SimulationParams::PENDULUM_HALF_CONE || isSpring)
+		{
+			attach.ap.SetBlendControlJointName( CCryName(nodeAttach->getAttr("A_BlendControlJointName")) );
+			int iAxis = 0;
+			nodeAttach->getAttr("A_BlendControlJointAxis", iAxis);
+			iAxis = clamp_tpl(iAxis, 0, 2);
+			attach.ap.SetBlendControlAxis( static_cast<SimulationParams::EBlendControlJointAxisToUse>(iAxis) );
+		}
+
 		uint32 IsProjection = 0;
 		nodeAttach->getAttr("P_Projection", IsProjection);
 		if (IsProjection)
@@ -868,7 +877,8 @@ IAttachment* CAttachmentManager::CreateVClothAttachment(const SVClothAttachmentP
 
 	if (isRenderMeshSkinFile && isSimMeshSkinFile)
 	{
-		ISkin* pModelSKIN = g_pCharacterManager->LoadModelSKIN(params.vclothParams.renderBinding.c_str(), params.skinLoadingFlags);
+		const int renderMeshLoadingFlags = params.skinLoadingFlags | CA_CacheSkinDataInCpuMemory;
+		ISkin* pModelSKIN = g_pCharacterManager->LoadModelSKIN(params.vclothParams.renderBinding.c_str(), renderMeshLoadingFlags);
 		if (!pModelSKIN && log)
 		{
 			g_pILog->LogError("CryAnimation[VCloth]: skin-attachment not created: CDF: %s  SKIN: %s", pathName, renderMeshSkin);
@@ -1191,11 +1201,39 @@ int32 CAttachmentManager::RemoveAttachmentByNameCRC(uint32 nameCRC, uint32 loadi
 	return 1;
 };
 
+void CAttachmentManager::sAttachedCharactersCache::Push(CCharInstance* character, IAttachment* attachment)
+{
+	m_attachmentsToIdx[attachment] = m_attachments.size();
+	m_attachments.push_back(attachment);
+	m_characters.push_back(character);
+}
+
+void CAttachmentManager::sAttachedCharactersCache::Clear()
+{
+	m_characters.clear();
+	m_attachments.clear();
+	m_attachmentsToIdx.clear();
+}
+
+void CAttachmentManager::sAttachedCharactersCache::Erase(IAttachment* attachment)
+{
+	if (m_attachmentsToIdx.find(attachment)!=m_attachmentsToIdx.end())
+	{
+		int idx = m_attachmentsToIdx[attachment];
+		m_attachmentsToIdx.erase(attachment);
+		m_attachments.erase(m_attachments.begin() + idx);
+		m_characters.erase(m_characters.begin() + idx);
+	}
+}
+
 void CAttachmentManager::RemoveAttachmentByIndex(uint32 index, uint32 loadingFlags)
 {
 	IAttachment* const pAttachment = GetInterfaceByIndex(index);
 	assert(pAttachment);
 	assert(pAttachment->GetType() == CA_BONE || pAttachment->GetType() == CA_FACE || pAttachment->GetType() == CA_SKIN || pAttachment->GetType() == CA_PROW || pAttachment->GetType() == CA_VCLOTH);
+
+	// Erase also in cache
+	m_attachedCharactersCache.Erase(pAttachment);
 
 	if (pAttachment->GetIAttachmentObject())
 	{
@@ -1511,10 +1549,9 @@ void CAttachmentManager::CreateCommands(Command::CBuffer& buffer)
 
 void CAttachmentManager::RebuildAttachedCharactersCache()
 {
-	if (m_attachedCharactersCache.frameId != g_pCharacterManager->m_nUpdateCounter)
+	if (m_attachedCharactersCache.FrameId() != g_pCharacterManager->m_nUpdateCounter)
 	{
-		m_attachedCharactersCache.attachments.clear();
-		m_attachedCharactersCache.characters.clear();
+		m_attachedCharactersCache.Clear();
 
 		if (m_TypeSortingRequired)
 		{
@@ -1533,8 +1570,7 @@ void CAttachmentManager::RebuildAttachedCharactersCache()
 				{
 					if (CCharInstance* pChildInstance = static_cast<CCharInstance*>(attachmentObject.GetICharacterInstance()))
 					{
-						m_attachedCharactersCache.attachments.push_back(&attachment);
-						m_attachedCharactersCache.characters.push_back(pChildInstance);
+						m_attachedCharactersCache.Push(pChildInstance, &attachment);
 					}
 				}
 
@@ -1547,8 +1583,7 @@ void CAttachmentManager::RebuildAttachedCharactersCache()
 						{
 							if (CCharInstance* pChildInstance = static_cast<CCharInstance*>(pEntity->GetCharacter(i)))
 							{
-								m_attachedCharactersCache.attachments.push_back(&attachment);
-								m_attachedCharactersCache.characters.push_back(pChildInstance);
+								m_attachedCharactersCache.Push(pChildInstance, &attachment);
 							}
 						}
 					}
@@ -1581,14 +1616,14 @@ void CAttachmentManager::RebuildAttachedCharactersCache()
 			registerAttachedCharacters(*pIAttachment);
 		}
 
-		m_attachedCharactersCache.frameId = g_pCharacterManager->m_nUpdateCounter;
+		m_attachedCharactersCache.SetFrameId( g_pCharacterManager->m_nUpdateCounter );
 	}
 }
 
 const std::vector<CCharInstance*>& CAttachmentManager::GetAttachedCharacterInstances()
 {
 	RebuildAttachedCharactersCache();
-	return m_attachedCharactersCache.characters;
+	return m_attachedCharactersCache.Characters();
 }
 
 int CAttachmentManager::GenerateAttachedCharactersContexts()
@@ -1597,11 +1632,11 @@ int CAttachmentManager::GenerateAttachedCharactersContexts()
 
 	int generatedContextsCount = 0;
 
-	assert(m_attachedCharactersCache.attachments.size() == m_attachedCharactersCache.characters.size());
-	for (size_t i = 0, limit = m_attachedCharactersCache.characters.size(); i < limit; ++i)
+	assert(m_attachedCharactersCache.Attachments().size() == m_attachedCharactersCache.Characters().size());
+	for (size_t i = 0, limit = m_attachedCharactersCache.Characters().size(); i < limit; ++i)
 	{
-		IAttachment* pAttachment = m_attachedCharactersCache.attachments[i];
-		CCharInstance* pCharacter = m_attachedCharactersCache.characters[i];
+		IAttachment* pAttachment = m_attachedCharactersCache.Attachment(i);
+		CCharInstance* pCharacter = m_attachedCharactersCache.Characters(i);
 
 		assert(!pCharacter->GetProcessingContext());
 
@@ -1638,7 +1673,7 @@ void CAttachmentManager::UpdateSockets(Skeleton::CPoseData& rPoseData)
 	}
 }
 
-void CAttachmentManager::UpdateAttachedObjects(Skeleton::CPoseData& rPoseData)
+void CAttachmentManager::UpdateAttachedObjects()
 {
 	if (m_TypeSortingRequired)
 	{
@@ -1747,7 +1782,7 @@ void CAttachmentManager::DrawAttachments(SRendParams& rParams, const Matrix34& r
 
 	if (passInfo.IsAuxWindow())
 	{
-		assert(m_pSkelInstance->m_CharEditMode & CA_CharacterTool);
+		assert(m_pSkelInstance->m_CharEditMode & CA_CharacterAuxEditor);
 
 		for (const IAttachment* pSocket : m_arrAttachments)
 		{
@@ -1809,7 +1844,7 @@ void CAttachmentManager::DrawAttachments(SRendParams& rParams, const Matrix34& r
 	}
 #endif
 	{
-		LOADING_TIME_PROFILE_SECTION_NAMED("SkinAttachments");
+		CRY_PROFILE_SECTION(PROFILE_LOADING_ONLY, "SkinAttachments");
 		for (uint32 i = m_sortedRanges[eRange_SkinMesh].begin; i < m_sortedRanges[eRange_SkinMesh].end; i++)
 		{
 			IAttachment* pIAttachment = m_arrAttachments[i];
@@ -1854,7 +1889,7 @@ void CAttachmentManager::DrawAttachments(SRendParams& rParams, const Matrix34& r
 		}
 	}
 	{
-		LOADING_TIME_PROFILE_SECTION_NAMED("VertexClothAttachments");
+		CRY_PROFILE_SECTION(PROFILE_LOADING_ONLY, "VertexClothAttachments");
 		for (uint32 i = m_sortedRanges[eRange_VertexClothOrPendulumRow].begin; i < m_sortedRanges[eRange_VertexClothOrPendulumRow].end; i++)
 		{
 			IAttachment* pIAttachment = m_arrAttachments[i];
@@ -2116,7 +2151,7 @@ void CAttachmentManager::GetMemoryUsage(ICrySizer* pSizer) const
 
 void CAttachmentManager::SortByType()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	m_TypeSortingRequired = 0;
 	CDefaultSkeleton& rDefaultSkeleton = *m_pSkelInstance->m_pDefaultSkeleton;
 	memset(m_sortedRanges, 0, sizeof(m_sortedRanges));
@@ -2264,8 +2299,6 @@ void CAttachmentManager::SortByType()
 				m_numRedirectionWithAttachment++;
 			if (pb->m_Simulation.m_arrChildren.size())
 				continue;
-			pb->m_Simulation.m_nAnimOverrideJoint =
-			  rDefaultSkeleton.GetJointIDByName("all_blendWeightPendulum");
 			int32 parentid = pb->m_nJointID;
 			if (parentid < 0)
 				continue;
@@ -2386,8 +2419,8 @@ void CAttachmentManager::ProcessAttachment(IAttachment* pSocket)
 			const auto parentNodeFlags = pParentRenderNode ? pParentRenderNode->GetRndFlags() : IRenderNode::RenderFlagsType();
 			const auto attachmentFlags = pSocket->GetFlags();
 
-			const bool hidden = ((attachmentFlags & FLAGS_ATTACH_VISIBLE) == 0);
-			pRenderNode->Hide(hidden);
+			const bool hidden = (parentNodeFlags & ERF_HIDDEN) || (!(attachmentFlags & FLAGS_ATTACH_VISIBLE));
+			pRenderNode->SetRndFlags(ERF_HIDDEN, hidden);
 
 			const bool nearest = (parentNodeFlags & ERF_FOB_NEAREST) && (!(attachmentFlags & FLAGS_ATTACH_EXCLUDE_FROM_NEAREST));
 			pRenderNode->SetRndFlags(ERF_FOB_NEAREST, nearest);
@@ -2408,10 +2441,21 @@ void CAttachmentManager::ProcessAttachment(IAttachment* pSocket)
 		}
 
 		// Attachments belonging to characters in auxiliary viewports should not be registered in the 3DEngine scene graph.
-		const bool auxiliaryViewport = (m_pSkelInstance->m_CharEditMode & CA_CharacterTool);
+		const bool auxiliaryViewport = (m_pSkelInstance->m_CharEditMode & CA_CharacterAuxEditor);
 		pRenderNode->SetRndFlags(ERF_NO_3DENGINE_REGISTRATION, auxiliaryViewport);
 
-		pRenderNode->SetMatrix(Matrix34{ pSocket->GetAttWorldAbsolute() * pSocket->GetAdditionalTransformation() });
+		// This check prevents attachments from being added to the scene graph when the parent character isn't.
+		if (auxiliaryViewport || (m_pSkelInstance->GetParentRenderNode() && m_pSkelInstance->GetParentRenderNode()->GetParent()))
+		{
+			pRenderNode->SetMatrix(Matrix34{ pSocket->GetAttWorldAbsolute() * pSocket->GetAdditionalTransformation() });
+		}
+		else
+		{
+			if (pRenderNode->GetParent())
+			{
+				gEnv->p3DEngine->UnRegisterEntityAsJob(pRenderNode);
+			}
+		}
 	}
 }
 
@@ -2529,6 +2573,13 @@ void* CAttachmentManager::CModificationCommandBuffer::Alloc(size_t size, size_t 
 	// and adjust to actual padding afterwards
 	m_memory.resize(m_memory.size() - align + padding);
 	m_commandOffsets.push_back(currentOffset + padding);
+#ifndef _RELEASE
+	if (m_memory.size() > Console::GetInst().ca_debug_attachmentManager_maxUsedMemSize)
+		Console::GetInst().ca_debug_attachmentManager_maxUsedMemSize = m_memory.size();
+
+	if (m_commandOffsets.size() > Console::GetInst().ca_debug_attachmentManager_maxUsedOffsetSize)
+		Console::GetInst().ca_debug_attachmentManager_maxUsedOffsetSize = m_commandOffsets.size();
+#endif
 	return &m_memory[m_commandOffsets[m_commandOffsets.size() - 1]];
 }
 
@@ -2536,8 +2587,8 @@ void CAttachmentManager::CModificationCommandBuffer::Clear()
 {
 	m_memory.resize(0);
 	m_commandOffsets.resize(0);
-	m_memory.reserve(kMaxMemory);
-	m_commandOffsets.reserve(kMaxOffsets);
+	m_memory.reserve(Console::GetInst().ca_MinAttachmentMemorySize);
+	m_commandOffsets.reserve(Console::GetInst().ca_MinAttachmentOffsetSize);
 }
 
 CAttachmentManager::CModificationCommandBuffer::~CModificationCommandBuffer()
@@ -2617,7 +2668,7 @@ void CAttachmentManager::SwapAttachmentObject(SAttachmentBase* pAttachment, IAtt
 			m_pAttachment->Immediate_SwapBinding(m_pNewAttachment);
 		}
 	private:
-		IAttachment* m_pNewAttachment;
+		_smart_ptr<IAttachment> m_pNewAttachment;
 	};
 	CMD_BUF_PUSH_COMMAND(m_modificationCommandBuffer, CSwapAttachmentObject, pAttachment, pNewAttachment);
 }

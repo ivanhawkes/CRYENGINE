@@ -12,6 +12,7 @@
 #include "StdAfx.h"
 #include <random>
 #include <CryRenderer/IRenderer.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 #if defined(ENABLE_PROFILING_CODE)
 
@@ -252,7 +253,7 @@ void CStroboscope::UpdateResult()
 					string file, procname;
 					int line;
 					void* baseAddr;
-					bool ok = IDebugCallStack::instance()->GetProcNameForAddr(addr, procname, baseAddr, file, line);
+					IDebugCallStack::instance()->GetProcNameForAddr(addr, procname, baseAddr, file, line);
 					string module = IDebugCallStack::instance()->GetModuleNameForAddr(addr);
 
 					SStrobosopeResult::SSymbolInfo info;

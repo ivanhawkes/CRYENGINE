@@ -3,7 +3,12 @@
 #include "stdafx.h"
 #include "CueInstance.h"
 #include "Common.h"
+#include "Object.h"
 #include "Cue.h"
+
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
+	#include <CrySystem/ITimer.h>
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
 
 namespace CryAudio
 {
@@ -12,14 +17,14 @@ namespace Impl
 namespace Adx2
 {
 //////////////////////////////////////////////////////////////////////////
-bool CCueInstance::PrepareForPlayback()
+bool CCueInstance::PrepareForPlayback(CObject& object)
 {
 	bool isPlaying = false;
 
 	if (criAtomExPlayback_GetStatus(m_playbackId) == CRIATOMEXPLAYBACK_STATUS_PLAYING)
 	{
-		CriAtomExAcbHn const pAcbHandle = m_pCue->GetAcbHandle();
-		auto const cueName = static_cast<CriChar8 const*>(m_pCue->GetName());
+		CriAtomExAcbHn const pAcbHandle = m_cue.GetAcbHandle();
+		auto const cueName = static_cast<CriChar8 const*>(m_cue.GetName());
 		CriAtomExCueInfo cueInfo;
 
 		if (criAtomExAcb_GetCueInfoByName(pAcbHandle, cueName, &cueInfo) == CRI_TRUE)
@@ -35,6 +40,9 @@ bool CCueInstance::PrepareForPlayback()
 			SetFlag(ECueInstanceFlags::HasAbsoluteVelocity);
 		}
 
+		RemoveFlag(ECueInstanceFlags::IsPending);
+		object.UpdateVelocityTracking();
+
 		isPlaying = true;
 	}
 
@@ -44,6 +52,10 @@ bool CCueInstance::PrepareForPlayback()
 //////////////////////////////////////////////////////////////////////////
 void CCueInstance::Stop()
 {
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
+	StartFadeOut();
+#endif  // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
+
 	criAtomExPlayback_Stop(m_playbackId);
 }
 
@@ -58,6 +70,18 @@ void CCueInstance::Resume()
 {
 	criAtomExPlayback_Pause(m_playbackId, CRI_FALSE);
 }
-} // namespace Adx2
-} // namespace Impl
-} // namespace CryAudio
+
+#if defined(CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE)
+//////////////////////////////////////////////////////////////////////////
+void CCueInstance::StartFadeOut()
+{
+	if ((m_cue.GetFadeOutTime() > 0.0f) && ((m_flags& ECueInstanceFlags::IsStopping) == 0))
+	{
+		SetFlag(ECueInstanceFlags::IsStopping);
+		m_timeFadeOutStarted = gEnv->pTimer->GetAsyncTime().GetSeconds();
+	}
+}
+#endif // CRY_AUDIO_IMPL_ADX2_USE_DEBUG_CODE
+}      // namespace Adx2
+}      // namespace Impl
+}      // namespace CryAudio

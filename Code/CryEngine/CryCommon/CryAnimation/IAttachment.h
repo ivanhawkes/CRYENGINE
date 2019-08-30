@@ -1,7 +1,6 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#ifndef IAttachment_h
-#define IAttachment_h
+#pragma once
 
 #include <Cry3DEngine/I3DEngine.h>
 #include <Cry3DEngine/IRenderNode.h>
@@ -231,6 +230,13 @@ struct SimulationParams
 		TRANSLATIONAL_PROJECTION = 0x05  //!< Used to project joints out of proxies.
 	};
 
+	enum EBlendControlJointAxisToUse
+	{
+		eBlendControlJointAxisToUse_X = 0,
+		eBlendControlJointAxisToUse_Y = 1,
+		eBlendControlJointAxisToUse_Z = 2
+	};
+
 	ClampType          m_nClampType;
 	bool               m_useDebugSetup;
 	bool               m_useDebugText;
@@ -258,6 +264,17 @@ struct SimulationParams
 	CCryName           m_strDirTransJoint;
 	DynArray<CCryName> m_arrProxyNames; //!< Test capsules/sphere joint against these colliders.
 
+	int  GetBlendControlJointId() const { return m_blendControlJointId; }
+	void SetBlendControlJointId(int id) { m_blendControlJointId = id; }
+	CCryName const& GetBlendControlJointName() const { return m_sBlendControlJointName; }
+	void SetBlendControlJointName(CCryName const& sName)
+	{
+		m_sBlendControlJointName = sName;
+		m_blendControlJointId = -1;
+	}
+	EBlendControlJointAxisToUse GetBlendControlAxis() const { return m_blendControlAxis; }
+	void SetBlendControlAxis(EBlendControlJointAxisToUse axis) { m_blendControlAxis = axis; }
+
 	SimulationParams()
 	{
 		m_nClampType = DISABLED;
@@ -283,7 +300,15 @@ struct SimulationParams
 		m_vStiffnessTarget.zero();
 		m_vCapsule.set(0, 0);
 		m_nProjectionType = 0;
+
+		m_blendControlJointId = -1;
+		m_blendControlAxis = EBlendControlJointAxisToUse::eBlendControlJointAxisToUse_X;
 	};
+
+protected:
+	CCryName					m_sBlendControlJointName;
+	int							m_blendControlJointId;
+	EBlendControlJointAxisToUse m_blendControlAxis;
 };
 
 struct RowSimulationParams
@@ -610,17 +635,17 @@ struct CCGFAttachment : public IAttachmentObject
 	CCGFAttachment(CCGFAttachment&&) = delete;
 	void operator=(CCGFAttachment&&) = delete;
 
-	virtual EType        GetAttachmentType() override                          { return eAttachment_StatObj; };
+	virtual EType        GetAttachmentType() override                          { return eAttachment_StatObj; }
 	virtual void         ProcessAttachment(IAttachment* pIAttachment) override;
 
-	virtual AABB         GetAABB() const override      { return pObj->GetAABB(); };
-	virtual float        GetRadiusSqr() const override { return sqr(pObj->GetRadius()); };
+	virtual AABB         GetAABB() const override      { return pObj->GetAABB(); }
+	virtual float        GetRadiusSqr() const override { return sqr(pObj->GetRadius()); }
 	virtual IStatObj*    GetIStatObj() const override;
 	virtual IRenderNode* GetIRenderNode() const override;
 	virtual void         Release()  override           { delete this; }
 
 	IMaterial*           GetBaseMaterial(uint32 nLOD) const override;
-	void                 SetReplacementMaterial(IMaterial* pMaterial, uint32 nLOD = 0) override { m_pReplacementMaterial = pMaterial; };
+	void                 SetReplacementMaterial(IMaterial* pMaterial, uint32 nLOD = 0) override { m_pReplacementMaterial = pMaterial; }
 	IMaterial*           GetReplacementMaterial(uint32 nLOD) const override                     { return m_pReplacementMaterial; }
 
 	_smart_ptr<IStatObj>  pObj;
@@ -690,7 +715,7 @@ struct CSKELAttachment : public IAttachmentObject
 	CSKELAttachment(CSKELAttachment&&) = delete;
 	void operator=(CSKELAttachment&&) = delete;
 
-	virtual EType               GetAttachmentType() override { return eAttachment_Skeleton; };
+	virtual EType               GetAttachmentType() override { return eAttachment_Skeleton; }
 	virtual void                ProcessAttachment(IAttachment* pIAttachment)  override;
 	virtual AABB                GetAABB() const override                               { return m_pCharInstance ? m_pCharInstance->GetAABB() : AABB(AABB::RESET);  };
 	virtual float               GetRadiusSqr() const override                          { return m_pCharInstance ? m_pCharInstance->GetRadiusSqr() : 0.0f;    }
@@ -767,12 +792,12 @@ struct CSKINAttachment : public IAttachmentObject
 	CSKINAttachment()
 	{}
 
-	virtual EType    GetAttachmentType() override                          { return eAttachment_SkinMesh; };
-	virtual AABB     GetAABB() const override                              { return AABB(AABB::RESET); };
+	virtual EType    GetAttachmentType() override                          { return eAttachment_SkinMesh; }
+	virtual AABB     GetAABB() const override                              { return AABB(AABB::RESET); }
 	virtual float    GetRadiusSqr() const override                         { return 0.0f; }
 	IAttachmentSkin* GetIAttachmentSkin() const override                   { return m_pIAttachmentSkin; }
 	void             Release() override                                    { delete this; }
-	virtual void     ProcessAttachment(IAttachment* pIAttachment) override {};
+	virtual void     ProcessAttachment(IAttachment* pIAttachment) override {}
 
 	IMaterial*       GetBaseMaterial(uint32 nLOD) const override;
 	void             SetReplacementMaterial(IMaterial* pMaterial, uint32 nLOD) override
@@ -820,7 +845,7 @@ public:
 
 		if (pEntity) pEntity->GetLocalBounds(aabb);
 		return aabb;
-	};
+	}
 
 	virtual float GetRadiusSqr() const override
 	{
@@ -835,7 +860,7 @@ public:
 		{
 			return 0.0f;
 		}
-	};
+	}
 
 	void       Release() override { delete this; }
 
@@ -861,7 +886,7 @@ inline IMaterial* CEntityAttachment::GetBaseMaterial(uint32 nLOD) const
 struct CLightAttachment : public IAttachmentObject
 {
 public:
-	CLightAttachment() : m_pLightSource(0) {};
+	CLightAttachment() : m_pLightSource(0) {}
 	virtual ~CLightAttachment()
 	{
 		if (m_pLightSource)
@@ -869,7 +894,7 @@ public:
 			gEnv->p3DEngine->DeleteRenderNode(m_pLightSource);
 			m_pLightSource = NULL;
 		}
-	};
+	}
 
 	virtual EType GetAttachmentType() override { return eAttachment_Light; }
 
@@ -903,7 +928,7 @@ public:
 	{
 		f32 r = m_pLightSource->GetLightProperties().m_fRadius;
 		return AABB(Vec3(-r, -r, -r), Vec3(+r, +r, +r));
-	};
+	}
 
 	virtual float GetRadiusSqr() const override { return sqr(m_pLightSource->GetLightProperties().m_fRadius); }
 
@@ -928,7 +953,7 @@ struct CEffectAttachment : public IAttachmentObject
 	struct SParameter
 	{
 		SParameter() : name(), value(0) { }
-		SParameter(const string& name, const IParticleAttributes::TValue& value) : name(name), value(value) { }
+		SParameter(const string& name, const IParticleAttributes::TValue& value) : name(name), value(value) {}
 		string name;
 		IParticleAttributes::TValue value;
 	};
@@ -998,7 +1023,7 @@ public:
 		{
 			return AABB(Vec3(-0.1f), Vec3(0.1f));
 		}
-	};
+	}
 
 	virtual float GetRadiusSqr() const override
 	{
@@ -1085,5 +1110,3 @@ struct IProxy
 
 	virtual ~IProxy(){}
 };
-
-#endif // IAttachment_h

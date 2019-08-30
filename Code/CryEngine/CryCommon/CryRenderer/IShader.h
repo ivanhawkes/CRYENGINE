@@ -1,48 +1,35 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*=============================================================================
-   IShader.h : Shaders common interface.
-
-   Revision history:
-* Created by Honich Andrey
-
-   =============================================================================*/
 #pragma once
-
-#include <CryCore/smartptr.h>
-#include <CryRenderer/IFlares.h>
-#include <CryRenderer/VertexFormats.h>
-
-#include <CryMath/Cry_XOptimise.h>
-#include <CryMemory/CrySizer.h>
-
-#include <CryThreading/CryThreadSafeRendererContainer.h>
 
 #include <CryCore/BitMask.h>
 #include <CryCore/Containers/CryArray.h>
+#include <CryCore/smartptr.h>
+#include <CryMath/Cry_XOptimise.h>
+#include <CryMemory/CrySizer.h>
+#include <CryRenderer/IFlares.h>
+#include <CryRenderer/VertexFormats.h>
 
-struct IMaterial;
+class CMaterial;
+class CREMesh;
 class CRenderElement;
 class CRenderObject;
-class CREMesh;
+class CShader;
+
+struct IAnimNode;
+struct IClipVolume;
+struct IMaterial;
 struct IRenderMesh;
 struct IShader;
+struct ITexture;
 struct IVisArea;
-class CShader;
-class CRenderElement;
-class CRenderElement;
-struct STexAnim;
-struct SShaderPass;
-struct SShaderItem;
-class ITexture;
-struct IMaterial;
 struct SParam;
-class CMaterial;
+struct SShaderItem;
+struct SShaderPass;
 struct SShaderSerializeContext;
-struct IAnimNode;
 struct SSkinningData;
 struct SSTexSamplerFX;
-struct IClipVolume;
+struct STexAnim;
 
 namespace JobManager {
 struct SJobState;
@@ -674,22 +661,6 @@ struct SDetailDecalInfo
 	}
 };
 
-struct SSkyInfo
-{
-	ITexture* m_SkyBox[3];
-	float     m_fSkyLayerHeight;
-
-	int       Size()
-	{
-		int nSize = sizeof(SSkyInfo);
-		return nSize;
-	}
-	SSkyInfo()
-	{
-		memset(this, 0, sizeof(SSkyInfo));
-	}
-};
-
 enum EResClassName
 {
 	eRCN_Texture,
@@ -871,7 +842,26 @@ struct SEfTexModificator
 
 	void   Reset()
 	{
-		memset(this, 0, sizeof(*this));
+		// Do not replace with memset to avoid compiler issues (VS2019/GCC8.3)
+		m_TexGenMatrix.SetZero();
+		m_TexMatrix.SetZero();
+		m_Tiling[0] = m_Tiling[1] = m_Tiling[2] = 0.0f;
+		m_Offs[0] = m_Offs[1] = m_Offs[2] = 0.0f;
+		m_RotOscCenter[0] = m_RotOscCenter[1] = m_RotOscCenter[2] = 0.0f;
+		m_OscRate[0] = m_OscRate[1] = 0.0f;
+		m_OscAmplitude[0] = m_OscAmplitude[1] = 0.0f;
+		m_OscPhase[0] = m_OscPhase[1] = 0.0f;
+		m_LastTime[0] = m_LastTime[1] = 0.0f;
+		m_CurrentJitter[0] = m_CurrentJitter[1] = 0.0f;
+		m_RotOscPhase[0] = m_RotOscPhase[1] = m_RotOscPhase[2] = 0;
+		m_Rot[0] = m_Rot[1] = m_Rot[2] = 0;
+		m_RotOscRate[0] = m_RotOscRate[1] = m_RotOscRate[2] = 0;
+		m_RotOscAmplitude[0] = m_RotOscAmplitude[1] = m_RotOscAmplitude[2] = 0;
+		m_eTGType = 0;
+		m_eRotType = 0;
+		m_eMoveType[0] = m_eMoveType[1] = 0;
+		m_bTexGenProjected = false;
+
 		m_Tiling[0] = m_Tiling[1] = 1.0f;
 	}
 	inline SEfTexModificator()
@@ -1343,7 +1333,6 @@ struct IRenderShaderResources
 	virtual int                        GetResFlags() = 0;
 	virtual void                       SetMtlLayerNoDrawFlags(uint8 nFlags) = 0;
 	virtual uint8                      GetMtlLayerNoDrawFlags() const = 0;
-	virtual SSkyInfo*                  GetSkyInfo() = 0;
 	virtual CCamera*                   GetCamera() = 0;
 	virtual void                       SetCamera(CCamera* pCam) = 0;
 	virtual void                       SetMaterialName(const char* szName) = 0;
@@ -1643,7 +1632,6 @@ enum EShaderType
 	eST_HUD3D,
 	eST_PostProcess,
 	eST_HDR,
-	eST_Sky,
 	eST_Particle,
 	eST_Compute,
 	eST_Max  //!< To define array size.
@@ -1799,7 +1787,7 @@ enum ERenderListID : uint8
 #define EF_OFFSETBUMP                    0x8000
 #define EF_NOTFOUND                      0x10000
 #define EF_DEFAULT                       0x20000
-#define EF_SKY                           0x40000
+#define EF_UNUSED_SKY                    0x40000 // TODO: remove if possible
 #define EF_USELIGHTS                     0x80000
 #define EF_ALLOW3DC                      0x100000
 #define EF_FOGSHADER                     0x200000
@@ -1815,7 +1803,7 @@ enum ERenderListID : uint8
 #define EF_REFRACTIVE                    0x40000000
 #define EF_NOPREVIEW                     0x80000000
 
-#define EF_PARSE_MASK                    (EF_SUPPORTSINSTANCING | EF_SKY | EF_HASCULL | EF_USELIGHTS | EF_REFRACTIVE)
+#define EF_PARSE_MASK                    (EF_SUPPORTSINSTANCING | EF_HASCULL | EF_USELIGHTS | EF_REFRACTIVE)
 
 // SShader::Flags2
 // Additional Different useful flags

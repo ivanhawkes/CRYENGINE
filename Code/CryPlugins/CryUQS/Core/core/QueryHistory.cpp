@@ -137,6 +137,7 @@ namespace UQS
 			: m_pOwningHistoryManager(nullptr)
 			, m_queryID(CQueryID::CreateInvalid())
 			, m_parentQueryID(CQueryID::CreateInvalid())
+			, m_priority(0)
 			, m_queryLifetimeStatus(EQueryLifetimeStatus::QueryIsNotCreatedYet)
 			, m_queryCreatedFrame(0)
 			, m_queryDestroyedFrame(0)
@@ -147,11 +148,12 @@ namespace UQS
 			// nothing
 		}
 
-		CHistoricQuery::CHistoricQuery(const CQueryID& queryID, const char* szQuerierName, const CQueryID& parentQueryID, CQueryHistoryManager* pOwningHistoryManager)
+		CHistoricQuery::CHistoricQuery(const CQueryID& queryID, const char* szQuerierName, const CQueryID& parentQueryID, int priority, CQueryHistoryManager* pOwningHistoryManager)
 			: m_pOwningHistoryManager(pOwningHistoryManager)
 			, m_queryID(queryID)
 			, m_parentQueryID(parentQueryID)
 			, m_querierName(szQuerierName)
+			, m_priority(priority)
 			, m_queryLifetimeStatus(EQueryLifetimeStatus::QueryIsNotCreatedYet)
 			, m_queryCreatedFrame(0)
 			, m_queryDestroyedFrame(0)
@@ -172,19 +174,15 @@ namespace UQS
 			return m_debugMessageCollection;
 		}
 
-		void CHistoricQuery::OnQueryCreated(size_t queryCreatedFrame, const CTimeValue& queryCreatedTimestamp)
+		void CHistoricQuery::OnQueryCreated(size_t queryCreatedFrame, const CTimeValue& queryCreatedTimestamp, const char* szQueryBlueprintName)
 		{
 			m_queryCreatedFrame = queryCreatedFrame;
 			m_queryCreatedTimestamp = queryCreatedTimestamp;
+			m_queryBlueprintName = szQueryBlueprintName;
 			m_queryLifetimeStatus = EQueryLifetimeStatus::QueryIsAlive;
 
 			// notify the top-level query-history-manager that the underlying query has just been created/started
 			m_pOwningHistoryManager->UnderlyingQueryJustGotCreated(m_queryID);
-		}
-
-		void CHistoricQuery::OnQueryBlueprintInstantiationStarted(const char* szQueryBlueprintName)
-		{
-			m_queryBlueprintName = szQueryBlueprintName;
 		}
 
 		void CHistoricQuery::OnQueryCanceled(const CQueryBase::SStatistics& finalStatistics)
@@ -782,6 +780,7 @@ namespace UQS
 				m_queryID,
 				m_parentQueryID,
 				m_queryBlueprintName.c_str(),
+				m_priority,
 				numGeneratedItems,
 				numItemsInFinalResultSet,
 				elapsedTime,
@@ -808,6 +807,11 @@ namespace UQS
 			// querier name + query blueprint name
 			{
 				consumer.AddTextLineToCurrentHistoricQuery(color, "'%s' / '%s'", m_finalStatistics.querierName.c_str(), m_finalStatistics.queryBlueprintName.c_str());
+			}
+
+			// priority
+			{
+				consumer.AddTextLineToCurrentHistoricQuery(color, "Priority: %i", m_priority);
 			}
 
 			// exception message
@@ -1118,6 +1122,7 @@ namespace UQS
 			ar(m_parentQueryID, "m_parentQueryID");
 			ar(m_querierName, "m_querierName");
 			ar(m_queryBlueprintName, "m_queryBlueprintName");
+			ar(m_priority, "m_priority");
 			ar(m_queryLifetimeStatus, "m_queryLifetimeStatus");
 			ar(m_queryCreatedTimestamp, "m_queryCreatedTimestamp");
 			ar(m_queryDestroyedTimestamp, "m_queryDestroyedTimestamp");
@@ -1160,7 +1165,7 @@ namespace UQS
 			return *this;
 		}
 
-		HistoricQuerySharedPtr CQueryHistory::AddNewHistoryEntry(const CQueryID& queryID, const char* szQuerierName, const CQueryID& parentQueryID, CQueryHistoryManager* pOwningHistoryManager)
+		HistoricQuerySharedPtr CQueryHistory::AddNewHistoryEntry(const CQueryID& queryID, const char* szQuerierName, const CQueryID& parentQueryID, int priority, CQueryHistoryManager* pOwningHistoryManager)
 		{
 			//
 			// insert the new historic query into the correct position in the array such that children will always reside somewhere after their parent
@@ -1186,7 +1191,7 @@ namespace UQS
 				}
 			}
 
-			HistoricQuerySharedPtr pNewEntry(new CHistoricQuery(queryID, szQuerierName, parentQueryID, pOwningHistoryManager));
+			HistoricQuerySharedPtr pNewEntry(new CHistoricQuery(queryID, szQuerierName, parentQueryID, priority, pOwningHistoryManager));
 			insertPos = m_historyData.historicQueries.insert(insertPos, std::move(pNewEntry));
 			return *insertPos;
 		}
@@ -1285,6 +1290,35 @@ namespace UQS
 			return true;
 		}
 
+		DECLARE_JOB("UQSHistory", TAsyncXmlSerializeJob, CQueryHistory::AsyncXmlSerializeJob);
+		void CQueryHistory::AsyncXmlSerializeJob(string xmlFilePath, SHistoryData snapshot)
+		{
+			if (m_serializationMutex.TryLock())
+			{
+#if !defined(EXCLUDE_NORMAL_LOG)
+				const CTimeValue timestampBefore = gEnv->pTimer->GetAsyncTime();
+#endif
+				Serialization::IArchiveHost* pArchiveHost = gEnv->pSystem->GetArchiveHost();
+				if (pArchiveHost->SaveXmlFile(xmlFilePath.c_str(), Serialization::SStruct(snapshot), "UQSQueryHistory"))
+				{
+#if !defined(EXCLUDE_NORMAL_LOG)
+					const CTimeValue timestampAfter = gEnv->pTimer->GetAsyncTime();
+					const float elapsedSeconds = (timestampAfter - timestampBefore).GetSeconds();
+					CryLogAlways("[UQS] Successfully dumped query history containing %i queries to '%s' in %.2f seconds", (int)snapshot.historicQueries.size(), xmlFilePath.c_str(), elapsedSeconds);
+#endif
+				}
+				else
+				{
+					CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_ERROR, "[UQS] Could not serialize the live query history to xml file '%s' (Serialization::IArchiveHost::SaveXmlFile() failed for some reason)", xmlFilePath.c_str());
+				}
+				m_serializationMutex.Unlock();
+			}
+			else
+			{
+				CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_ERROR, "[UQS] CQueryHistory::StartAsyncXmlSerializeJob: async serializing still in progress - please try again in a few seconds.");
+			}
+		}
+
 		void CQueryHistory::StartAsyncXmlSerializeJob(const char* szXmlFilePath)
 		{
 			string xmlFilePath(szXmlFilePath);
@@ -1301,38 +1335,18 @@ namespace UQS
 				}
 			}
 
-			auto myLambda = [snapshot, xmlFilePath, this]()
-			{
-				if (m_serializationMutex.TryLock())
-				{
-					const CTimeValue timestampBefore = gEnv->pTimer->GetAsyncTime();
-					Serialization::IArchiveHost* pArchiveHost = gEnv->pSystem->GetArchiveHost();
-					if (pArchiveHost->SaveXmlFile(xmlFilePath.c_str(), Serialization::SStruct(snapshot), "UQSQueryHistory"))
-					{
-						const CTimeValue timestampAfter = gEnv->pTimer->GetAsyncTime();
-						const float elapsedSeconds = (timestampAfter - timestampBefore).GetSeconds();
-						CryLogAlways("[UQS] Successfully dumped query history containing %i queries to '%s' in %.2f seconds", (int)snapshot.historicQueries.size(), xmlFilePath.c_str(), elapsedSeconds);
-					}
-					else
-					{
-						CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_ERROR, "[UQS] Could not serialize the live query history to xml file '%s' (Serialization::IArchiveHost::SaveXmlFile() failed for some reason)", xmlFilePath.c_str());
-					}
-					m_serializationMutex.Unlock();
-				}
-				else
-				{
-					CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_ERROR, "[UQS] CQueryHistory::StartAsyncXmlSerializeJob: async serializing still in progress - please try again in a few seconds.");
-				}
-			};
-
-			gEnv->pJobManager->AddLambdaJob("UQSHistory", myLambda, JobManager::eStreamPriority);
+			TAsyncXmlSerializeJob job(xmlFilePath, snapshot);
+			job.SetClassInstance(this);
+			job.Run(JobManager::eStreamPriority);
 			CryLogAlways("[UQS] Just added a new job to serialize the live query history. We'll let you know once that job is finished.");
 		}
 
 		void CQueryHistory::PrintStatisticsToConsole(const char* szMessagePrefix) const
 		{
+#if !defined(EXCLUDE_NORMAL_LOG)
 			size_t totalMemoryUsage = GetRoughMemoryUsage();
 			CryLogAlways("%s%i queries in history, %.2fkb (%.2fmb) memory usage", szMessagePrefix, (int)m_historyData.historicQueries.size(), (float)totalMemoryUsage / 1024.0f, (float)totalMemoryUsage / (1024.0f * 1024.0f));
+#endif
 		}
 
 	}

@@ -356,10 +356,6 @@ void CViewport::OnDragSelectRectangle(CPoint pnt1, CPoint pnt2, bool bNormilizeR
 	box.min.z = -10000;
 	box.max.z = 10000;
 	GetIEditor()->GetLevelEditorSharedState()->SetSelectedRegion(box);
-
-	// Show marker position in the status bar
-	float w = box.max.x - box.min.x;
-	float h = box.max.y - box.min.y;
 }
 
 void CViewport::SetCursor(QCursor* hCursor)
@@ -781,7 +777,7 @@ bool CViewport::MouseCallback(EMouseEvent event, CPoint& point, int flags)
 	// it may call the engine again and cause a deadlock.
 	// Concrete example: CryPhysics called from Trackview causing an assert, and moving the cursor over the viewport
 	// would cause the editor to freeze as it calls CryPhysics again for a raycast while it didn't release the lock.
-	if (gEnv->pSystem->IsAssertDialogVisible())
+	if (Cry::Assert::IsInAssert())
 	{
 		return true;
 	}

@@ -19,6 +19,24 @@ EDITOR_COMMON_API bool MoveFileAllowOverwrite(const char* szOldFilePath, const c
 //! Copies the file at the given file path to the target file path allowing overwriting of the target (does not use CryPak).
 EDITOR_COMMON_API bool CopyFileAllowOverwrite(const char* szSourceFilePath, const char* szDestinationFilePath);
 
+//! Recursively copies the directory from 'source' to 'destination' directory. Existing files in 'destination' will not be overwritten
+EDITOR_COMMON_API bool CopyDirectory(const char* szSource, const char* szDestination);
+
+//! Recursively copies the contents of directory from 'source' to 'destination' directory. Existing files in 'destination' will not be overwritten
+EDITOR_COMMON_API bool CopyDirectoryContents(const char* szSource, const char* szDestination);
+
+//! Non-recursively copies the files in a directory from 'source' to 'destination' directory. Existing files in 'destination' will not be overwritten
+EDITOR_COMMON_API bool CopyFiles(const char* szSource, const char* szDestination);
+
+//! Recursively moves the directory from 'source' to 'destination' directory. Existing files in 'destination' will not be overwritten
+EDITOR_COMMON_API bool MoveDirectory(const char* szSource, const char* szDestination);
+
+//! Recursively moves the contents of directory from 'source' to 'destination' directory. Existing files in 'destination' will not be overwritten
+EDITOR_COMMON_API bool MoveDirectoryContents(const char* szSource, const char* szDestination);
+
+//! Non-recursively moves the files in a directory from 'source' to 'destination' directory. Existing files in 'destination' will not be overwritten
+EDITOR_COMMON_API bool MoveFiles(const char* szSource, const char* szDestination);
+
 //! Removes the directory at the given path (does not use CryPak).
 EDITOR_COMMON_API bool RemoveDirectory(const char* szPath, bool bRecursive = true);
 
@@ -52,8 +70,9 @@ namespace Pak
 {
 //! Returns true if the file exists only in paks.
 EDITOR_COMMON_API bool IsFileInPakOnly(const string& path);
+//! Returns true if the file exists either in paks or on file system.
+EDITOR_COMMON_API bool IsFileInPakOrOnDisk(const string& path);
 // Returns true if the files have the same content, false otherwise.
-
 EDITOR_COMMON_API bool CompareFiles(const string& filePath1, const string& filePath2);
 //! Copies the file at the given file path to the target file path allowing overwriting of the target.
 
@@ -67,5 +86,5 @@ EDITOR_COMMON_API bool CopyFileAllowOverwrite(const char* szSourceFilePath, cons
 //! \see ICryPak::OpenPack()
 EDITOR_COMMON_API void Unpak(const char* szArchivePath, const char* szDestPath, std::function<void(float)> progress);
 }
-	
+
 }

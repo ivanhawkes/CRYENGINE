@@ -52,13 +52,17 @@ class BehaviorTreeManager;
 }
 namespace Perception
 {
-	class CAuditionMap;
+class CAuditionMap;
 }
 class CVisionMap;
 class CFactionMap;
 class CFactionSystem;
 class CGroupManager;
+namespace Cry { namespace AI { namespace CollisionAvoidance
+{
 class CCollisionAvoidanceSystem;
+}}}
+
 class CAIObjectManager;
 class NavigationSystem;
 namespace AIActionSequence {
@@ -74,7 +78,7 @@ struct IAIBubblesSystem;
 
 struct SAIEnvironment
 {
-	AIConsoleVars            CVars;
+	SAIConsoleVars            CVars;
 
 	SConfiguration           configuration;
 
@@ -102,7 +106,7 @@ struct SAIEnvironment
 	CFactionMap*                         pFactionMap;
 	CFactionSystem*                      pFactionSystem;
 	CGroupManager*                       pGroupManager;
-	CCollisionAvoidanceSystem*           pCollisionAvoidanceSystem;
+	Cry::AI::CollisionAvoidance::CCollisionAvoidanceSystem* pCollisionAvoidanceSystem;
 	struct IMovementSystem*              pMovementSystem;
 	AIActionSequence::SequenceManager*   pSequenceManager;
 	ClusterDetector*                     pClusterDetector;

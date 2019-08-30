@@ -14,10 +14,9 @@
 void InitJobManager()
 {
 	gEnv->pJobManager = GetJobManagerInterface();
-
-	auto pseudoProfilerCallback = [](class CFrameProfilerSection* pSection) {};
-	gEnv->callbackStartSection = pseudoProfilerCallback;
-	gEnv->callbackEndSection = pseudoProfilerCallback;
+	
+	gEnv->startProfilingSection = [](SProfilingSection*) { return false; };
+	gEnv->recordProfilingMarker = [](SProfilingMarker*) {};
 	gEnv->pJobManager->Init(8);
 }
 
@@ -85,8 +84,7 @@ TEST_F(CJobSystemTest, MemberFunctionJobSimple)
 	CTestJobHost host;
 	TTestJob job(42);
 	job.SetClassInstance(&host);
-	job.SetPriorityLevel(JobManager::eStreamPriority);
-	job.Run();
+	job.Run(JobManager::eStreamPriority);
 	while (!host.IsDoneCalculating()) {}
 	REQUIRE(host.GetValue() == 42);
 }
@@ -101,9 +99,7 @@ TEST_F(CJobSystemTest, MemberFunctionJobMultiple)
 		std::unique_ptr<CTestJobHost> host = stl::make_unique<CTestJobHost>();
 		TTestJob job(i);
 		job.SetClassInstance(host.get());
-		job.RegisterJobState(&jobState);
-		job.SetPriorityLevel(JobManager::eStreamPriority);
-		job.Run();
+		job.Run(JobManager::eStreamPriority, &jobState);
 		jobObjects.push_back(std::move(host));
 	}
 
@@ -194,7 +190,7 @@ TEST_F(CJobSystemTest, MoveConstructor)
 
 TEST_F(CJobSystemTest, LambdaJobConcise)
 {
-	std::atomic<int> v { 0 };
+	std::atomic<int> v{ 0 };
 	JobManager::SJobState jobState;
 	for (int i = 0; i < 100; i++)
 	{
@@ -210,7 +206,6 @@ TEST_F(CJobSystemTest, LambdaJobConcise)
 
 DECLARE_LAMBDA_JOB("TestLambdaJob", TTestLambdaJob);
 DECLARE_LAMBDA_JOB("TestLambdaJob2", TTestLambdaJob2, void(int));
-
 
 struct SDestructorDetector
 {
@@ -271,15 +266,24 @@ TEST_F(CJobSystemTest, PostJob)
 	JobManager::SJobState jobState;
 	JobManager::SJobState jobState2;
 	std::atomic<int> x{ 0 };
-	gEnv->pJobManager->AddLambdaJob("ExampleJob2", [&]
+
+	DECLARE_LAMBDA_JOB("ExampleJob2", TExampleJob2);
+	TExampleJob2 job1 = [&]
 	{
-		x++;
-	}, JobManager::eRegularPriority, &jobState);
-	auto followup = [&]
-	{
+		REQUIRE(static_cast<int>(x) == 0);
 		x++;
 	};
-	jobState.RegisterPostJob("PostJob", followup, JobManager::eRegularPriority, &jobState2);
+	job1.Run(JobManager::eRegularPriority, &jobState);
+	
+	DECLARE_LAMBDA_JOB("PostJob", TPostJob);
+	TPostJob postJob = [&]
+	{
+		REQUIRE(static_cast<int>(x) == 1);
+		x++;
+	};
+	postJob.RegisterJobState(&jobState2);
+	jobState.RegisterPostJob(std::move(postJob));
+
 	jobState.Wait();
 	jobState2.Wait();
 	REQUIRE(static_cast<int>(x) == 2);

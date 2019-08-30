@@ -238,7 +238,7 @@ public:
 	{
 		SetDebugLocked(false);
 		const int counter = CryInterlockedDecrement(&m_readCount);     // release read
-		assert(counter >= 0);
+		CRY_ASSERT(counter >= 0);
 		if (m_writeLock.TryLock())
 			m_writeLock.Unlock();
 		else if (counter == 0 && m_modifyCount)
@@ -259,7 +259,7 @@ public:
 
 #if defined(USE_CRY_ASSERT)
 		int counter = CryInterlockedDecrement(&m_modifyCount);    // decrement write counter
-		assert(counter >= 0);
+		CRY_ASSERT(counter >= 0);
 #else
 		CryInterlockedDecrement(&m_modifyCount);    // decrement write counter
 #endif
@@ -288,8 +288,8 @@ protected:
 		if (!m_writeLock.TryLock())
 		{
 #ifdef _DEBUG
-			assert(!m_debugLocked);
-			assert(!bDebug);
+			CRY_ASSERT(!m_debugLocked);
+			CRY_ASSERT(!bDebug);
 #endif
 			if (bTry)
 				return false;
@@ -352,7 +352,7 @@ inline void SingleProducerSingleConsumerQueueBase::Push(void* pObj, volatile uin
 	CSimpleThreadBackOff backoff;
 	while (rProducerIndex - rConsumerIndex == nBufferSize)
 	{
-		backoff.backoff();
+		backoff.Backoff();
 	}
 
 	CryMT::CryMemoryBarrier();
@@ -373,7 +373,7 @@ inline  void SingleProducerSingleConsumerQueueBase::Pop(void* pObj, volatile uin
 	CSimpleThreadBackOff backoff;
 	while (rProducerIndex - rConsumerIndex == 0)
 	{
-		backoff.backoff();
+		backoff.Backoff();
 	}
 
 	char* pBuffer = alias_cast<char*>(arrBuffer);
@@ -401,6 +401,7 @@ inline  void N_ProducerSingleConsumerQueueBase::Push(void* pObj, volatile uint32
 
 		if (nProducerIndex - nConsumerIndex == nBufferSize)
 		{
+			// Hard yield once. Then push to fallback list
 			if (iter++ > CSimpleThreadBackOff::kHardYieldInterval)
 			{
 				uint32 nSizeToAlloc = sizeof(SFallbackList) + nObjectSize - 1;
@@ -410,7 +411,7 @@ inline  void N_ProducerSingleConsumerQueueBase::Push(void* pObj, volatile uint32
 				CryInterlockedPushEntrySList(fallbackList, pFallbackEntry->nextEntry);
 				return;
 			}
-			backoff.backoff();
+			backoff.Backoff();
 			continue;
 		}
 
@@ -440,7 +441,7 @@ inline bool N_ProducerSingleConsumerQueueBase::Pop(void* pObj, volatile uint32& 
 	{
 		while (rRunning && rProducerIndex - rConsumerIndex == 0)
 		{
-			backoff.backoff();
+			backoff.Backoff();
 		}
 	}
 
@@ -479,7 +480,7 @@ inline bool N_ProducerSingleConsumerQueueBase::Pop_impl(void* pObj, volatile uin
 	CSimpleThreadBackOff backoff;
 	while (arrStates[rConsumerIndex % nBufferSize] == 0)
 	{
-		backoff.backoff();
+		backoff.Backoff();
 	}
 
 	char* pBuffer = alias_cast<char*>(arrBuffer);

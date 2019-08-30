@@ -36,6 +36,11 @@ CCharacterRenderNode::CCharacterRenderNode()
 //////////////////////////////////////////////////////////////////////////
 CCharacterRenderNode::~CCharacterRenderNode()
 {
+	if (m_pCharacterInstance)
+	{
+		m_pCharacterInstance->SetParentRenderNode(nullptr);
+	}
+
 	Dephysicalize();
 	Get3DEngine()->FreeRenderNodeState(this);
 
@@ -66,7 +71,7 @@ void CCharacterRenderNode::Render(const SRendParams& inputRendParams, const SRen
 
 	DBG_LOCK_TO_THREAD(this);
 
-	if (!m_pCharacterInstance || m_dwRndFlags & ERF_HIDDEN)
+	if (!m_pCharacterInstance)
 		return;
 
 	// some parameters will be modified
@@ -149,7 +154,7 @@ void CCharacterRenderNode::SetMatrix(const Matrix34& transform)
 	m_pCharacterInstance->SetAttachmentLocation_DEPRECATED(QuatTS(transform));
 }
 
-void CCharacterRenderNode::GetLocalBounds(AABB& bbox)
+void CCharacterRenderNode::GetLocalBounds(AABB& bbox) const
 {
 	if (!m_pCharacterInstance)
 	{
@@ -185,7 +190,7 @@ void CCharacterRenderNode::Physicalize(bool bInstant)
 }
 
 //////////////////////////////////////////////////////////////////////////
-float CCharacterRenderNode::GetMaxViewDist()
+float CCharacterRenderNode::GetMaxViewDist() const
 {
 	if (GetRndFlags() & ERF_FORCE_POST_3D_RENDER)
 	{
@@ -289,6 +294,11 @@ void CCharacterRenderNode::SetCharacter(ICharacterInstance* pCharacter)
 {
 	if (m_pCharacterInstance != pCharacter)
 	{
+		if (m_pCharacterInstance)
+		{
+			m_pCharacterInstance->SetParentRenderNode(nullptr);
+		}
+
 		m_pCharacterInstance = pCharacter;
 		m_pCharacterInstance->SetParentRenderNode(this);
 
@@ -422,12 +432,9 @@ void CCharacterRenderNode::PrecacheCharacterCollect(const float fImportance, ICh
 					const int minPrecacheLod = clamp_tpl(nLod - 1, minLod, maxLod);
 					const int maxPrecacheLod = clamp_tpl(nLod + 1, minLod, maxLod);
 
-					const QuatT& q = pAtt->GetAttAbsoluteDefault();
-					Matrix34A tm34 = matParent * Matrix34(q);
-
 					for (int currentLod = minPrecacheLod; currentLod <= maxPrecacheLod; ++currentLod)
 					{
-						pStatObj->UpdateStreamableComponents(fImportance, tm34, bFullUpdate, currentLod);
+						pStatObj->UpdateStreamableComponents(fImportance, bFullUpdate, currentLod);
 
 						pStatObj = (CStatObj*)pStatObj->GetLodObject(currentLod, true);
 						IMaterial* pAttMatOverride = (IMaterial*)pIAttachmentObject->GetReplacementMaterial();
@@ -486,8 +493,7 @@ void CCharacterRenderNode::PrecacheCharacterCollect(const float fImportance, ICh
 
 				for (int currentLod = minPrecacheLod; currentLod <= maxPrecacheLod; ++currentLod)
 				{
-					Matrix34A tm34 = matParent * Matrix34(pSkeletonPose->GetAbsJointByID(i));
-					pStatObj->UpdateStreamableComponents(fImportance, tm34, bFullUpdate, currentLod);
+					pStatObj->UpdateStreamableComponents(fImportance, bFullUpdate, currentLod);
 
 					IMaterial* pStatObjMat = pStatObj->GetMaterial();
 					IStatObj* pStatObjLod = pStatObj->GetLodObject(currentLod, true);
@@ -550,7 +556,7 @@ void CCharacterRenderNode::UpdateStreamingPriority(const SUpdateStreamingPriorit
 		bDrawNear = true;
 	}
 
-	CRY_PROFILE_REGION(PROFILE_3DENGINE, "UpdateObjectsStreamingPriority_PrecacheCharacter");
+	CRY_PROFILE_SECTION(PROFILE_3DENGINE, "UpdateObjectsStreamingPriority_PrecacheCharacter");
 
 	const SRenderingPassInfo& passInfo = *streamingContext.pPassInfo;
 	// If the object is in camera space, don't use the prediction position.

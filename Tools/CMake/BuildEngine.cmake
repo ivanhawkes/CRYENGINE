@@ -364,12 +364,57 @@ else()
 endif()
 endfunction(try_to_enable_oculus_hrtf)
 
+function(try_to_enable_cryspatial)
+if(WIN64 OR DURANGO)
+	if (DEFINED AUDIO_CRYSPATIAL)
+		if (AUDIO_CRYSPATIAL)
+			if (EXISTS "${SDK_DIR}/Audio/cryspatial")
+				message(STATUS "CrySpatial audio SDK found in ${SDK_DIR}/Audio/cryspatial - enabling CrySpatial HRTF support.")
+				
+				# This is to update only the message in the cache that is then used in the GUI as a tooltip.
+				option(AUDIO_CRYSPATIAL "CrySpatial audio SDK found in ${SDK_DIR}/Audio/cryspatial." ON)
+			else()
+				message(STATUS "CrySpatial audio SDK not found in ${SDK_DIR}/Audio/cryspatial - disabling CrySpatial HRTF support.")
+				
+				# Disables the AUDIO_CRYSPATIAL option but also updates the message in the cache that is then used in the GUI as a tooltip.
+				option(AUDIO_CRYSPATIAL "CrySpatial audio SDK not found in ${SDK_DIR}/Audio/cryspatial." OFF)
+			endif()
+		else()
+			if (EXISTS "${SDK_DIR}/Audio/cryspatial")
+				message(STATUS "CrySpatial audio SDK found in ${SDK_DIR}/Audio/cryspatial but AUDIO_CRYSPATIAL option turned OFF")
+				
+				# This is to update only the message in the cache that is then used in the GUI as a tooltip.
+				option(AUDIO_CRYSPATIAL "CrySpatial audio SDK found in ${SDK_DIR}/Audio/cryspatial but AUDIO_CRYSPATIAL option turned OFF." OFF)
+			else()
+				message(STATUS "CrySpatial audio SDK not found in ${SDK_DIR}/Audio/cryspatial and AUDIO_CRYSPATIAL option turned OFF")
+				
+				# This is to update only the message in the cache that is then used in the GUI as a tooltip.
+				option(AUDIO_CRYSPATIAL "CrySpatial audio SDK not found in ${SDK_DIR}/Audio/cryspatial and AUDIO_CRYSPATIAL option turned OFF." OFF)
+			endif()
+		endif()
+	else()
+		# If this option is not in the cache yet, set it depending on whether the SDK is present or not.
+		if (EXISTS "${SDK_DIR}/Audio/cryspatial")
+			message(STATUS "CrySpatial audio SDK found in ${SDK_DIR}/Audio/cryspatial - enabling CrySpatial HRTF support.")
+			set(AUDIO_CRYSPATIAL ON CACHE BOOL "CrySpatial audio SDK found in ${SDK_DIR}/Audio/cryspatial." FORCE)
+		else()
+			message(STATUS "CrySpatial audio SDK not found in ${SDK_DIR}/Audio/cryspatial - disabling CrySpatial HRTF support.")
+			set(AUDIO_CRYSPATIAL OFF CACHE BOOL "CrySpatial audio SDK not found in ${SDK_DIR}/Audio/cryspatial." FORCE)
+		endif()
+	endif()
+else()
+	message(STATUS "Disabling CrySpatial HRTF support due to unsupported platform.")
+	set(AUDIO_CRYSPATIAL OFF CACHE BOOL "CrySpatial HRTF disabled due to unsupported platform." FORCE)
+endif()
+endfunction(try_to_enable_cryspatial)
+
 try_to_enable_fmod()
 try_to_enable_portaudio()
 try_to_enable_sdl_mixer()
 try_to_enable_wwise()
 try_to_enable_adx2()
 try_to_enable_oculus_hrtf()
+try_to_enable_cryspatial()
 # ~Audio
 
 #Physics modules
@@ -489,11 +534,15 @@ if (OPTION_ENGINE)
 	#libs
 	add_subdirectory ("Code/Libs/bigdigits")
 	add_subdirectory ("Code/Libs/mikkelsen")
+
+	if (WINDOWS)
+		add_subdirectory("Code/Libs/Detours")
+	endif ()
 	
 	if(PLUGIN_VR_OCULUS)
 		add_subdirectory("Code/Libs/oculus")
 	endif()
-	
+		
 	if (WINDOWS OR LINUX)
 		add_subdirectory ("Code/Libs/curl")
 	endif ()
@@ -581,3 +630,6 @@ if (OPTION_ENGINE OR OPTION_SHADERCACHEGEN)
 	add_subdirectory ("Code/Libs/lzss")
 	add_subdirectory ("Code/Libs/tiff")	
 endif()
+
+add_subdirectory ("Code/Libs/qpOASES")
+

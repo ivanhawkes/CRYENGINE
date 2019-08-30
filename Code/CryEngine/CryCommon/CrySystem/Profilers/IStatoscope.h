@@ -1,16 +1,6 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-// -------------------------------------------------------------------------
-//  File name:   IStatoscope.h
-// -------------------------------------------------------------------------
-//
-////////////////////////////////////////////////////////////////////////////
-
-#ifndef __IStatoscope_h__
-#define __IStatoscope_h__
 #pragma once
-
-class CFrameProfiler;
 
 #if ENABLE_STATOSCOPE
 
@@ -94,7 +84,6 @@ public:
 	virtual void        AddUserMarkerFmt(const char* path, const char* fmt, ...) = 0; //!< A copy of the strings is taken, so they don't need to persist.
 	virtual void        LogCallstack(const char* tag) = 0;                            //!< Likewise with tag.
 	virtual void        LogCallstackFormat(const char* tagFormat, ...) = 0;
-	virtual void        SetCurrentProfilerRecords(const std::vector<CFrameProfiler*>* profilers) = 0;
 	virtual void        Flush() = 0;
 	inline bool         IsRunning()                         { return m_bIsRunning; }
 	inline void         SetIsRunning(const bool bIsRunning) { m_bIsRunning = bIsRunning; }
@@ -123,10 +112,9 @@ struct IStatoscope
 	void        AddUserMarkerFmt(const char* path, const char* fmt, ...)                      {}
 	void        LogCallstack(const char* tag)                                                 {}
 	void        LogCallstackFormat(const char* tagFormat, ...)                                {}
-	void        SetCurrentProfilerRecords(const std::vector<CFrameProfiler*>* profilers)      {}
 	void        Flush()                                                                       {}
 	bool        IsRunning()                                                                   { return false; }
-	void        SetIsRunning(const bool bIsRunning)                                           {};
+	void        SetIsRunning(const bool bIsRunning)                                           {}
 	bool        IsLoggingForTelemetry()                                                       { return false; }
 	void        SetupFPSCaptureCVars()                                                        {}
 	bool        RequestScreenShot()                                                           { return false; }
@@ -139,5 +127,3 @@ struct IStatoscope
 };
 
 #endif // ENABLE_STATOSCOPE
-
-#endif  // __IStatoscope_h__

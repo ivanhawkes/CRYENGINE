@@ -124,7 +124,7 @@ void CBrush::Render(const struct SRendParams& _EntDrawParams, const SRenderingPa
 
 	DBG_LOCK_TO_THREAD(this);
 
-	if (!m_pStatObj || m_dwRndFlags & ERF_HIDDEN)
+	if (!m_pStatObj)
 		return; //false;
 
 	if (m_dwRndFlags & ERF_COLLISION_PROXY || m_dwRndFlags & ERF_RAYCAST_PROXY)
@@ -307,7 +307,7 @@ void CBrush::Physicalize(bool bInstant)
 
 void CBrush::PhysicalizeOnHeap(IGeneralMemoryHeap* pHeap, bool bInstant)
 {
-	MEMSTAT_CONTEXT_FMT(EMemStatContextTypes::MSC_Physics, 0, "Brush: %s", m_pStatObj ? m_pStatObj->GetFilePath() : "(unknown)");
+	MEMSTAT_CONTEXT_FMT(EMemStatContextType::Physics, "Brush: %s", m_pStatObj ? m_pStatObj->GetFilePath() : "(unknown)");
 
 	if (m_pStatObj && (m_pStatObj->GetBreakableByGame() || m_pStatObj->GetIDMatBreakable() != -1))
 	{
@@ -395,19 +395,17 @@ void CBrush::PhysicalizeOnHeap(IGeneralMemoryHeap* pHeap, bool bInstant)
 	params.pMtx3x4 = &mtxScale;
 	m_pStatObj->Physicalize(m_pPhysEnt, &params);
 
-	if (m_dwRndFlags & (ERF_HIDABLE | ERF_HIDABLE_SECONDARY | ERF_EXCLUDE_FROM_TRIANGULATION | ERF_NODYNWATER))
-	{
+	{ // Update foreign data flags based on render flags
 		pe_params_foreign_data foreignData;
-		m_pPhysEnt->GetParams(&foreignData);
+		foreignData.iForeignFlagsAND = ~(PFF_HIDABLE | PFF_HIDABLE_SECONDARY | PFF_EXCLUDE_FROM_STATIC | PFF_OUTDOOR_AREA);
 		if (m_dwRndFlags & ERF_HIDABLE)
-			foreignData.iForeignFlags |= PFF_HIDABLE;
+			foreignData.iForeignFlagsOR |= PFF_HIDABLE;
 		if (m_dwRndFlags & ERF_HIDABLE_SECONDARY)
-			foreignData.iForeignFlags |= PFF_HIDABLE_SECONDARY;
-		//[PETAR] new flag to exclude from triangulation
+			foreignData.iForeignFlagsOR |= PFF_HIDABLE_SECONDARY;
 		if (m_dwRndFlags & ERF_EXCLUDE_FROM_TRIANGULATION)
-			foreignData.iForeignFlags |= PFF_EXCLUDE_FROM_STATIC;
+			foreignData.iForeignFlagsOR |= PFF_EXCLUDE_FROM_STATIC;
 		if (m_dwRndFlags & ERF_NODYNWATER)
-			foreignData.iForeignFlags |= PFF_OUTDOOR_AREA;
+			foreignData.iForeignFlagsOR |= PFF_OUTDOOR_AREA;
 		m_pPhysEnt->SetParams(&foreignData);
 	}
 
@@ -723,7 +721,7 @@ void CBrush::SetLayerId(uint16 nLayerId)
 	InvalidatePermanentRenderObject();
 }
 
-IRenderMesh* CBrush::GetRenderMesh(int nLod)
+IRenderMesh* CBrush::GetRenderMesh(int nLod) const
 {
 	IStatObj* pStatObj = m_pStatObj ? m_pStatObj->GetLodObject(nLod) : NULL;
 	return pStatObj ? pStatObj->GetRenderMesh() : NULL;
@@ -805,7 +803,7 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 				return;
 	}
 
-	if (!m_pStatObj || m_dwRndFlags & ERF_HIDDEN)
+	if (!m_pStatObj)
 		return;
 
 	/*
@@ -931,7 +929,7 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	if (!passInfo.IsShadowPass() && m_nInternalFlags & IRenderNode::REQUIRES_NEAREST_CUBEMAP)
 	{
 		if (!(pObj->m_nTextureID = GetObjManager()->CheckCachedNearestCubeProbe(this)) || !GetCVars()->e_CacheNearestCubePicking)
-			pObj->m_nTextureID = GetObjManager()->GetNearestCubeProbe(pAffectingLights, m_pOcNode->GetVisArea(), CBrush::GetBBox());
+			pObj->m_nTextureID = GetObjManager()->GetNearestCubeProbe(pAffectingLights, GetEntityVisArea(), CBrush::GetBBox());
 
 		pTempData->userData.nCubeMapId = pObj->m_nTextureID;
 	}
@@ -939,8 +937,8 @@ void CBrush::Render(const CLodValue& lodValue, const SRenderingPassInfo& passInf
 	//////////////////////////////////////////////////////////////////////////
 	// temp fix to update ambient color (Vlad please review!)
 	pObj->m_nClipVolumeStencilRef = userData.m_pClipVolume ? userData.m_pClipVolume->GetStencilRef() : 0;
-	if (m_pOcNode && m_pOcNode->GetVisArea())
-		pObj->SetAmbientColor(m_pOcNode->GetVisArea()->GetFinalAmbientColor(), passInfo);
+	if (auto pVisArea = GetEntityVisArea())
+		pObj->SetAmbientColor(pVisArea->GetFinalAmbientColor(), passInfo);
 	else
 		pObj->SetAmbientColor(Get3DEngine()->GetSkyColor(), passInfo);
 	//////////////////////////////////////////////////////////////////////////
@@ -1104,7 +1102,7 @@ void CBrush::InvalidatePermanentRenderObjectMatrix()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-bool CBrush::CanExecuteRenderAsJob()
+bool CBrush::CanExecuteRenderAsJob() const
 {
 	return (GetCVars()->e_ExecuteRenderAsJobMask & BIT(GetRenderNodeType())) != 0 &&
 	       (m_dwRndFlags & ERF_RENDER_ALWAYS) == 0;
@@ -1117,19 +1115,7 @@ void CBrush::DisablePhysicalization(bool bDisable)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void CBrush::FillBBox(AABB& aabb)
-{
-	aabb = CBrush::GetBBox();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-EERType CBrush::GetRenderNodeType()
-{
-	return eERType_Brush;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-float CBrush::GetMaxViewDist()
+float CBrush::GetMaxViewDist() const
 {
 	if (GetRndFlags() & ERF_FORCE_POST_3D_RENDER)
 	{

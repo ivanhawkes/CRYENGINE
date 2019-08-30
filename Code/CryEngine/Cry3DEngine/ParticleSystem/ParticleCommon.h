@@ -3,7 +3,7 @@
 #pragma once
 
 #include <CryParticleSystem/IParticlesPfx2.h>
-#include <CryRenderer/RenderElements/CREParticle.h>
+#include <CryMemory/HeapAllocator.h>
 
 // compile options
 #ifdef _DEBUG
@@ -48,19 +48,56 @@
 namespace pfx2
 {
 
-const uint gMinimumVersion = 1;
-const uint gCurrentVersion = 13;
+const uint gMinimumVersion   = 1;
+const uint gCurrentVersion   = 13;
 
-const TParticleId gInvalidId           = -1;
-const float gInfinity                  = std::numeric_limits<float>::infinity();
+const TParticleId gInvalidId = -1;
+const float gInfinity        = std::numeric_limits<float>::infinity();
 
-using TParticleHeap                    = stl::HeapAllocator<stl::PSyncNone>;
+class HeapAllocator
+{
+public:
+	static void* SysAlloc(size_t nSize)
+	{
+		CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
+		return malloc(nSize); 
+	}
+	static void  SysDealloc(void* ptr)
+	{
+		CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
+		free(ptr);
+	}
+};
+
+using TParticleHeap                    = stl::HeapAllocator<stl::PSyncNone, HeapAllocator>;
 template<typename T> using THeapArray  = TParticleHeap::Array<T, uint, CRY_PFX2_PARTICLES_ALIGNMENT>;
 using TParticleIdArray                 = THeapArray<TParticleId>;
 using TFloatArray                      = THeapArray<float>;
 
 template<typename T> using TDynArray   = FastDynArray<T, uint, NAlloc::ModuleAlloc>;
-template<typename T> using TSmartArray = TDynArray<_smart_ptr<T>>;
+template<typename T> using TSmallArray = SmallDynArray<T, uint, NAlloc::ModuleAlloc>;
+template<typename T> using TSmartArray = TSmallArray<_smart_ptr<T>>;
+
+template<typename T> struct TReuseArray : TSmallArray<T>
+{
+	void reset()
+	{
+		m_nUsed = 0;
+	}
+	uint used() const
+	{
+		return m_nUsed;
+	}
+	T& append()
+	{
+		if (m_nUsed == this->size())
+			this->emplace_back();
+		return (*this)[m_nUsed++];
+	}
+
+protected:
+	uint m_nUsed = 0;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef CRY_PFX2_USE_SSE
@@ -103,7 +140,7 @@ struct SRenderContext
 	SRenderContext(const SRendParams& rParams, const SRenderingPassInfo& passInfo)
 		: m_renderParams(rParams)
 		, m_passInfo(passInfo)
-		, m_distance(0.0f)
+		, m_distance(rParams.fDistance)
 		, m_lightVolumeId(0)
 		, m_fogVolumeId(0) {}
 	const SRendParams&        m_renderParams;
@@ -203,7 +240,11 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-inline int ThreadMode() { return Cry3DEngineBase::GetCVars()->e_ParticlesThread; }
+inline const CVars* GetCVars() { return Cry3DEngineBase::GetCVars(); }
+inline int ThreadMode() { return GetCVars()->e_ParticlesThread; }
+inline int DebugVar() { return GetCVars()->e_ParticlesDebug; }
+inline int DebugMode(char flag) { return (DebugVar() & AlphaBit(flag)); }
+inline int DebugMode(int flags) { return (DebugVar() & AlphaBits(flags)); }
 
 }
 

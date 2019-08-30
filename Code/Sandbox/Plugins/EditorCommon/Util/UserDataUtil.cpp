@@ -1,6 +1,7 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include <StdAfx.h>
+#include "FileUtils.h"
 #include "UserDataUtil.h"
 
 #include <QDir>
@@ -13,46 +14,78 @@
 
 namespace UserDataUtil
 {
-const unsigned currentVersion = 1;
 
-bool Migrate(const QString& from, const QString& to)
+namespace Private_UserDataUtil
 {
-	QFileInfo fileInfo(from);
-	if (fileInfo.isDir())
+	string GetEnginePath(const char* szRelativeFilePath)
 	{
-		QDir fromDir(from);
-		if (!fromDir.exists())
-			return false;
+		string path;
+		path.Format("%s/Editor/%s", PathUtil::GetEnginePath(), szRelativeFilePath);
+		return path;
+	}
 
-		QString newDir = to + "/" + fromDir.dirName();
-		QDir toDir(newDir);
-		toDir.mkpath(toDir.absolutePath());
-
-		QFileInfoList infoList = fromDir.entryInfoList(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
-		for (const QFileInfo& fileInfo : infoList)
+	QVariant Load(const char* szFullPath)
+	{
+		QFile file(szFullPath);
+		if (!file.open(QIODevice::ReadOnly))
 		{
-			if (!Migrate(from + "/" + fileInfo.fileName(), newDir))
-				return false;
+			string msg;
+			msg.Format("Failed to open path: %s", szFullPath);
+			CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_COMMENT, msg);
+			return QVariant();
+		}
+
+		QJsonDocument doc(QJsonDocument::fromJson(file.readAll()));
+
+		return doc.toVariant();
+	}
+
+	void Merge(const QVariantMap& defaultData, const QVariantMap& preferredData, QVariantMap& mergedData)
+	{
+		// Merged data should start by containing default data. Items that conflict with preferred data will be replaced
+		mergedData = defaultData;
+
+		QList<QString> preferredDataKeys = preferredData.keys();
+		for (const QString& preferredDataKey : preferredDataKeys)
+		{
+			if (defaultData.contains(preferredDataKey))
+			{
+				QVariant defaultValue = defaultData.value(preferredDataKey);
+				QVariant preferredValue = preferredData.value(preferredDataKey);
+				
+				// if type defers from default type, use preferred value
+				if (defaultValue.type() == QMetaType::QVariantMap && preferredValue.type() == QMetaType::QVariantMap)
+				{
+					QVariantMap& defaultVariantMap = defaultData[preferredDataKey].toMap();
+					QVariantMap& preferredVariantMap = preferredData[preferredDataKey].toMap();
+					QVariantMap& mergedVariantMap = mergedData[preferredDataKey].toMap();
+
+					Merge(defaultVariantMap, preferredVariantMap, mergedVariantMap);
+					continue;
+				}
+
+				// Intentional fall-through:
+				// If types are different or if variant type is not a map, then proceed to use the preferred data value
+			}
+
+			// if not key is not contained in default data, then proceed to insert insert
+			mergedData.insert(preferredDataKey, preferredData[preferredDataKey]);
 		}
 	}
-	else
+
+	QVariant LoadMerged(const char* szRelativeFilePath)
 	{
-		QString destination(to + "/" + fileInfo.fileName());
+		QVariantMap userData = Load(GetUserPath(szRelativeFilePath).c_str()).toMap();
+		QVariantMap engineData = Load(GetEnginePath(szRelativeFilePath).c_str()).toMap();
+		QVariantMap mergedData;
 
-		// Don't replace any existing files
-		if (QFile::exists(destination))
-			return true;
+		Merge(engineData, userData, mergedData);
 
-		// Make sure the folder exists in the versioned user data
-		QFileInfo fileInfo(destination);
-		QDir toDir(fileInfo.absolutePath());
-		toDir.mkpath(fileInfo.absolutePath());
-
-		return QFile::copy(from, destination);
+		return mergedData;
 	}
-
-	return true;
 }
+
+const unsigned currentVersion = 1;
 
 bool Migrate(const char* szRelativeFilePath)
 {
@@ -80,62 +113,57 @@ bool Migrate(const char* szRelativeFilePath)
 		}
 
 		// If directory was copied successfully, then return the current version path
-		return Migrate(lastVersionPath, currentVersionPath);
+		return FileUtils::CopyDirectory(QtUtil::ToString(lastVersionPath).c_str(), QtUtil::ToString(currentVersionPath).c_str());
 	}
 
 	return true;
 }
 
-QString GetUserPath(const char* szRelativeFilePath)
+string GetUserPath(const char* szRelativeFilePath)
 {
-	return QtUtil::GetAppDataFolder() + "/" + QString::number(currentVersion) + "/" + szRelativeFilePath;
+	string userPath;
+	userPath.Format("%s/%d/%s", QtUtil::ToString(QtUtil::GetAppDataFolder()), currentVersion, szRelativeFilePath);
+	return userPath;
 }
 
-QVariant Load(const char* szRelativeFilePath)
+QVariant Load(const char* szRelativeFilePath, LoadType loadType)
 {
-	const QString filePath(GetUserPath(szRelativeFilePath));
-	QFile file(filePath);
-	if (!file.open(QIODevice::ReadOnly))
+	switch (loadType)
 	{
-		QString msg = "Failed to open path: " + filePath;
-		CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_COMMENT, QtUtil::ToConstCharPtr(msg));
-		return QVariant();
+	case LoadType::PrioritizeUserData:
+		return Private_UserDataUtil::Load(GetUserPath(szRelativeFilePath).c_str());
+	case LoadType::MergeData:
+		return Private_UserDataUtil::LoadMerged(szRelativeFilePath);
 	}
 
-	QJsonDocument doc(QJsonDocument::fromJson(file.readAll()));
-
-	return doc.toVariant();
+	CRY_ASSERT_MESSAGE(0, "User Data Util: Unknown loadtype");
+	return QVariant();
 }
 
-void Save(const char* szRelativeFilePath, const char* data)
+bool Save(const char* szRelativeFilePath, const char* data)
 {
-	QString filePath(GetUserPath(szRelativeFilePath));
+	const string filePath(GetUserPath(szRelativeFilePath));
 	// Remove filename from path
-	QDir dir(QFileInfo(filePath).absolutePath());
+	QDir dir(QFileInfo(filePath.c_str()).absolutePath());
 	// Make sure the directory exists
 	dir.mkpath(dir.absolutePath());
 
-	QFile file(filePath);
+	QFile file(filePath.c_str());
 	if (!file.open(QIODevice::WriteOnly))
 	{
-		CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_ERROR, "Failed to open path: %s", QtUtil::ToConstCharPtr(filePath));
-		return;
+		CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_ERROR, "Failed to open path: %s", filePath.c_str());
+		return false;
 	}
 
-	file.write(data);
+	return file.write(data) > 0;
 }
 } // namespace UserDataUtil
 
-CUserData::CUserData(std::vector<string> userDataPaths)
+CUserData::CUserData(const std::vector<string>& userDataPaths)
 {
 	// Automatically migrate any relevant data to new version folder
 	for (auto& userDataPath : userDataPaths)
 	{
 		UserDataUtil::Migrate(userDataPath.c_str());
 	}
-}
-
-CUserData::~CUserData()
-{
-
 }

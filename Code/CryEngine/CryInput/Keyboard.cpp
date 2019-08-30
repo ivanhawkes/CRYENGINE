@@ -12,6 +12,7 @@
 
 #include "StdAfx.h"
 #include "Keyboard.h"
+#include <CrySystem/ConsoleRegistration.h>
 
 #ifdef USE_DXINPUT
 
@@ -97,9 +98,6 @@ bool CKeyboard::SetExclusiveMode(bool value)
 	   }*/
 
 	HRESULT hr;
-
-	// Enable Windows keys if we are not in game mode - to always leave enabled, set to 0
-	DWORD winKeyFlags = (!gEnv->IsEditor() || gEnv->IsEditorGameMode() ? DISCL_NOWINKEY : 0);
 
 	if (value)
 	{

@@ -17,6 +17,7 @@ constexpr ControlId g_resumeAllTriggerId = StringToId(g_szResumeAllTriggerName);
 namespace Impl
 {
 struct IImpl;
+struct IObject;
 struct IEnvironmentConnection;
 struct IParameterConnection;
 struct ISettingConnection;
@@ -24,8 +25,10 @@ struct ISwitchStateConnection;
 struct ITriggerConnection;
 } // namespace Impl
 
+class CListener;
 class CSystem;
 class CObject;
+class CDefaultObject;
 class CLoseFocusTrigger;
 class CGetFocusTrigger;
 class CMuteAllTrigger;
@@ -44,10 +47,10 @@ enum class ESystemStates : EnumFlagsType
 	None             = 0,
 	ImplShuttingDown = BIT(0),
 	IsMuted          = BIT(1),
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	IsPaused         = BIT(2),
 	PoolsAllocated   = BIT(3),
-#endif  // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_USE_DEBUG_CODE
 };
 CRY_CREATE_ENUM_FLAG_OPERATORS(ESystemStates);
 
@@ -58,6 +61,8 @@ using PreloadRequestLookup = std::map<PreloadRequestId, CPreloadRequest*>;
 using EnvironmentLookup = std::map<EnvironmentId, CEnvironment const*>;
 using SettingLookup = std::map<ControlId, CSetting const*>;
 using TriggerInstanceIdLookup = std::map<TriggerInstanceId, CObject*>;
+using TriggerInstanceIdLookupDefault = std::map<TriggerInstanceId, CDefaultObject*>;
+using ContextLookup = std::map<ContextId, CryFixedStringT<MaxFileNameLength>>;
 
 using TriggerConnections = std::vector<Impl::ITriggerConnection*>;
 using ParameterConnections = std::vector<Impl::IParameterConnection*>;
@@ -65,8 +70,10 @@ using SwitchStateConnections = std::vector<Impl::ISwitchStateConnection*>;
 using EnvironmentConnections = std::vector<Impl::IEnvironmentConnection*>;
 using SettingConnections = std::vector<Impl::ISettingConnection*>;
 using Objects = std::vector<CObject*>;
+using Listeners = std::vector<CListener*>;
 
 extern Impl::IImpl* g_pIImpl;
+extern CListener g_defaultListener;
 extern CSystem g_system;
 extern ESystemStates g_systemStates;
 extern TriggerLookup g_triggers;
@@ -76,7 +83,9 @@ extern PreloadRequestLookup g_preloadRequests;
 extern EnvironmentLookup g_environments;
 extern SettingLookup g_settings;
 extern TriggerInstanceIdLookup g_triggerInstanceIdToObject;
-extern CObject g_object;
+extern TriggerInstanceIdLookupDefault g_triggerInstanceIdToDefaultObject;
+extern ContextLookup g_registeredContexts;
+extern CDefaultObject g_defaultObject;
 extern CLoseFocusTrigger g_loseFocusTrigger;
 extern CGetFocusTrigger g_getFocusTrigger;
 extern CMuteAllTrigger g_muteAllTrigger;
@@ -118,15 +127,47 @@ static void IncrementTriggerInstanceIdCounter()
 	}
 }
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
+extern CListener g_previewListener;
 extern Objects g_constructedObjects;
+
+constexpr char const* g_szPreviewListenerName = "Preview Listener";
+constexpr ListenerId g_previewListenerId = StringToId("ThisIsTheHopefullyUniqueIdForThePreviewListener");
 
 constexpr char const* g_szPreviewTriggerName = "preview_trigger";
 constexpr ControlId g_previewTriggerId = StringToId(g_szPreviewTriggerName);
 
 class CPreviewTrigger;
 extern CPreviewTrigger g_previewTrigger;
-extern CObject g_previewObject;
+extern CDefaultObject g_previewObject;
 extern SPoolSizes g_debugPoolSizes;
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+
+using SwitchStateIds = std::map<ControlId, SwitchStateId>;
+using ParameterValues = std::map<ControlId, float>;
+using EnvironmentValues = std::map<EnvironmentId, float>;
+
+struct SContextInfo final
+{
+	SContextInfo() = delete;
+
+	explicit SContextInfo(
+		ContextId const contextId_,
+		bool isRegistered_,
+		bool isActive_)
+		: contextId(contextId_)
+		, isRegistered(isRegistered_)
+		, isActive(isActive_)
+	{}
+
+	ContextId const contextId;
+	bool            isRegistered;
+	bool            isActive;
+};
+
+using ContextInfo = std::map<CryFixedStringT<MaxFileNameLength>, SContextInfo>;
+extern ContextInfo g_contextInfo;
+
+using ContextDebugInfo = std::map<CryFixedStringT<MaxFileNameLength>, bool>;
+extern ContextDebugInfo g_contextDebugInfo;
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 }      // namespace CryAudio

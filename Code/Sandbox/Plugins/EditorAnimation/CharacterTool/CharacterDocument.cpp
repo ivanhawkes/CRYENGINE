@@ -775,12 +775,12 @@ void CharacterDocument::LoadCharacter(const char* filename)
 
 	if (m_uncompressedCharacter)
 	{
-		m_uncompressedCharacter->SetCharEditMode(m_uncompressedCharacter->GetCharEditMode() | CA_CharacterTool);
+		m_uncompressedCharacter->SetCharEditMode(m_uncompressedCharacter->GetCharEditMode() | CA_CharacterAuxEditor);
 	}
 
 	if (m_compressedCharacter)
 	{
-		m_compressedCharacter->SetCharEditMode(m_compressedCharacter->GetCharEditMode() | CA_CharacterTool);
+		m_compressedCharacter->SetCharEditMode(m_compressedCharacter->GetCharEditMode() | CA_CharacterAuxEditor);
 		m_compressedCharacter->GetISkeletonAnim()->SetEventCallback(AnimationEventCallback, this);
 
 		m_PhysicalLocation.SetIdentity();
@@ -796,8 +796,6 @@ void CharacterDocument::LoadCharacter(const char* filename)
 		m_camRadius = (m_AABB.max - m_AABB.min).GetLength();
 
 		Physicalize();
-
-		IMaterial* pMtl = m_compressedCharacter->GetIMaterial();
 
 		if (!m_groundAlignment)
 		{
@@ -1490,7 +1488,6 @@ static void DrawAnimationStateText(IRenderer* renderer, IRenderAuxGeom* pAuxRend
 {
 	int y = 30;
 
-	bool singleLine = lines.size() == 1;
 	for (size_t i = 0; i < lines.size(); ++i)
 	{
 		const StateText& l = lines[i];
@@ -1523,8 +1520,6 @@ void CharacterDocument::OnAnimEvent(ICharacterInstance* character)
 	if (!m_bPaused)
 	{
 		ISkeletonAnim& skeletonAnim = *character->GetISkeletonAnim();
-		ISkeletonPose& skeletonPose = *character->GetISkeletonPose();
-		IDefaultSkeleton& defaultSkeleton = character->GetIDefaultSkeleton();
 
 		AnimEventInstance event = skeletonAnim.GetLastAnimEvent();
 		PlayAnimEvent(character, event);
@@ -1830,8 +1825,6 @@ void CharacterDocument::PreRender(const SRenderContext& context)
 
 		context.viewport->SetState(*m_viewportState);
 
-		f32 fDistanceFromOrigin = m_PhysicalLocation.t.GetLength();
-
 		m_LocalEntityMat = Matrix34(m_PhysicalLocation);
 
 		if (m_Callbacks.size() > 0)
@@ -1987,7 +1980,6 @@ void CharacterDocument::DrawCharacter(ICharacterInstance* pInstanceBase, const S
 	m_pAuxRenderer->SetRenderFlags(e_Def3DPublicRenderflags);
 
 	f32 FrameTime = GetIEditor()->GetSystem()->GetITimer()->GetFrameTime();
-	int yPos = 162;
 
 	// draw joint names
 	if (m_displayOptions->skeleton.showJointNames)

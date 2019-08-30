@@ -10,6 +10,9 @@
 #include <IEditor.h>
 #include <CryIcon.h>
 
+#include <CrySystem/IValidator.h>
+#include <CrySystem/ISystem.h>
+
 #include <QAbstractProxyModel>
 #include <QAction>
 #include <QApplication>
@@ -67,20 +70,26 @@ QPixmap CreateDefaultPixmap(QModelIndexList indices)
 		QPixmap icon = GetPixmapFromDecoration(index.data(Qt::DecorationRole), fm.height(), fm.height());
 
 		// Text and icon are aligned to bottom of cell.
-		const int cellHeight = std::max(icon.height(), fm.height());
-		const int textX = pStyleHelper->toolTipMarginLeft() + icon.width() + spacing;
-		const int posY = pStyleHelper->toolTipMarginTop() + yOff + cellHeight - icon.height();
+		QRect textRect = fm.boundingRect(name);
+		// We set the font to be 12 pixels in Qss, font metrics returns 13
+		textRect.setHeight(textRect.height() - 1);
+		int fontDescent = fm.descent();
+		const int cellHeight = std::max(icon.height(), textRect.height());
+		const int iconMargin = icon.width() == 0 ? 0 : pStyleHelper->toolTipIconMargin();
+		const int textX = icon.width() + iconMargin;
+		const int iconPosY = yOff + cellHeight - icon.height();
+		const int textPosY = yOff + cellHeight - fontDescent;
+		
+		canvasPainter.drawPixmap(0, iconPosY, icon, 0, 0, icon.width(), icon.height());
+		canvasPainter.drawText(textX, textPosY, name);
 
-		canvasPainter.drawPixmap(pStyleHelper->toolTipMarginLeft(), posY, icon, 0, 0, icon.width(), icon.height());
-		canvasPainter.drawText(textX, posY + fm.height(), name);
-
-		const int cellWidth = textX + fm.width(name) + pStyleHelper->toolTipMarginRight();
+		const int cellWidth = textX + textRect.width();
 
 		width = std::max(width, cellWidth);
 		yOff += cellHeight + cellSpacing;
 	}
 
-	int height = pStyleHelper->toolTipMarginTop() + pStyleHelper->toolTipMarginBottom() + yOff - cellSpacing;
+	int height = yOff - cellSpacing;
 
 	QPixmap clipped(std::min(width, canvas.width()), std::min(height, canvas.height()));
 	QPainter clippedPainter(&clipped);
@@ -252,7 +261,6 @@ void QAdvancedTreeView::OnContextMenu(const QPoint& point)
 					pAction->setChecked(IsColumnVisible(i));
 					connect(pAction, &QAction::toggled, [=](bool bChecked)
 					{
-						int column = pAction->data().toInt();
 						SetColumnVisible(i, bChecked);
 					});
 
@@ -270,7 +278,6 @@ void QAdvancedTreeView::OnContextMenu(const QPoint& point)
 
 				connect(pAction, &QAction::toggled, [=](bool bChecked)
 				{
-					int column = pAction->data().toInt();
 					SetColumnVisible(i, bChecked);
 				});
 
@@ -537,7 +544,6 @@ QVariantMap QAdvancedTreeView::GetState() const
 
 void QAdvancedTreeView::SetState(const QVariantMap& state)
 {
-	QHeaderView* pHeader = header();
 	auto itemModel = header()->model();
 
 	QVariant columnDataVar = state.value("columnData");
@@ -628,7 +634,6 @@ void QAdvancedTreeView::SetState(const QVariantMap& state)
 
 		if (sortedSectionVar.isValid() && sortOrderVar.isValid())
 		{
-			auto h = header();
 			header()->setSortIndicator(sortedSectionVar.toInt(), static_cast<Qt::SortOrder>(sortOrderVar.toInt()));
 		}
 	}
@@ -691,7 +696,6 @@ void QAdvancedTreeView::drawBranches(QPainter* painter, const QRect& rect,
 	int level = index.column();
 
 	QRect primitive(reverse ? rect.left() : rect.right() + 1, rect.top(), indent, rect.height());
-	int branchAreaLeft = rect.left();
 
 	QModelIndex parent = index.parent();
 	QModelIndex current = parent;

@@ -3,8 +3,9 @@
 #include "StdAfx.h"
 #include "PropertiesWidget.h"
 
-#include "AudioControlsEditorPlugin.h"
-#include "ImplementationManager.h"
+#include "AssetsManager.h"
+#include "ContextManager.h"
+#include "ImplManager.h"
 #include "ConnectionsWidget.h"
 #include "Common/IImpl.h"
 
@@ -79,7 +80,31 @@ CPropertiesWidget::CPropertiesWidget(QWidget* const pParent)
 			}
 		}, reinterpret_cast<uintptr_t>(this));
 
-	g_implementationManager.SignalOnAfterImplementationChange.Connect([this]()
+	g_contextManager.SignalOnAfterContextAdded.Connect([this]()
+		{
+			if (!g_assetsManager.IsLoading())
+			{
+			  RevertPropertyTree();
+			}
+		}, reinterpret_cast<uintptr_t>(this));
+
+	g_contextManager.SignalOnAfterContextRemoved.Connect([this]()
+		{
+			if (!g_assetsManager.IsLoading())
+			{
+			  RevertPropertyTree();
+			}
+		}, reinterpret_cast<uintptr_t>(this));
+
+	g_contextManager.SignalContextRenamed.Connect([this]()
+		{
+			if (!g_assetsManager.IsLoading())
+			{
+			  RevertPropertyTree();
+			}
+		}, reinterpret_cast<uintptr_t>(this));
+
+	g_implManager.SignalOnAfterImplChange.Connect([this]()
 		{
 			setEnabled(g_pIImpl != nullptr);
 		}, reinterpret_cast<uintptr_t>(this));
@@ -95,7 +120,10 @@ CPropertiesWidget::~CPropertiesWidget()
 	g_assetsManager.SignalOnAfterAssetRemoved.DisconnectById(reinterpret_cast<uintptr_t>(this));
 	g_assetsManager.SignalControlModified.DisconnectById(reinterpret_cast<uintptr_t>(this));
 	g_assetsManager.SignalAssetRenamed.DisconnectById(reinterpret_cast<uintptr_t>(this));
-	g_implementationManager.SignalOnAfterImplementationChange.DisconnectById(reinterpret_cast<uintptr_t>(this));
+	g_contextManager.SignalOnAfterContextAdded.DisconnectById(reinterpret_cast<uintptr_t>(this));
+	g_contextManager.SignalOnAfterContextRemoved.DisconnectById(reinterpret_cast<uintptr_t>(this));
+	g_contextManager.SignalContextRenamed.DisconnectById(reinterpret_cast<uintptr_t>(this));
+	g_implManager.SignalOnAfterImplChange.DisconnectById(reinterpret_cast<uintptr_t>(this));
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -161,6 +189,12 @@ void CPropertiesWidget::OnSetSelectedAssets(Assets const& selectedAssets, bool c
 }
 
 //////////////////////////////////////////////////////////////////////////
+void CPropertiesWidget::OnConnectionAdded(ControlId const id)
+{
+	m_pConnectionsWidget->OnConnectionAdded(id);
+}
+
+//////////////////////////////////////////////////////////////////////////
 void CPropertiesWidget::OnBeforeReload()
 {
 	m_pConnectionsWidget->OnBeforeReload();
@@ -170,6 +204,18 @@ void CPropertiesWidget::OnBeforeReload()
 void CPropertiesWidget::OnAfterReload()
 {
 	m_pConnectionsWidget->OnAfterReload();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CPropertiesWidget::OnFileImporterOpened()
+{
+	m_pConnectionsWidget->OnFileImporterOpened();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CPropertiesWidget::OnFileImporterClosed()
+{
+	m_pConnectionsWidget->OnFileImporterClosed();
 }
 
 //////////////////////////////////////////////////////////////////////////

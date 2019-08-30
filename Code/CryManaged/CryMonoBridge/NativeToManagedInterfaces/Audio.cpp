@@ -87,16 +87,6 @@ static MonoInternals::MonoString* GetConfigPath()
 	return pAudioConfigPathObject->GetManagedObject();
 }
 
-static void PlayFile(CryAudio::SPlayFileInfo* pPlayFileInfo)
-{
-	gEnv->pAudioSystem->PlayFile(*pPlayFileInfo);
-}
-
-static void StopFile(CryAudio::SPlayFileInfo* pPlayFileInfo)
-{
-	gEnv->pAudioSystem->StopFile(pPlayFileInfo->szFile);
-}
-
 static void EnableAllSound(bool bIsEnabled)
 {
 	if (bIsEnabled)
@@ -140,17 +130,17 @@ static void ReleaseAudioObject(CryAudio::IObject* pAudioObject)
 	gEnv->pAudioSystem->ReleaseObject(pAudioObject);
 }
 
-static void ExecuteAudioObjectTrigger(CryAudio::IObject* pAudioObject, uint triggerId, bool bExecuteSync)
+static void ExecuteAudioObjectTrigger(CryAudio::IObject* pAudioObject, uint triggerId, bool bExecuteSync, EntityId entityId = INVALID_ENTITYID)
 {
 	if (bExecuteSync)
 	{
 		const CryAudio::SRequestUserData data(CryAudio::ERequestFlags::ExecuteBlocking | CryAudio::ERequestFlags::CallbackOnExternalOrCallingThread | CryAudio::ERequestFlags::DoneCallbackOnExternalThread);
-		pAudioObject->ExecuteTrigger(triggerId, data);
+		pAudioObject->ExecuteTrigger(triggerId, entityId, data);
 	}
 	else
 	{
 		const CryAudio::SRequestUserData data(CryAudio::ERequestFlags::CallbackOnExternalOrCallingThread | CryAudio::ERequestFlags::DoneCallbackOnExternalThread);
-		pAudioObject->ExecuteTrigger(triggerId, data);
+		pAudioObject->ExecuteTrigger(triggerId, entityId, data);
 	}
 
 }
@@ -168,23 +158,9 @@ static void StopAudioObjectTrigger(CryAudio::IObject* pAudioObject, uint trigger
 	}
 }
 
-static CryAudio::SPlayFileInfo* CreateSPlayFileInfo(MonoInternals::MonoString* pFilePath)
-{
-	std::shared_ptr<CMonoString> pFilePathObject = CMonoDomain::CreateString(pFilePath);
-
-	CryAudio::SPlayFileInfo* pPlayFileInfo = new CryAudio::SPlayFileInfo(pFilePathObject->GetString());
-
-	return pPlayFileInfo;
-}
-
-static void ReleaseSPlayFileInfo(CryAudio::SPlayFileInfo* pPlayFileInfo)
-{
-	delete pPlayFileInfo;
-}
-
 static CryAudio::SRequestInfo* CreateSRequestInfo(uint eRequestResult, uint audioSystemEvent, uint CtrlId, EntityId entityId)
 {
-	CryAudio::SRequestInfo* pRequestInfo = new CryAudio::SRequestInfo(static_cast<CryAudio::ERequestResult>(eRequestResult), nullptr, nullptr, nullptr, static_cast<CryAudio::ESystemEvents>(audioSystemEvent), (CryAudio::ControlId)CtrlId, entityId, nullptr);
+	CryAudio::SRequestInfo* pRequestInfo = new CryAudio::SRequestInfo(static_cast<CryAudio::ERequestResult>(eRequestResult), nullptr, nullptr, nullptr, static_cast<CryAudio::ESystemEvents>(audioSystemEvent), (CryAudio::ControlId)CtrlId, entityId);
 	return pRequestInfo;
 }
 
@@ -223,9 +199,9 @@ static void RemoveAudioRequestListener(AudioRequestListener listener)
 	gEnv->pAudioSystem->RemoveRequestListener(listener, nullptr);
 }
 
-static CryAudio::IListener* CreateAudioListener(CryAudio::CTransformation const& transformation)
+static CryAudio::IListener* CreateAudioListener(CryAudio::CTransformation const& transformation, const char* szName)
 {
-	return gEnv->pAudioSystem->CreateListener(transformation);
+	return gEnv->pAudioSystem->CreateListener(transformation, szName);
 }
 
 static void SetAudioListenerTransformation(CryAudio::IListener* pAudioListener, CryAudio::CTransformation* pCObjectTransformation)
@@ -247,8 +223,6 @@ void CAudioInterface::RegisterFunctions(std::function<void(const void* pMethod, 
 	func(CreateAudioObject, "CreateAudioObject");
 	func(StopAllSounds, "StopAllSounds");
 	func(GetConfigPath, "GetConfigPath");
-	func(PlayFile, "PlayFile");
-	func(StopFile, "StopFile");
 	func(EnableAllSound, "EnableAllSound");
 	func(AddAudioRequestListener, "AddAudioRequestListener");
 	func(RemoveAudioRequestListener, "RemoveAudioRequestListener");
@@ -262,10 +236,6 @@ void CAudioInterface::RegisterFunctions(std::function<void(const void* pMethod, 
 	func(ReleaseAudioObject, "ReleaseAudioObject");
 	func(ExecuteAudioObjectTrigger, "ExecuteAudioObjectTrigger");
 	func(StopAudioObjectTrigger, "StopAudioObjectTrigger");
-
-	//SPlayFileInfo
-	func(CreateSPlayFileInfo, "CreateSPlayFileInfo");
-	func(ReleaseSPlayFileInfo, "ReleaseSPlayFileInfo");
 
 	//SRequestInfo
 	func(CreateSRequestInfo, "CreateSRequestInfo");

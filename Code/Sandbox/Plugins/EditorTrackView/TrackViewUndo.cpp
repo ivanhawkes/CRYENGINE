@@ -294,7 +294,7 @@ void CAbstractUndoAnimNodeTransaction::AddNode()
 	m_pParentNode->m_pAnimSequence->AddNode(m_pNode->m_pAnimNode);
 
 	// Release ownership and add node back to parent node
-	CTrackViewNode* pNode = m_pStoredTrackViewNode.release();
+	m_pStoredTrackViewNode.release();
 	m_pParentNode->AddNode(m_pNode);
 
 	m_pNode->BindToEditorObjects();
@@ -461,8 +461,7 @@ void CUndoTrackRemove::Redo()
 CUndoAnimNodeReparent::CUndoAnimNodeReparent(CTrackViewAnimNode* pAnimNode, CTrackViewAnimNode* pNewParent)
 	: CAbstractUndoAnimNodeTransaction(pAnimNode), m_pNewParent(pNewParent), m_pOldParent(m_pParentNode)
 {
-	const CTrackViewSequence* pSequence = pAnimNode->GetSequence();
-	assert(pSequence == m_pNewParent->GetSequence() && pSequence == m_pOldParent->GetSequence());
+	CRY_ASSERT(pAnimNode->GetSequence() == m_pNewParent->GetSequence() && pAnimNode->GetSequence() == m_pOldParent->GetSequence());
 
 	Reparent(pNewParent);
 }

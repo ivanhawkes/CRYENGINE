@@ -22,7 +22,7 @@ struct QMenuComboBox::MenuAction : public QAction
 	MenuAction(const QString& text, QObject* parent = nullptr) : QAction(text, parent) {}
 
 	QString toolTip;
-	int index;
+	int     index;
 };
 
 class QMenuComboBox::Popup : public QMenu
@@ -98,7 +98,7 @@ public:
 
 namespace Private_MenuComboBox
 {
-	static const int sWidthOffsetDefault = 36;
+static const int sWidthOffsetDefault = 36;
 }
 
 QMenuComboBox::QMenuComboBox(QWidget* parent)
@@ -191,6 +191,14 @@ void QMenuComboBox::AddItems(const QStringList& items)
 	}
 }
 
+void QMenuComboBox::AddItems(const std::vector<QString>& items)
+{
+	for (const QString& str : items)
+	{
+		AddItem(str);
+	}
+}
+
 void QMenuComboBox::RemoveItem(int index)
 {
 	if (index < 0 || index >= m_data.size())
@@ -199,7 +207,7 @@ void QMenuComboBox::RemoveItem(int index)
 	}
 
 	bool wasSelected = m_data[index].action->isChecked();
-	
+
 	m_popup->removeAction(m_data[index].action);
 
 	m_data.remove(index);
@@ -212,7 +220,7 @@ void QMenuComboBox::RemoveItem(int index)
 
 	if (wasSelected)
 	{
-		if (!m_multiSelect && !m_emptySelect && ! m_data.isEmpty())
+		if (!m_multiSelect && !m_emptySelect && !m_data.isEmpty())
 		{
 			bool wasLastSelected = m_lastSelected == 0;
 			m_lastSelected = -1; // Invalidate last index so we can make sure a new item is selected and text is updated correctly
@@ -374,7 +382,10 @@ void QMenuComboBox::SetItemText(int index, const QString& text)
 	{
 		return;
 	}
+
 	m_data[index].text = text;
+	m_data[index].action->setText(m_data[index].text);
+
 	if (index == m_lastSelected)
 	{
 		UpdateText();
@@ -390,7 +401,7 @@ void QMenuComboBox::InternalSetChecked(int index, bool checked /*= true*/)
 	{
 		if (m_emptySelect && !m_multiSelect)
 		{
-			m_popup->actions()[0]->setChecked(checked);
+			m_popup->actions()[0] -> setChecked(checked);
 		}
 	}
 	else
@@ -405,7 +416,7 @@ bool QMenuComboBox::IsChecked(int index) const
 	{
 		if (m_emptySelect && !m_multiSelect)
 		{
-			return m_popup->actions()[0]->isChecked();
+			return m_popup->actions()[0] -> isChecked();
 		}
 		else
 		{
@@ -420,7 +431,7 @@ bool QMenuComboBox::IsChecked(int index) const
 
 bool QMenuComboBox::IsChecked(const QString& str)
 {
-	for (int i = 0; i < m_data.length(); i++)
+	for (int i = 0; i < m_data.length(); i ++)
 	{
 		if (m_data[i].text == str)
 			return IsChecked(i);
@@ -432,7 +443,7 @@ bool QMenuComboBox::IsChecked(const QString& str)
 QList<int> QMenuComboBox::GetCheckedIndices() const
 {
 	QList<int> ret;
-	for (int i = 0; i < m_data.length(); i++)
+	for (int i = 0; i < m_data.length(); i ++)
 	{
 		if (m_data[i].action->isChecked())
 			ret.push_back(i);
@@ -443,7 +454,7 @@ QList<int> QMenuComboBox::GetCheckedIndices() const
 QStringList QMenuComboBox::GetCheckedItems() const
 {
 	QStringList ret;
-	for (int i = 0; i < m_data.length(); i++)
+	for (int i = 0; i < m_data.length(); i ++)
 	{
 		if (m_data[i].action->isChecked())
 		{
@@ -482,7 +493,7 @@ void QMenuComboBox::paintEvent(QPaintEvent*)
 	QStyleOption styleOption;
 	styleOption.init(this);
 	QPainter painter(this);
-	style()->drawPrimitive(QStyle::PE_Widget, &styleOption, &painter, this);
+	style()->drawPrimitive(QStyle::PE_Widget, & styleOption, & painter, this);
 }
 
 void QMenuComboBox::changeEvent(QEvent* pEvent)
@@ -656,7 +667,10 @@ void QMenuComboBox::OnToggled(int index, bool checked)
 			// at index 0
 			else
 			{
-				OnToggled(-1, checked);
+				if (m_lastSelected != -1) // deselect regular entry -> fall back to empty entry
+					OnToggled(-1, true);
+				else // deselect of the empty entry -> reenable to keep the checkmark
+					InternalSetChecked(-1, true);
 			}
 		}
 	}

@@ -1,14 +1,6 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*=============================================================================
-
-   Revision history:
-* Created by Vladimir Kajalin
-
-   =============================================================================*/
-
-#ifndef __D3D_SVO__H__
-#define __D3D_SVO__H__
+#pragma once
 
 #if defined(FEATURE_SVO_GI)
 
@@ -19,8 +11,8 @@ class CSvoComputePass : public CComputeRenderPass
 {
 public:
 
-	CSvoComputePass()
-		: CComputeRenderPass::CComputeRenderPass(CSvoComputePass::eFlags_ReflectConstantBuffersFromShader)
+	CSvoComputePass(CGraphicsPipeline* pGraphicsPipeline)
+		: CComputeRenderPass::CComputeRenderPass(pGraphicsPipeline, CSvoComputePass::eFlags_ReflectConstantBuffersFromShader)
 	{
 	}
 
@@ -30,12 +22,17 @@ public:
 class CSvoFullscreenPass : public CFullscreenPass
 {
 public:
-
+	CSvoFullscreenPass(CGraphicsPipeline* pGraphicsPipeline) : CFullscreenPass(pGraphicsPipeline) {}
 	int nPrevTargetSize = 0;
 };
 
 struct SSvoTargetsSet
 {
+	SSvoTargetsSet(CGraphicsPipeline* pGraphicsPipeline)
+		: passConeTrace(pGraphicsPipeline)
+		, passDemosaic(pGraphicsPipeline)
+		, passUpscale(pGraphicsPipeline) {}
+
 	// tracing targets
 	_smart_ptr<CTexture> pRT_RGB_0, pRT_ALD_0, pRT_RGB_1, pRT_ALD_1;
 
@@ -49,6 +46,24 @@ struct SSvoTargetsSet
 	CSvoFullscreenPass   passConeTrace;
 	CSvoFullscreenPass   passDemosaic;
 	CSvoFullscreenPass   passUpscale;
+};
+
+struct SSvoPrimitivePasses
+{
+	SSvoTargetsSet m_tsDiff, m_tsSpec;
+
+	// passes
+	CSvoComputePass      m_passClearBricks;
+	CSvoComputePass      m_passInjectDynamicLights;
+	CSvoComputePass      m_passInjectStaticLights;
+	CSvoComputePass      m_passInjectAirOpacity;
+	CSvoComputePass      m_passPropagateLighting_1to2;
+	CSvoComputePass      m_passPropagateLighting_2to3;
+	CSvoFullscreenPass   m_passTroposphere;
+
+	SGraphicsPipelineKey currentKey;
+
+	SSvoPrimitivePasses(CGraphicsPipeline* pGraphicsPipeline);
 };
 
 class CSvoRenderer : public ISvoRenderer
@@ -74,8 +89,8 @@ public:
 	size_t               GetAllocatedMemory();
 
 	static bool          SetShaderParameters(float*& pSrc, uint32 paramType, UFloat4* sData);
-	static CTexture*     GetRsmColorMap(const ShadowMapFrustum& rFr, bool bCheckUpdate = false);
-	static CTexture*     GetRsmNormlMap(const ShadowMapFrustum& rFr, bool bCheckUpdate = false);
+	static CTexture*     GetRsmColorMap(CGraphicsPipeline& graphicsPipeline, const ShadowMapFrustum& rFr, bool bCheckUpdate = false);
+	static CTexture*     GetRsmNormlMap(CGraphicsPipeline& graphicsPipeline, const ShadowMapFrustum& rFr, bool bCheckUpdate = false);
 	ShadowMapFrustum*    GetRsmSunFrustum(const CRenderView* pRenderView) const;
 	CTexture*            GetTroposphereMinRT();
 	CTexture*            GetTroposphereMaxRT();
@@ -91,6 +106,14 @@ public:
 	ColorF               GetSkyColor()             { return m_texInfo.vSkyColorTop; }
 
 	void                 FillForwardParams(SForwardParams& svogiParams, bool enable = true) const;
+
+	void                 BeginFrame(CGraphicsPipeline* pGraphicsPipeline)
+	{
+		if (!m_pPasses || m_pPasses->currentKey != pGraphicsPipeline->GetKey())
+		{
+			m_pPasses = stl::make_unique<SSvoPrimitivePasses>(pGraphicsPipeline);
+		}
+	}
 
 protected:
 
@@ -130,7 +153,7 @@ protected:
 	void                   VoxelizeRE();
 	bool                   VoxelizeMeshes(CShader* ef, SShaderPass* sfm);
 
-	CRenderView*           RenderView() const { return m_pRenderView; };
+	CRenderView*           RenderView() const { return m_pRenderView; }
 
 	#ifdef FEATURE_SVO_GI_ALLOW_HQ
 	_smart_ptr<CTexture> m_pRT_NID_0;
@@ -189,16 +212,7 @@ protected:
 	static CSvoRenderer*              s_pInstance;
 	PodArray<I3DEngine::SSvoNodeInfo> m_arrNodeInfo;
 
-	SSvoTargetsSet                    m_tsDiff, m_tsSpec;
-
-	// passes
-	CSvoComputePass    m_passClearBricks;
-	CSvoComputePass    m_passInjectDynamicLights;
-	CSvoComputePass    m_passInjectStaticLights;
-	CSvoComputePass    m_passInjectAirOpacity;
-	CSvoComputePass    m_passPropagateLighting_1to2;
-	CSvoComputePass    m_passPropagateLighting_2to3;
-	CSvoFullscreenPass m_passTroposphere;
+	std::unique_ptr<SSvoPrimitivePasses> m_pPasses;
 
 	// cvar values
 	#define INIT_ALL_SVO_CVARS                                      \
@@ -293,5 +307,4 @@ protected:
 	#undef INIT_SVO_CVAR
 };
 
-#endif
-#endif
+#endif // FEATURE_SVO_GI

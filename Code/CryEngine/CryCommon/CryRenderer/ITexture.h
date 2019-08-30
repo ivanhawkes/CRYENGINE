@@ -1,20 +1,12 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*=============================================================================
-   IShader.h : Shaders common interface.
+#pragma once
 
-   Revision history:
-* Created by Anton Kaplanyan
-
-   =============================================================================*/
-
-#ifndef _ITEXTURE_H_
-#define _ITEXTURE_H_
+#include "Tarray.h"
 
 #include <CryCore/CryEnumMacro.h>
 #include <CryMath/Cry_Math.h>
 #include <CryMath/Cry_Color.h>
-#include "Tarray.h"
 
 class CTexture;
 
@@ -235,6 +227,8 @@ struct STextureStreamingStats
 		nStaticTexturesSize = 0;
 		nNumStreamingRequests = 0;
 		nThroughput = 0;
+		nOverflowAllocationSize = 0;
+		nOverflowAllocationCount = 0;
 		nNumTexturesPerFrame = 0;
 		nRequiredStreamedTexturesSize = 0;
 		nRequiredStreamedTexturesCount = 0;
@@ -247,6 +241,8 @@ struct STextureStreamingStats
 	size_t     nStreamedTexturesSize;
 	size_t     nStaticTexturesSize;
 	size_t     nNumStreamingRequests;
+	size_t     nOverflowAllocationSize;
+	size_t     nOverflowAllocationCount;
 	uint32     nNumTexturesPerFrame;
 	size_t     nThroughput;
 	size_t     nRequiredStreamedTexturesSize;
@@ -444,7 +440,7 @@ public:
 typedef STexData* STexDataPtr;
 
 //! Texture object interface.
-class ITexture
+struct ITexture
 {
 protected:
 	virtual ~ITexture() {}
@@ -667,5 +663,3 @@ struct STexAnim
 	}
 };
 //! \endcond
-
-#endif// _ITEXTURE_H_

@@ -215,23 +215,24 @@ void RootOpticsElement::RenderPreview(const SLensFlareRenderParam* pParam, const
 	if (!pParam->IsValid())
 		return;
 
+	_smart_ptr<CRenderView> pRenderView = pParam->passInfo.GetRenderView();
+
 	if (gcpRendD3D->m_pRT->IsRenderThread())
 	{
-		return RT_RenderPreview(pParam, vPos);
+		return RT_RenderPreview(vPos, pParam);
 	}
-	
-	SLensFlareRenderParam copyParam = *pParam;
-	gcpRendD3D->m_pRT->ExecuteRenderThreadCommand([=] 
+
+	gcpRendD3D->m_pRT->ExecuteRenderThreadCommand([=]
 	{
-		RT_RenderPreview(&copyParam, vPos);
+		std::shared_ptr<CGraphicsPipeline> pGraphicsPipeline = pRenderView->GetGraphicsPipeline();
+		pGraphicsPipeline->SetCurrentRenderView(pRenderView.get());
+		RT_RenderPreview(vPos, pParam);
 	}, ERenderCommandFlags::None);
 }
 
-void RootOpticsElement::RT_RenderPreview(const SLensFlareRenderParam* pParam, const Vec3& vPos)
+void RootOpticsElement::RT_RenderPreview(const Vec3& vPos, const SLensFlareRenderParam* pParam)
 {
-	CRY_PROFILE_REGION(PROFILE_RENDERER, "RootOpticsElement::RT_RenderPreview");
-
-	CRY_ASSERT(pParam  && pParam->IsValid());
+	CRY_PROFILE_SECTION(PROFILE_RENDERER, "RootOpticsElement::RT_RenderPreview");
 
 	SFlareLight light;
 	light.m_vPos = vPos;
@@ -253,9 +254,10 @@ void RootOpticsElement::RT_RenderPreview(const SLensFlareRenderParam* pParam, co
 		viewport.Height = float(pDstRT->GetHeight());
 		viewport.MinDepth = 0.0f;
 		viewport.MaxDepth = 1.0f;
-
+		
+		_smart_ptr<CRenderView> pRenderView = pParam->passInfo.GetRenderView();
 		SRenderViewInfo viewInfo[CCamera::eEye_eCount];
-		size_t viewInfoCount = gcpRendD3D->GetGraphicsPipeline().GenerateViewInfo(viewInfo);
+		size_t viewInfoCount = pRenderView->GetGraphicsPipeline()->GenerateViewInfo(viewInfo);
 
 		std::vector<CPrimitiveRenderPass*> prePasses;
 
@@ -325,7 +327,7 @@ bool RootOpticsElement::ProcessAll(CPrimitiveRenderPass& targetPass, std::vector
 	context.lightWorldPos = vSrcWorldPos;
 	context.lightScreenPos[0] = vSrcProjPos;
 
-	for (int i=1; i<viewInfoCount; ++i)
+	for (int i = 1; i < viewInfoCount; ++i)
 	{
 		Vec3 projPos;
 		if (CFlareSoftOcclusionQuery::ComputeProjPos(vSrcWorldPos, pViewInfo[i].viewMatrix, pViewInfo[i].projMatrix, projPos))
@@ -333,7 +335,7 @@ bool RootOpticsElement::ProcessAll(CPrimitiveRenderPass& targetPass, std::vector
 			if (pViewInfo[i].flags & SRenderViewInfo::eFlags_ReverseDepth)
 				projPos.z = 1.0f - projPos.z;
 
-			PREFAST_ASSUME(i>0 && i<CCamera::eEye_eCount);
+			PREFAST_ASSUME(i > 0 && i < CCamera::eEye_eCount);
 			context.lightScreenPos[i] = projPos;
 		}
 	}
@@ -357,4 +359,3 @@ bool RootOpticsElement::ProcessAll(CPrimitiveRenderPass& targetPass, std::vector
 
 	return true;
 }
-

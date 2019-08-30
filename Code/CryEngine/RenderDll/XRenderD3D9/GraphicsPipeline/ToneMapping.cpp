@@ -2,10 +2,9 @@
 
 #include "StdAfx.h"
 #include "ToneMapping.h"
-
+#include "ColorGrading.h"
 #include "Bloom.h"
 #include "SunShafts.h"
-#include "ColorGrading.h"
 #include "D3DPostProcess.h"
 
 #include <Common/RenderDisplayContext.h>
@@ -15,11 +14,10 @@ void CToneMappingStage::Execute()
 	FUNCTION_PROFILER_RENDERER();
 	PROFILE_LABEL_SCOPE("TONEMAPPING");
 
-	CSunShaftsStage*    pSunShaftsStage    = (CSunShaftsStage   *)GetStdGraphicsPipeline().GetStage(eStage_Sunshafts);
-	CBloomStage*        pBloomStage        = (CBloomStage       *)GetStdGraphicsPipeline().GetStage(eStage_Bloom);
-	CColorGradingStage* pColorGradingStage = (CColorGradingStage*)GetStdGraphicsPipeline().GetStage(eStage_ColorGrading);
+	CSunShaftsStage* pSunShaftsStage = m_graphicsPipeline.GetStage<CSunShaftsStage>();
+	CBloomStage* pBloomStage = m_graphicsPipeline.GetStage<CBloomStage>();
+	CColorGradingStage* pColorGradingStage = m_graphicsPipeline.GetStage<CColorGradingStage>();
 
-	bool bHighQualitySunshafts = false;
 	bool bColorGradingEnabled = pColorGradingStage->IsStageActive(EShaderRenderingFlags(0));
 	bool bSunShaftsEnabled = pSunShaftsStage->IsStageActive(EShaderRenderingFlags(0));
 	bool bBloomEnabled = pBloomStage->IsStageActive(EShaderRenderingFlags(0));
@@ -140,7 +138,7 @@ void CToneMappingStage::ExecuteDebug()
 		m_passToneMapping.SetTechnique(pShader, techToneMapping, rtMask);
 		m_passToneMapping.SetRenderTarget(0, CRendererResources::s_ptexDisplayTargetDst);
 		m_passToneMapping.SetState(GS_NODEPTHTEST);
-		m_passToneMapping.SetFlags(CPrimitiveRenderPass::ePassFlags_RequireVrProjectionConstants);	
+		m_passToneMapping.SetFlags(CPrimitiveRenderPass::ePassFlags_RequireVrProjectionConstants);
 		m_passToneMapping.SetPrimitiveFlags(primFlags);
 		m_passToneMapping.SetSampler(0, EDefaultSamplerStates::LinearClamp);
 		m_passToneMapping.SetTexture(0, CRendererResources::s_ptexHDRTarget);
@@ -148,7 +146,6 @@ void CToneMappingStage::ExecuteDebug()
 		m_passToneMapping.SetRequireWorldPos(true);
 		m_passToneMapping.SetRequirePerViewConstantBuffer(true);
 	}
-
 
 	if (CRenderer::CV_r_HDRDebug == 2)
 	{
@@ -167,9 +164,6 @@ void CToneMappingStage::ExecuteDebug()
 void CToneMappingStage::ExecuteFixedExposure(CTexture* pColorTex, CTexture* pDepthTex)
 {
 	PROFILE_LABEL_SCOPE("TONEMAPPING_FIXED_EXPOSURE");
-
-	CRenderView* pRenderView = RenderView();
-	const CRenderOutput* pOutput = pRenderView->GetRenderOutput();
 
 //	ASSERT_LEGACY_PIPELINE
 	return;

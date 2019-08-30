@@ -132,7 +132,7 @@ void CRoadRenderNode::SetVertices(const Vec3* pVertsAll, int nVertsNumAll,
 
 void CRoadRenderNode::Compile() PREFAST_SUPPRESS_WARNING(6262) //function uses > 32k stack space
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	// free old object and mesh
 	m_pRenderMesh = NULL;
@@ -419,7 +419,7 @@ void CRoadRenderNode::Compile() PREFAST_SUPPRESS_WARNING(6262) //function uses >
 
 		if (m_bPhysicalize)
 		{
-			LOADING_TIME_PROFILE_SECTION_NAMED("RoadPhysicalization");
+			CRY_PROFILE_SECTION(PROFILE_LOADING_ONLY, "RoadPhysicalization");
 
 			IGeomManager* pGeoman = GetPhysicalWorld()->GetGeomManager();
 			primitives::box abox;
@@ -435,7 +435,7 @@ void CRoadRenderNode::Compile() PREFAST_SUPPRESS_WARNING(6262) //function uses >
 
 			if (m_pMaterial && m_pPhysEnt)
 			{
-				LOADING_TIME_PROFILE_SECTION_NAMED("RoadPhysicalizationParts");
+				CRY_PROFILE_SECTION(PROFILE_LOADING_ONLY, "RoadPhysicalizationParts");
 
 				ISurfaceType* psf;
 				if ((psf = m_pMaterial->GetSurfaceType()) || m_pMaterial->GetSubMtl(0) && (psf = m_pMaterial->GetSubMtl(0)->GetSurfaceType()))
@@ -664,17 +664,7 @@ void CRoadRenderNode::OffsetPosition(const Vec3& delta)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void CRoadRenderNode::FillBBox(AABB& aabb)
-{
-	aabb = CRoadRenderNode::GetBBox();
-}
-
-EERType CRoadRenderNode::GetRenderNodeType()
-{
-	return eERType_Road;
-}
-
-float CRoadRenderNode::GetMaxViewDist()
+float CRoadRenderNode::GetMaxViewDist() const
 {
 	if (GetMinSpecFromRenderNodeFlags(m_dwRndFlags) == CONFIG_DETAIL_SPEC)
 		return max(GetCVars()->e_ViewDistMin, CRoadRenderNode::GetBBox().GetRadius() * GetCVars()->e_ViewDistRatioDetail * GetViewDistRatioNormilized());
@@ -692,7 +682,7 @@ IMaterial* CRoadRenderNode::GetMaterial(Vec3* pHitPos) const
 	return m_pMaterial;
 }
 
-bool CRoadRenderNode::CanExecuteRenderAsJob()
+bool CRoadRenderNode::CanExecuteRenderAsJob() const
 {
 	return !gEnv->IsEditor() && GetCVars()->e_ExecuteRenderAsJobMask & BIT(GetRenderNodeType());
 }

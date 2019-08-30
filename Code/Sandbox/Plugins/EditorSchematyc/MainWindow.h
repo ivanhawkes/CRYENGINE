@@ -16,7 +16,7 @@
 
 #include "ObjectModel.h"
 
-class CInspector;
+class CInspectorLegacy;
 class QAction;
 class QVBoxLayout;
 
@@ -77,15 +77,14 @@ public:
 	CAsset* GetAsset() const { return m_pAsset; }
 
 protected:
-	// CEditor
-	virtual void CreateDefaultLayout(CDockableContainer* pSender) override;
-	// ~CEditor
 
 	// CAssetEditor
 	virtual bool OnOpenAsset(CAsset* pAsset) override;
 	virtual bool OnSaveAsset(CEditableAsset& editAsset) override;
 	virtual bool OnAboutToCloseAsset(string& reason) const override;
 	virtual void OnCloseAsset() override;
+	virtual void OnInitialize() override;
+	virtual void OnCreateDefaultLayout(CDockableContainer* pSender, QWidget* pAssetBrowser) override;
 	// ~CAssetEditor
 
 	void SaveState();
@@ -106,7 +105,6 @@ protected Q_SLOTS:
 	void OnGraphViewWidgetDestruction(QObject* pObject);
 
 private:
-	void                             RegisterWidgets();
 	void                             InitMenu();
 	void                             InitToolbar(QVBoxLayout* pWindowLayout);
 
@@ -131,7 +129,7 @@ private:
 	Schematyc::CLogWidget*           CreateLogWidget();
 	Schematyc::CPreviewWidget*       CreatePreviewWidget();
 	Schematyc::CScriptBrowserWidget* CreateScriptBrowserWidget();
-	CInspector*                      CreateInspectorWidget();
+	CInspectorLegacy*                CreateInspectorWidget();
 	CGraphViewWidget*                CreateGraphViewWidget();
 
 private:
@@ -154,7 +152,7 @@ private:
 	QAction*                         m_pShowLogSettingsToolbarAction;
 	QAction*                         m_pShowPreviewSettingsToolbarAction;
 
-	CInspector*                      m_pInspector;
+	CInspectorLegacy*                m_pInspector;
 	CGraphViewWidget*                m_pGraphView;
 };
 

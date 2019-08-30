@@ -7,8 +7,6 @@
 
 namespace CryAudio
 {
-class CObject;
-
 class CSwitchState final : public CPoolObject<CSwitchState, stl::PSyncNone>
 {
 public:
@@ -19,14 +17,14 @@ public:
 	CSwitchState& operator=(CSwitchState const&) = delete;
 	CSwitchState& operator=(CSwitchState&&) = delete;
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	explicit CSwitchState(
 		ControlId const switchId,
 		SwitchStateId const switchStateId,
 		SwitchStateConnections const& connections,
 		char const* const szName)
-		: m_switchStateId(switchStateId)
-		, m_switchId(switchId)
+		: m_switchId(switchId)
+		, m_switchStateId(switchStateId)
 		, m_connections(connections)
 		, m_name(szName)
 	{}
@@ -35,21 +33,24 @@ public:
 		ControlId const switchId,
 		SwitchStateId const switchStateId,
 		SwitchStateConnections const& connections)
-		: m_switchStateId(switchStateId)
-		, m_switchId(switchId)
+		: m_switchId(switchId)
+		, m_switchStateId(switchStateId)
 		, m_connections(connections)
 	{}
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 
 	~CSwitchState();
 
-	void          Set(CObject const& object) const;
 	void          SetGlobally() const;
 	SwitchStateId GetId() const { return m_switchStateId; }
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
+	void        Set(CObject const& object) const;
+	void        Set(CDefaultObject const& object) const;
 	char const* GetName() const { return m_name.c_str(); }
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#else
+	void        Set(Impl::IObject* const pIObject) const;
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 
 private:
 
@@ -57,8 +58,8 @@ private:
 	SwitchStateId const          m_switchStateId;
 	SwitchStateConnections const m_connections;
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	CryFixedStringT<MaxControlNameLength> const m_name;
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 };
 } // namespace CryAudio

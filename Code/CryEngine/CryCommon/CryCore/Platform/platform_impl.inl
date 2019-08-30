@@ -146,6 +146,10 @@ extern "C" DLL_EXPORT SRegFactoryNode* GetHeadToRegFactories()
 	#include <CryMath/ISplineSerialization_impl.h>
 
 	#include <CryCore/TypeInfo_impl.h>
+	#include <CryMemory/VirtualMemory_impl.h>
+	#if CRY_PLATFORM_ORBIS
+		#include <CryMemory/VirtualMemory_impl_sce.h>
+	#endif
 
 	#define CRY_PLATFORM_IMPL_H_FILE 1
 	#include <CryCore/CryTypeInfo.inl>
@@ -485,9 +489,6 @@ EQuestionResult CryMessageBox(const wchar_t* szText, const wchar_t* szCaption, E
 CAutoRegFlowNodeBase* CAutoRegFlowNodeBase::s_pFirst = nullptr;
 CAutoRegFlowNodeBase* CAutoRegFlowNodeBase::s_pLast = nullptr;
 bool                  CAutoRegFlowNodeBase::s_bNodesRegistered = false;
-
-// load implementation of platform profile marker
-#include <CrySystem/Profilers/FrameProfiler/FrameProfiler_impl.h>
 
 CRY_ALIGN(64) uint32 BoxSides[0x40 * 8] = {
 	0, 0, 0, 0, 0, 0, 0, 0, //00

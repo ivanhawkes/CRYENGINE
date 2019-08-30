@@ -222,7 +222,11 @@ CTrackViewAnimNode* CTrackViewAnimNode::CreateSubNode(const string& name, const 
 	}
 
 	pNewAnimNode->SetName(name);
-	pNewAnimNode->CreateDefaultTracks();
+	if (animNodeType != eAnimNodeType_Entity)
+	{
+		pNewAnimNode->CreateDefaultTracks();
+	}
+
 	pNewAnimNode->SetParent(m_pAnimNode);
 
 	CTrackViewAnimNodeFactory animNodeFactory;
@@ -749,7 +753,6 @@ CTrackViewAnimNodeBundle CTrackViewAnimNode::AddSelectedEntities()
 		}
 
 		// Get node type (either entity or camera)
-		EAnimNodeType nodeType = eAnimNodeType_Invalid;
 		CTrackViewAnimNode* pAnimNode = nullptr;
 		if (pObject->IsKindOf(RUNTIME_CLASS(CCameraObject)))
 		{

@@ -837,7 +837,7 @@ struct IFireCommandHandler
 	virtual int GetShotCount() const = 0;
 
 	//! Used by fire command handler to fill in information about projectiles to be fired by the AI.
-	virtual void GetProjectileInfo(SFireCommandProjectileInfo& info) const     {};
+	virtual void GetProjectileInfo(SFireCommandProjectileInfo& info) const     {}
 
 	virtual bool GetOverrideAimingPosition(Vec3& overrideAimingPosition) const { return false; }
 
@@ -1830,7 +1830,8 @@ inline AgentDictionary::AgentDictionary()
 	fireModeXml.Add("BurstSnipe", FIREMODE_BURST_SNIPE);
 	fireModeXml.Add("AimSweep", FIREMODE_AIM_SWEEP);
 	fireModeXml.Add("BurstOnce", FIREMODE_BURST_ONCE);
-	fireModeXml.Add("Vehicle", FIREMODE_VEHICLE);
+	// Commented out on purpose so that we don't serialize this value on Sandbox editors. See CE-19948.
+	// fireModeXml.Add("Vehicle", FIREMODE_VEHICLE);
 
 	fireModesSerialization.reserve(17);
 	fireModesSerialization.push_back("Off");
@@ -1849,7 +1850,8 @@ inline AgentDictionary::AgentDictionary()
 	fireModesSerialization.push_back("BurstSnipe");
 	fireModesSerialization.push_back("AimSweep");
 	fireModesSerialization.push_back("BurstOnce");
-	fireModesSerialization.push_back("Vehicle");
+	// Commented out on purpose so that we don't serialize this value on Sandbox editors. See CE-19948.
+	// fireModesSerialization.push_back("Vehicle");
 
 	bodyOrientationsXml.Reserve(3);
 	bodyOrientationsXml.Add("FullyTowardsMovementDirection", FullyTowardsMovementDirection);
@@ -1898,7 +1900,8 @@ SERIALIZATION_ENUM(EFireMode::FIREMODE_MELEE_FORCED, "melee_forced", "MeleeForce
 SERIALIZATION_ENUM(EFireMode::FIREMODE_BURST_SNIPE, "burst_snipe", "BurstSnipe")
 SERIALIZATION_ENUM(EFireMode::FIREMODE_AIM_SWEEP, "aim_sweep", "AimSweep")
 SERIALIZATION_ENUM(EFireMode::FIREMODE_BURST_ONCE, "burst_once", "BurstOnce")
-SERIALIZATION_ENUM(EFireMode::FIREMODE_VEHICLE, "vehicle", "Vehicle")
+// Commented out on purpose so that we don't serialize this value on Sandbox editors. See CE-19948.
+// SERIALIZATION_ENUM(EFireMode::FIREMODE_VEHICLE, "vehicle", "Vehicle")
 SERIALIZATION_ENUM_END()
 
 SERIALIZATION_ENUM_BEGIN(EBodyOrientationMode, "Body Orientation Mode")

@@ -88,8 +88,6 @@ static void DrawElement(const SRenderContext& rc, const SElement& element, Eleme
 	if (element.hidden)
 		return;
 
-	IRenderer* renderer = GetIEditorImpl()->GetRenderer();
-	IPhysicsDebugRenderer* physicsDebugRenderer = GetIEditorImpl()->GetSystem()->GetIPhysicsDebugRenderer();
 	IRenderAuxGeom* aux = rc.pAuxGeom;
 
 	SAuxGeomRenderFlags defaultFlags(e_Mode3D | e_AlphaBlended | e_DrawInFrontOff | e_FillModeSolid | e_CullModeNone | e_DepthWriteOn | e_DepthTestOn);
@@ -98,8 +96,6 @@ static void DrawElement(const SRenderContext& rc, const SElement& element, Eleme
 
 	QuatT transform = spaceProvider->ElementToWorldSpace(element);
 	Matrix34 transformM(transform);
-
-	bool isHighlighted = element.id == highlightedItem;
 
 	if (element.shape == SHAPE_BOX)
 	{
@@ -170,9 +166,6 @@ static void DrawElement(const SRenderContext& rc, const SElement& element, Eleme
 
 void CScene::OnViewportRender(const SRenderContext& rc)
 {
-	IRenderer* renderer = GetIEditorImpl()->GetRenderer();
-	IRenderAuxGeom* aux = rc.pAuxGeom;
-
 	IPhysicsDebugRenderer* physicsDebugRenderer = GetIEditorImpl()->GetSystem()->GetIPhysicsDebugRenderer();
 	physicsDebugRenderer->UpdateCamera(*rc.viewport->Camera());
 
@@ -209,24 +202,30 @@ void CScene::OnViewportRender(const SRenderContext& rc)
 
 	bool hasSelection = !m_selection.IsEmpty();
 
-	if (m_showGizmo && hasSelection)
+	if (m_showGizmo && hasSelection && m_axisHelper.get())
 	{
 		SAuxGeomRenderFlags prevFlags = IRenderAuxGeom::GetAux()->GetRenderFlags();
 		IRenderAuxGeom::GetAux()->SetRenderFlags(e_Mode3D | e_AlphaBlended | e_FillModeSolid | e_CullModeBack | e_DepthTestOn | e_DepthWriteOn);
 
-		int selectionCaps = GetSelectionCaps();
+		switch (m_transformationMode)
+		{
+		case MODE_TRANSLATE:
+			m_axisHelper->SetMode(CAxisHelper::MOVE_FLAG);
+			break;
+		case MODE_ROTATE:
+			m_axisHelper->SetMode(CAxisHelper::ROTATE_FLAG);
+			break;
+		case MODE_SCALE:
+			m_axisHelper->SetMode(CAxisHelper::SCALE_FLAG);
+			break;
+		}
+
+		const float gizmoSize = 1.0f;
 		Matrix34 m = Matrix34(GetGizmoOrientation(GetSelectionTransform(SPACE_WORLD), rc.viewport->Camera(), m_transformationSpace));
 		SDisplayContext dc;
 		CDisplayViewportAdapter view(rc.viewport);
 		dc.SetView(&view);
-
-		SGizmoPreferences gizmoParameters;
-		gizmoParameters.axisGizmoSize = 0.2f;
-
-		if (m_axisHelper.get())
-		{
-			m_axisHelper->DrawAxis(m, dc);
-		}
+		m_axisHelper->DrawAxis(m, dc, gizmoSize);
 
 		IRenderAuxGeom::GetAux()->SetRenderFlags(prevFlags);
 	}

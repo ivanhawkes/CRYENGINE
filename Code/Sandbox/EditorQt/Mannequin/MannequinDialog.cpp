@@ -20,6 +20,7 @@
 #include <Util/FileUtil.h>
 
 #include <CryGame/IGameFramework.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 #define MANNEQUIN_EDITOR_VERSION   "1.00"
 #define MANNEQUIN_EDITOR_TOOL_NAME "Mannequin Editor"
@@ -426,7 +427,6 @@ void CMannequinDialog::ResavePreviewFile()
 
 bool CMannequinDialog::SavePreviewFile(const char* filename)
 {
-	IMannequin& mannequinSys = gEnv->pGameFramework->GetMannequinInterface();
 	const SControllerDef* pControllerDef = m_contexts.m_controllerDef;
 	if (pControllerDef == NULL)
 	{

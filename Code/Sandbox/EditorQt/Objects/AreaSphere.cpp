@@ -167,7 +167,6 @@ void CAreaSphere::Display(CObjectRenderHelper& objRenderHelper)
 		solidColor = CMFCUtils::ColorBToColorRef(GetColor());
 	}
 
-	const Matrix34& tm = GetWorldTM();
 	Vec3 pos = GetWorldPos();
 
 	bool bFrozen = IsFrozen();
@@ -290,6 +289,15 @@ void CAreaSphere::OnEntityRemoved(IEntity const* const pIEntity)
 		{
 			pArea->RemoveEntity(pIEntity->GetId());
 		}
+	}
+}
+
+void CAreaSphere::ClearArea()
+{
+	IEntityAreaComponent* const pArea = m_pEntity->GetComponent<IEntityAreaComponent>();
+	if (pArea)
+	{
+		pArea->RemoveEntities();
 	}
 }
 

@@ -39,7 +39,7 @@ CBreadcrumbsBar::CBreadcrumbsBar()
 	m_hoverWidget->setObjectName("HoverWidget");
 
 	auto layout = new QHBoxLayout();
-	layout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+	layout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	layout->addWidget(m_dropDownButton);
 	layout->addLayout(m_breadCrumbsLayout);
 	layout->addWidget(m_hoverWidget);
@@ -276,7 +276,7 @@ void CBreadcrumbsBar::OnEnterPressed()
 		}
 		else
 		{
-			bool result = m_textEdit->setProperty("error", true);
+			m_textEdit->setProperty("error", true);
 			m_textEdit->style()->unpolish(m_textEdit);
 			m_textEdit->style()->polish(m_textEdit);
 			ToggleBreadcrumbsVisibility(false);

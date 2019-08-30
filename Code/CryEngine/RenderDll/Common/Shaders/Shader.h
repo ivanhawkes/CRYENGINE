@@ -1,15 +1,6 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*=============================================================================
-   Shader.h : Shaders declarations.
-
-   Revision history:
-* Created by Honich Andrey
-
-   =============================================================================*/
-
-#ifndef __SHADER_H__
-#define __SHADER_H__
+#pragma once
 
 #include "../Defs.h"
 
@@ -28,7 +19,7 @@
 
 // bump this value up if you want to invalidate shader cache (e.g. changed some code or .ext file)
 // #### VIP NOTE ####: DON'T USE MORE THAN ONE DECIMAL PLACE!!!! else it doesn't work...
-#define FX_CACHE_VER     0.6
+#define FX_CACHE_VER     1.0
 #define FX_SER_CACHE_VER 1.2    // Shader serialization version (FX_CACHE_VER + FX_SER_CACHE_VER)
 
 // Maximum 1 digit here
@@ -250,10 +241,7 @@ struct SFXParam
 		m_nRegister[4] = 10000;
 		m_nRegister[5] = 10000;
 	}
-	~SFXParam()
-	{
-		int nnn = 0;
-	}
+	~SFXParam() = default;
 	uint32 GetComponent(EHWShaderClass eSHClass);
 	void   GetParamComp(uint32 nOffset, CryFixedStringT<128>& param);
 	uint32 GetParamFlags() { return m_nFlags; }
@@ -536,7 +524,6 @@ struct SOptimiseStats
 	int nUniqueEntries;
 	int nSizeUncompressed;
 	int nSizeCompressed;
-	int nTokenDataSize;
 	int nDirDataSize;
 	SOptimiseStats()
 	{
@@ -544,7 +531,6 @@ struct SOptimiseStats
 		nUniqueEntries = 0;
 		nSizeUncompressed = 0;
 		nSizeCompressed = 0;
-		nTokenDataSize = 0;
 		nDirDataSize = 0;
 	}
 };
@@ -846,7 +832,6 @@ public:
 	virtual const char* mfGetEntryName() = 0;
 	virtual void        mfUpdatePreprocessFlags(SShaderTechnique* pTech) = 0;
 	virtual bool        mfFlushCacheFile() = 0;
-	bool                mfWriteoutTokensToCache();
 
 	// Used to precache shader combination during shader cache generation.
 	virtual bool        PrecacheShader(CShader* pSH, const SShaderCombIdent &cacheIdent,uint32 nFlags) = 0;
@@ -874,7 +859,6 @@ public:
 	static byte*            mfIgnoreRemapsFromCache(int nRemaps, byte* pP);
 	static byte*            mfIgnoreBindsFromCache(int nParams, byte* pP);
 
-	static void             mfValidateTokenData(CResFile* pRF);
 	static void             mfValidateDirEntries(CResFile* pRF);
 
 	// Import/Export
@@ -1429,7 +1413,6 @@ public:
 
 inline SShaderTechnique* SShaderItem::GetTechnique() const
 {
-	SShaderTechnique* pTech = NULL;
 	int nTech = m_nTechnique;
 	if (nTech < 0)
 		nTech = 0;
@@ -1445,7 +1428,3 @@ inline SShaderTechnique* SShaderItem::GetTechnique() const
 	}
 	return NULL;
 }
-
-//////////////////////////////////////////////////////////////////////////
-
-#endif

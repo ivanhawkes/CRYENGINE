@@ -429,6 +429,11 @@ void CEntityPhysics::AwakeOnRender(bool bRender)
 				GetEntity()->SetInternalFlag(CEntity::EInternalFlag::PhysicsAwakeOnRender, false);
 			}
 		}
+		if (GetEntity()->HasInternalFlag(CEntity::EInternalFlag::PhysicsAttachClothOnRender))
+		{
+			OnTimer(0);
+			GetEntity()->SetFlags(GetEntity()->GetFlags() & ~ENTITY_FLAG_SEND_RENDER_EVENT);
+		}
 	}
 }
 
@@ -468,7 +473,7 @@ void CEntityPhysics::OnTimer(int id)
 			return;
 		}
 		// Re-create timer, re-use same id
-		GetEntity()->SetTimer(this, GetEntity()->GetId(), CryGUID(), 0, 50);
+		GetEntity()->SetTimer(this, GetEntity()->GetId(), CryGUID(), 0, 200);
 	}
 }
 
@@ -1465,7 +1470,7 @@ void CEntityPhysics::PhysicalizeSoft(SEntityPhysicalizeParams& params)
 		pf.flagsAND = pef_log_poststep;
 		m_pPhysicalEntity->SetParams(&pf);
 		GetEntity()->SetInternalFlag(CEntity::EInternalFlag::PhysicsAttachClothOnRender, true);
-		GetEntity()->SetTimer(this, GetEntity()->GetId(), CryGUID(), 0, 50);
+		GetEntity()->SetFlags(GetEntity()->GetFlags() | ENTITY_FLAG_SEND_RENDER_EVENT);
 	}
 }
 
@@ -1759,9 +1764,12 @@ bool CEntityPhysics::ConvertCharacterToRagdoll(SEntityPhysicalizeParams& params,
 	GetEntity()->SetInternalFlag(CEntity::EInternalFlag::PhysicsHasCharacter, true);
 	GetEntity()->SetInternalFlag(CEntity::EInternalFlag::PhysicsSyncCharacter, true);
 
+	Matrix34 mtxloc = GetEntity()->GetSlotLocalTM(params.nSlot, false);
+	mtxloc.ScaleColumn(GetEntity()->GetScale());
+	GetEntity()->SetSlotLocalTM(params.nSlot, Matrix34(IDENTITY));
+
 	// This is special case when converting living character into the rag-doll
-	IPhysicalEntity* pPhysEntity = pCharacter->GetISkeletonPose()->RelinquishCharacterPhysics(//GetEntity()->GetSlotWorldTM(params.nSlot),
-		GetEntity()->GetWorldTM(), params.fStiffnessScale, params.bCopyJointVelocities, velInitial);
+	IPhysicalEntity* pPhysEntity = pCharacter->GetISkeletonPose()->RelinquishCharacterPhysics(mtxloc,	params.fStiffnessScale, params.bCopyJointVelocities, velInitial);
 	if (pPhysEntity)
 	{
 		// Store current velocity.
@@ -2045,6 +2053,7 @@ void CEntityPhysics::OnPhysicsPostStep(EventPhysPostStep* pEvent)
 			pSlot->GetLocalBounds(bboxLoc);
 			bbox.SetTransformedAABB(pSlot->GetWorldTM(), bboxLoc);
 			pRenderNode->SetBBox(bbox);
+			pRenderNode->SetEntityStatObj(pStatObjNew);	// forces permanent render object invalidation
 		}
 	}
 

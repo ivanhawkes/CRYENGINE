@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 #include "ProjectLoader.h"
 
+#include "Common.h"
 #include "Impl.h"
 #include "Utils.h"
 
@@ -18,16 +19,16 @@ namespace Impl
 namespace Fmod
 {
 // Paths
-string const g_eventFoldersPath = "/metadata/eventfolder/";
-string const g_parametersFoldersPath = "/metadata/parameterpresetfolder/";
-string const g_snapshotGroupsPath = "/metadata/snapshotgroup/";
-string const g_mixerGroupsPath = "/metadata/group/";
-string const g_eventsPath = "/metadata/event/";
-string const g_parametersPath = "/metadata/parameterpreset/";
-string const g_snapshotsPath = "/metadata/snapshot/";
-string const g_returnsPath = "/metadata/return/";
-string const g_vcasPath = "/metadata/vca/";
-string const g_bankPath = "/metadata/bank/";
+constexpr char const* g_szEventFoldersPath = "/metadata/eventfolder/";
+constexpr char const* g_szParametersFoldersPath = "/metadata/parameterpresetfolder/";
+constexpr char const* g_szSnapshotGroupsPath = "/metadata/snapshotgroup/";
+constexpr char const* g_szMixerGroupsPath = "/metadata/group/";
+constexpr char const* g_szEventsPath = "/metadata/event/";
+constexpr char const* g_szParametersPath = "/metadata/parameterpreset/";
+constexpr char const* g_szSnapshotsPath = "/metadata/snapshot/";
+constexpr char const* g_szReturnsPath = "/metadata/return/";
+constexpr char const* g_szVcasPath = "/metadata/vca/";
+constexpr char const* g_szBankPath = "/metadata/bank/";
 
 using ItemNames = std::vector<string>;
 
@@ -65,18 +66,18 @@ CProjectLoader::CProjectLoader(
 	CItem* const pReturnsFolder = CreateItem(s_returnsFolderName, EItemType::EditorFolder, &m_rootItem, EItemFlags::IsContainer);
 	CItem* const pVcasFolder = CreateItem(s_vcasFolderName, EItemType::EditorFolder, &m_rootItem, EItemFlags::IsContainer);
 
-	ParseFolder(projectPath + g_eventFoldersPath, *pEventsFolder, rootItem);          // Event folders
-	ParseFolder(projectPath + g_parametersFoldersPath, *pParametersFolder, rootItem); // Parameter folders
-	ParseFolder(projectPath + g_snapshotGroupsPath, *pSnapshotsFolder, rootItem);     // Snapshot groups
-	ParseFolder(projectPath + g_mixerGroupsPath, *pReturnsFolder, rootItem);          // Mixer groups
-	ParseFolder(projectPath + g_eventsPath, *pEventsFolder, rootItem);                // Events
-	ParseFolder(projectPath + g_parametersPath, *pParametersFolder, rootItem);        // Parameters
-	ParseFolder(projectPath + g_snapshotsPath, *pSnapshotsFolder, rootItem);          // Snapshots
-	ParseFolder(projectPath + g_returnsPath, *pReturnsFolder, rootItem);              // Returns
-	ParseFolder(projectPath + g_vcasPath, *pVcasFolder, rootItem);                    // VCAs
-	ParseFolder(projectPath + g_bankPath, rootItem, rootItem);                        // Audio tables of banks
+	ParseFolder(projectPath + g_szEventFoldersPath, *pEventsFolder, rootItem);          // Event folders
+	ParseFolder(projectPath + g_szParametersFoldersPath, *pParametersFolder, rootItem); // Parameter folders
+	ParseFolder(projectPath + g_szSnapshotGroupsPath, *pSnapshotsFolder, rootItem);     // Snapshot groups
+	ParseFolder(projectPath + g_szMixerGroupsPath, *pReturnsFolder, rootItem);          // Mixer groups
+	ParseFolder(projectPath + g_szEventsPath, *pEventsFolder, rootItem);                // Events
+	ParseFolder(projectPath + g_szParametersPath, *pParametersFolder, rootItem);        // Parameters
+	ParseFolder(projectPath + g_szSnapshotsPath, *pSnapshotsFolder, rootItem);          // Snapshots
+	ParseFolder(projectPath + g_szReturnsPath, *pReturnsFolder, rootItem);              // Returns
+	ParseFolder(projectPath + g_szVcasPath, *pVcasFolder, rootItem);                    // VCAs
+	ParseFolder(projectPath + g_szBankPath, rootItem, rootItem);                        // Audio tables of banks
 
-	if (!m_audioTableDirectories.empty())
+	if (!m_audioTableInfos.empty())
 	{
 		CItem* const pKeysFolder = CreateItem(s_keysFolderName, EItemType::EditorFolder, &m_rootItem, EItemFlags::IsContainer);
 		LoadKeys(*pKeysFolder);
@@ -106,9 +107,9 @@ void CProjectLoader::LoadBanks(string const& folderPath, bool const isLocalized,
 
 		// We have to exclude the Master Bank, for this we look
 		// for the file that ends with "strings.bank" as it is guaranteed
-		// to have the same name as the Master Bank and there should be unique
+		// to have the same name as the Master Bank and there should be unique.
 		ItemNames banks;
-		string masterBankName = "";
+		ItemNames masterBankNames;
 
 		do
 		{
@@ -126,7 +127,7 @@ void CProjectLoader::LoadBanks(string const& folderPath, bool const isLocalized,
 
 					if (pos != string::npos)
 					{
-						masterBankName = fileName.substr(0, pos);
+						masterBankNames.emplace_back(fileName.substr(0, pos));
 					}
 					else
 					{
@@ -139,7 +140,23 @@ void CProjectLoader::LoadBanks(string const& folderPath, bool const isLocalized,
 
 		for (string const& bankName : banks)
 		{
-			if (isLocalized || (bankName.compareNoCase(0, masterBankName.length(), masterBankName) != 0))
+			bool canCreateItem = isLocalized;
+
+			if (!canCreateItem)
+			{
+				canCreateItem = true;
+
+				for (auto const& masterBankName : masterBankNames)
+				{
+					if ((bankName.compareNoCase(0, masterBankName.length(), masterBankName) == 0))
+					{
+						canCreateItem = false;
+						break;
+					}
+				}
+			}
+
+			if (canCreateItem)
 			{
 				string const filePath = folderPath + "/" + bankName;
 				EPakStatus const pakStatus = pCryPak->IsFileExist(filePath.c_str(), ICryPak::eFileLocation_OnDisk) ? EPakStatus::OnDisk : EPakStatus::None;
@@ -184,56 +201,56 @@ void CProjectLoader::ParseFile(string const& filepath, CItem& parent, EPakStatus
 {
 	if (GetISystem()->GetIPak()->IsFileExist(filepath))
 	{
-		XmlNodeRef const pRoot = GetISystem()->LoadXmlFromFile(filepath);
+		XmlNodeRef const rootNode = GetISystem()->LoadXmlFromFile(filepath);
 
-		if (pRoot != nullptr)
+		if (rootNode.isValid())
 		{
 			CItem* pItem = nullptr;
-			int const numChildren = pRoot->getChildCount();
+			int const numChildren = rootNode->getChildCount();
 
 			for (int i = 0; i < numChildren; ++i)
 			{
-				XmlNodeRef const pChild = pRoot->getChild(i);
+				XmlNodeRef const childNode = rootNode->getChild(i);
 
-				if (pChild != nullptr)
+				if (childNode.isValid())
 				{
-					char const* const szClassName = pChild->getAttr("class");
+					char const* const szClassName = childNode->getAttr("class");
 
 					if ((_stricmp(szClassName, "EventFolder") == 0) || (_stricmp(szClassName, "ParameterPresetFolder") == 0))
 					{
-						LoadFolder(pChild, parent, pakStatus);
+						LoadFolder(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "SnapshotGroup") == 0)
 					{
-						LoadSnapshotGroup(pChild, parent, pakStatus);
+						LoadSnapshotGroup(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "Event") == 0)
 					{
-						pItem = LoadEvent(pChild, parent, pakStatus);
+						pItem = LoadEvent(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "Snapshot") == 0)
 					{
-						LoadSnapshot(pChild, parent, pakStatus);
+						LoadSnapshot(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "ParameterPreset") == 0)
 					{
-						LoadParameter(pChild, parent, pakStatus);
+						LoadParameter(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "MixerReturn") == 0)
 					{
-						LoadReturn(pChild, parent, pakStatus);
+						LoadReturn(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "MixerGroup") == 0)
 					{
-						LoadMixerGroup(pChild, parent, pakStatus);
+						LoadMixerGroup(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "MixerVCA") == 0)
 					{
-						LoadVca(pChild, parent, pakStatus);
+						LoadVca(childNode, parent, pakStatus);
 					}
 					else if (_stricmp(szClassName, "AudioTable") == 0)
 					{
-						LoadAudioTable(pChild);
+						LoadAudioTable(childNode);
 					}
 					else if (_stricmp(szClassName, "ProgrammerSound") == 0)
 					{
@@ -293,15 +310,24 @@ CItem* CProjectLoader::GetContainer(string const& id, EItemType const type, CIte
 	}
 	else
 	{
-		// If folder not found parse the file corresponding to it and try looking for it again
-		if (type == EItemType::Folder)
+		// If folder not found parse the file corresponding to it and try looking for it again.
+		switch (type)
 		{
-			ParseFile(m_projectPath + g_eventFoldersPath + id + ".xml", parent, pakStatus);
-			ParseFile(m_projectPath + g_parametersFoldersPath + id + ".xml", parent, pakStatus);
-		}
-		else if (type == EItemType::MixerGroup)
-		{
-			ParseFile(m_projectPath + g_mixerGroupsPath + id + ".xml", parent, pakStatus);
+		case EItemType::Folder:
+			{
+				ParseFile(m_projectPath + g_szEventFoldersPath + id + ".xml", parent, pakStatus);
+				ParseFile(m_projectPath + g_szParametersFoldersPath + id + ".xml", parent, pakStatus);
+				break;
+			}
+		case EItemType::MixerGroup:
+			{
+				ParseFile(m_projectPath + g_szMixerGroupsPath + id + ".xml", parent, pakStatus);
+				break;
+			}
+		default:
+			{
+				break;
+			}
 		}
 
 		folder = m_containerIds.find(id);
@@ -316,74 +342,74 @@ CItem* CProjectLoader::GetContainer(string const& id, EItemType const type, CIte
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadContainer(XmlNodeRef const pNode, EItemType const type, string const& relationshipParamName, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadContainer(XmlNodeRef const& node, EItemType const type, string const& relationshipParamName, CItem& parent, EPakStatus const pakStatus)
 {
 	string name = "";
 	CItem* pParent = &parent;
-	int const numChildren = pNode->getChildCount();
+	int const numChildren = node->getChildCount();
 
 	for (int i = 0; i < numChildren; ++i)
 	{
-		XmlNodeRef const pChild = pNode->getChild(i);
-		string const attribName = pChild->getAttr("name");
+		XmlNodeRef const childNode = node->getChild(i);
+		string const attribName = childNode->getAttr("name");
 
 		if (attribName.compareNoCase("name") == 0)
 		{
-			// Get the container name
-			XmlNodeRef const pNameNode = pChild->getChild(0);
+			// Get the container name.
+			XmlNodeRef const nameNode = childNode->getChild(0);
 
-			if (pNameNode != nullptr)
+			if (nameNode.isValid())
 			{
-				name = pNameNode->getContent();
+				name = nameNode->getContent();
 			}
 		}
 		else if (attribName.compareNoCase(relationshipParamName) == 0)
 		{
-			// Get the container parent
-			XmlNodeRef const pParentContainerNode = pChild->getChild(0);
+			// Get the container parent.
+			XmlNodeRef const parentContainerNode = childNode->getChild(0);
 
-			if (pParentContainerNode != nullptr)
+			if (parentContainerNode.isValid())
 			{
-				string const parentContainerId = pParentContainerNode->getContent();
+				string const parentContainerId = parentContainerNode->getContent();
 				pParent = GetContainer(parentContainerId, type, parent, pakStatus);
 			}
 		}
 	}
 
 	CItem* const pContainer = CreateItem(name, type, pParent, EItemFlags::IsContainer, pakStatus);
-	m_containerIds[pNode->getAttr("id")] = pContainer;
+	m_containerIds[node->getAttr("id")] = pContainer;
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadSnapshotGroup(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadSnapshotGroup(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
 	string name = "";
 	ItemNames snapshotsItems;
-	int const numChildren = pNode->getChildCount();
+	int const numChildren = node->getChildCount();
 
 	for (int i = 0; i < numChildren; ++i)
 	{
-		XmlNodeRef const pChild = pNode->getChild(i);
-		char const* const szAttribName = pChild->getAttr("name");
+		XmlNodeRef const childNode = node->getChild(i);
+		char const* const szAttribName = childNode->getAttr("name");
 
 		if (_stricmp(szAttribName, "name") == 0)
 		{
-			XmlNodeRef const pNameNode = pChild->getChild(0);
+			XmlNodeRef const nameNode = childNode->getChild(0);
 
-			if (pNameNode != nullptr)
+			if (nameNode.isValid())
 			{
-				name = pNameNode->getContent();
+				name = nameNode->getContent();
 			}
 		}
 		else if (_stricmp(szAttribName, "items") == 0)
 		{
-			int const itemCount = pChild->getChildCount();
+			int const itemCount = childNode->getChildCount();
 
 			for (int j = 0; j < itemCount; ++j)
 			{
-				XmlNodeRef const itemNode = pChild->getChild(j);
+				XmlNodeRef const itemNode = childNode->getChild(j);
 
-				if (itemNode != nullptr)
+				if (itemNode.isValid())
 				{
 					snapshotsItems.emplace_back(itemNode->getContent());
 				}
@@ -403,58 +429,58 @@ void CProjectLoader::LoadSnapshotGroup(XmlNodeRef const pNode, CItem& parent, EP
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadFolder(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadFolder(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	LoadContainer(pNode, EItemType::Folder, "folder", parent, pakStatus);
+	LoadContainer(node, EItemType::Folder, "folder", parent, pakStatus);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadMixerGroup(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadMixerGroup(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	LoadContainer(pNode, EItemType::MixerGroup, "output", parent, pakStatus);
+	LoadContainer(node, EItemType::MixerGroup, "output", parent, pakStatus);
 }
 
 //////////////////////////////////////////////////////////////////////////
-CItem* CProjectLoader::LoadItem(XmlNodeRef const pNode, EItemType const type, CItem& parent, EPakStatus const pakStatus)
+CItem* CProjectLoader::LoadItem(XmlNodeRef const& node, EItemType const type, CItem& parent, EPakStatus const pakStatus)
 {
 	CItem* pItem = nullptr;
 	string itemName = "";
 	CItem* pParent = &parent;
-	int const numChildren = pNode->getChildCount();
+	int const numChildren = node->getChildCount();
 
 	for (int i = 0; i < numChildren; ++i)
 	{
-		XmlNodeRef const pChild = pNode->getChild(i);
+		XmlNodeRef const childNode = node->getChild(i);
 
-		if (pChild != nullptr)
+		if (childNode.isValid())
 		{
-			char const* const szTag = pChild->getTag();
+			char const* const szTag = childNode->getTag();
 
 			if (_stricmp(szTag, "property") == 0)
 			{
-				string const paramName = pChild->getAttr("name");
+				string const paramName = childNode->getAttr("name");
 
 				if (paramName == "name")
 				{
-					XmlNodeRef const pValue = pChild->getChild(0);
+					XmlNodeRef const valueNode = childNode->getChild(0);
 
-					if (pValue != nullptr)
+					if (valueNode.isValid())
 					{
-						itemName = pValue->getContent();
+						itemName = valueNode->getContent();
 					}
 				}
 			}
 			else if (_stricmp(szTag, "relationship") == 0)
 			{
-				char const* const relationshipName = pChild->getAttr("name");
+				char const* const relationshipName = childNode->getAttr("name");
 
 				if ((_stricmp(relationshipName, "folder") == 0) || (_stricmp(relationshipName, "output") == 0))
 				{
-					XmlNodeRef const pValue = pChild->getChild(0);
+					XmlNodeRef const valueNode = childNode->getChild(0);
 
-					if (pValue != nullptr)
+					if (valueNode.isValid())
 					{
-						string const parentContainerId = pValue->getContent();
+						string const parentContainerId = valueNode->getContent();
 						auto const folder = m_containerIds.find(parentContainerId);
 
 						if (folder != m_containerIds.end())
@@ -469,7 +495,7 @@ CItem* CProjectLoader::LoadItem(XmlNodeRef const pNode, EItemType const type, CI
 
 	if (type == EItemType::Snapshot)
 	{
-		string const id = pNode->getAttr("id");
+		string const id = node->getAttr("id");
 
 		auto const snapshotGroupPair = m_snapshotGroupItems.find(id);
 
@@ -485,21 +511,21 @@ CItem* CProjectLoader::LoadItem(XmlNodeRef const pNode, EItemType const type, CI
 }
 
 //////////////////////////////////////////////////////////////////////////
-CItem* CProjectLoader::LoadEvent(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+CItem* CProjectLoader::LoadEvent(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	return LoadItem(pNode, EItemType::Event, parent, pakStatus);
+	return LoadItem(node, EItemType::Event, parent, pakStatus);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadSnapshot(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadSnapshot(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	LoadItem(pNode, EItemType::Snapshot, parent, pakStatus);
+	LoadItem(node, EItemType::Snapshot, parent, pakStatus);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadReturn(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadReturn(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	CItem* const pReturn = LoadItem(pNode, EItemType::Return, parent, pakStatus);
+	CItem* const pReturn = LoadItem(node, EItemType::Return, parent, pakStatus);
 
 	if (pReturn != nullptr)
 	{
@@ -514,57 +540,81 @@ void CProjectLoader::LoadReturn(XmlNodeRef const pNode, CItem& parent, EPakStatu
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadParameter(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadParameter(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	LoadItem(pNode, EItemType::Parameter, parent, pakStatus);
+	LoadItem(node, EItemType::Parameter, parent, pakStatus);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadVca(XmlNodeRef const pNode, CItem& parent, EPakStatus const pakStatus)
+void CProjectLoader::LoadVca(XmlNodeRef const& node, CItem& parent, EPakStatus const pakStatus)
 {
-	LoadItem(pNode, EItemType::VCA, parent, pakStatus);
+	LoadItem(node, EItemType::VCA, parent, pakStatus);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CProjectLoader::LoadAudioTable(XmlNodeRef const pNode)
+void CProjectLoader::LoadAudioTable(XmlNodeRef const& node)
 {
-	int const numChildren = pNode->getChildCount();
+	string name = "";
+	bool isLocalized = false;
+	bool includeSubdirs = false;
+
+	int const numChildren = node->getChildCount();
 
 	for (int i = 0; i < numChildren; ++i)
 	{
-		XmlNodeRef const pChild = pNode->getChild(i);
+		XmlNodeRef const childNode = node->getChild(i);
 
-		if (pChild != nullptr)
+		if (childNode.isValid())
 		{
-			char const* const szTag = pChild->getTag();
+			char const* const szTag = childNode->getTag();
 
 			if (_stricmp(szTag, "property") == 0)
 			{
-				string const paramName = pChild->getAttr("name");
+				string const paramName = childNode->getAttr("name");
 
 				if (paramName == "sourceDirectory")
 				{
-					XmlNodeRef const pValue = pChild->getChild(0);
+					XmlNodeRef const valueNode = childNode->getChild(0);
 
-					if (pValue != nullptr)
+					if (valueNode.isValid())
 					{
-						m_audioTableDirectories.emplace(m_projectPath + "/" + pValue->getContent());
-						break;
+						name = m_projectPath + "/" + valueNode->getContent();
+					}
+				}
+				else if (paramName == "isLocalized")
+				{
+					XmlNodeRef const valueNode = childNode->getChild(0);
+
+					if ((valueNode.isValid()) && (_stricmp(valueNode->getContent(), "true") == 0))
+					{
+						isLocalized = true;
+					}
+				}
+				else if (paramName == "includeSubDirectories")
+				{
+					XmlNodeRef const valueNode = childNode->getChild(0);
+
+					if ((valueNode.isValid()) && (_stricmp(valueNode->getContent(), "true") == 0))
+					{
+						includeSubdirs = true;
 					}
 				}
 			}
 		}
+	}
+
+	if (!name.empty())
+	{
+		m_audioTableInfos.emplace(SAudioTableInfo(name, isLocalized, includeSubdirs));
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 void CProjectLoader::LoadKeys(CItem& parent)
 {
-	for (auto const& tableDir : m_audioTableDirectories)
+	for (auto const& tableInfo : m_audioTableInfos)
 	{
-		string const keysFilePath = tableDir + "/keys.txt";
-
-		_finddata_t fd;
+		string const keysFilePath = tableInfo.isLocalized ? (tableInfo.name + "/" + g_language + "/keys.txt") : (tableInfo.name + "/keys.txt");
 		ICryPak* const pCryPak = gEnv->pCryPak;
 
 		if (pCryPak->IsFileExist(keysFilePath.c_str()))
@@ -573,41 +623,63 @@ void CProjectLoader::LoadKeys(CItem& parent)
 		}
 		else
 		{
-			intptr_t const handle = pCryPak->FindFirst(tableDir + "/*.*", &fd);
+			string const filePath = tableInfo.isLocalized ? (tableInfo.name + "/" + g_language) : (tableInfo.name);
+			LoadKeysFromFiles(parent, filePath);
+		}
+	}
+}
 
-			if (handle != -1)
+//////////////////////////////////////////////////////////////////////////
+void CProjectLoader::LoadKeysFromFiles(CItem& parent, string const& filePath)
+{
+	ICryPak* const pCryPak = gEnv->pCryPak;
+	_finddata_t fd;
+	intptr_t const handle = pCryPak->FindFirst(filePath + "/*.*", &fd);
+
+	if (handle != -1)
+	{
+		do
+		{
+			if (fd.attrib & _A_SUBDIR)
 			{
-				do
+				string const subFolderName = fd.name;
+
+				if ((subFolderName != ".") && (subFolderName != ".."))
 				{
-					string fileName = fd.name;
+					CItem* const pFolderItem = CreateItem(subFolderName, EItemType::Folder, &parent, EItemFlags::IsContainer);
+					string const subFolderPath = filePath + "/" + fd.name;
 
-					if ((fileName != ".") && (fileName != "..") && !fileName.empty())
+					LoadKeysFromFiles(*pFolderItem, subFolderPath);
+				}
+			}
+			else
+			{
+				string const fileName = fd.name;
+
+				if ((fileName != ".") && (fileName != "..") && !fileName.empty())
+				{
+					string::size_type const posExtension = fileName.rfind('.');
+
+					if (posExtension != string::npos)
 					{
-						string::size_type const posExtension = fileName.rfind('.');
+						string const fileExtension = fileName.data() + posExtension;
 
-						if (posExtension != string::npos)
+						if ((_stricmp(fileExtension, ".mp3") == 0) ||
+						    (_stricmp(fileExtension, ".ogg") == 0) ||
+						    (_stricmp(fileExtension, ".wav") == 0) ||
+						    (_stricmp(fileExtension, ".mp2") == 0) ||
+						    (_stricmp(fileExtension, ".flac") == 0) ||
+						    (_stricmp(fileExtension, ".aiff") == 0))
 						{
-							string const fileExtension = fileName.data() + posExtension;
-
-							// TODO: Add all supported file formats.
-							if ((_stricmp(fileExtension, ".mp3") == 0) ||
-							    (_stricmp(fileExtension, ".ogg") == 0) ||
-							    (_stricmp(fileExtension, ".wav") == 0) ||
-							    (_stricmp(fileExtension, ".mp2") == 0) ||
-							    (_stricmp(fileExtension, ".flac") == 0) ||
-							    (_stricmp(fileExtension, ".aiff") == 0))
-							{
-								PathUtil::RemoveExtension(fileName);
-								CreateItem(fileName, EItemType::Key, &parent, EItemFlags::None);
-							}
+							CreateItem(PathUtil::RemoveExtension(fileName), EItemType::Key, &parent, EItemFlags::None);
 						}
 					}
 				}
-				while (pCryPak->FindNext(handle, &fd) >= 0);
-
-				pCryPak->FindClose(handle);
 			}
 		}
+		while (pCryPak->FindNext(handle, &fd) >= 0);
+
+		pCryPak->FindClose(handle);
 	}
 }
 

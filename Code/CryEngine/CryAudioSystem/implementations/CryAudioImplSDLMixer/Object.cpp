@@ -7,9 +7,9 @@
 #include "Impl.h"
 #include "Listener.h"
 #include "VolumeParameter.h"
-#include "StandaloneFile.h"
 #include "VolumeState.h"
 #include "SoundEngine.h"
+#include <CryAudio/IAudioSystem.h>
 
 #include <SDL_mixer.h>
 
@@ -26,14 +26,18 @@ void CObject::Update(float const deltaTime)
 	{
 		float distance = 0.0f;
 		float angle = 0.0f;
-		GetDistanceAngleToObject(g_pListener->GetTransformation(), m_transformation, distance, angle);
+
+		if (m_pListener != nullptr)
+		{
+			GetDistanceAngleToObject(m_pListener->GetTransformation(), m_transformation, distance, angle);
+		}
 
 		auto iter(m_eventInstances.begin());
 		auto iterEnd(m_eventInstances.end());
 
 		while (iter != iterEnd)
 		{
-			auto const pEventInstance = *iter;
+			CEventInstance const* const pEventInstance = *iter;
 
 			if (pEventInstance->IsToBeRemoved())
 			{
@@ -74,11 +78,26 @@ void CObject::StopAllTriggers()
 //////////////////////////////////////////////////////////////////////////
 ERequestStatus CObject::SetName(char const* const szName)
 {
-#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
 	m_name = szName;
-#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
 
 	return ERequestStatus::Success;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CObject::AddListener(IListener* const pIListener)
+{
+	m_pListener = static_cast<CListener*>(pIListener);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CObject::RemoveListener(IListener* const pIListener)
+{
+	if (m_pListener == static_cast<CListener*>(pIListener))
+	{
+		m_pListener = nullptr;
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -86,7 +105,7 @@ void CObject::StopEvent(uint32 const id)
 {
 	for (auto const pEventInstance : m_eventInstances)
 	{
-		if (pEventInstance->GetEventId() == id)
+		if (pEventInstance->GetEvent().GetId() == id)
 		{
 			pEventInstance->Stop();
 		}
@@ -104,11 +123,11 @@ void CObject::SetVolume(SampleId const sampleId, float const value)
 
 		for (auto const pEventInstance : m_eventInstances)
 		{
-			auto const pEvent = pEventInstance->GetEvent();
+			CEvent const& event = pEventInstance->GetEvent();
 
-			if (pEvent->GetSampleId() == sampleId)
+			if (event.GetSampleId() == sampleId)
 			{
-				int const mixVolume = GetAbsoluteVolume(pEvent->GetVolume(), volumeMultiplier);
+				int const mixVolume = GetAbsoluteVolume(event.GetVolume(), volumeMultiplier);
 
 				for (auto const channel : pEventInstance->m_channels)
 				{

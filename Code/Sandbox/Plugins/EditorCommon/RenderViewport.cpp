@@ -261,6 +261,12 @@ void CRenderViewport::ProcessMouse()
 	{
 		if (gEnv->pHardwareMouse && m_lastMousePos != point)
 		{
+			// Ensure, viewport is set correctly, even after switching widgets while in game mode
+			if (GetIEditor()->GetViewportManager()->GetSelectedViewport() != this)
+			{
+				GetIEditor()->GetViewportManager()->SelectViewport(this);
+			}
+
 			gEnv->pHardwareMouse->Event(point.x, point.y, HARDWAREMOUSEEVENT_MOVE);
 		}
 		m_lastMousePos = point;
@@ -344,12 +350,7 @@ void CRenderViewport::ProcessMouse()
 
 		ypr.y = CLAMP(ypr.y, -1.5f, 1.5f);    // to keep rotation in reasonable range
 		// In the recording mode of a custom camera, the z rotation is allowed.
-
-		//		bool bExclusiveMode = GetIEditor()->GetLevelEditorSharedState()->GetEditTool() && GetIEditor()->GetLevelEditorSharedState()->GetEditTool()->IsExclusiveMode();
-		//		if( GetCameraObject() == NULL || (!GetIEditor()->GetAnimation()->IsRecordMode() && !bExclusiveMode) )
-		{
-			ypr.z = 0;    // to have camera always upward
-		}
+		ypr.z = 0;    // to have camera always upward
 
 		camtm = Matrix34(CCamera::CreateOrientationYPR(ypr), camtm.GetTranslation());
 		SetViewTM(camtm);
@@ -525,7 +526,7 @@ void CRenderViewport::Update()
 		SDisplayContext displayContext = InitDisplayContext(m_displayContextKey);
 
 		// 3D engine stats
-		GetIEditor()->GetSystem()->RenderBegin(m_displayContextKey);
+		GetIEditor()->GetSystem()->RenderBegin(m_displayContextKey, m_graphicsPipelineKey);
 
 		bool bRenderStats = m_bRenderStats;
 
@@ -1096,8 +1097,7 @@ void CRenderViewport::SetViewTM(const Matrix34& viewTM, bool bMoveOnly)
 			return;
 		}
 
-		const bool bExclusiveMode = GetIEditor()->GetLevelEditorSharedState()->GetEditTool() && GetIEditor()->GetLevelEditorSharedState()->GetEditTool()->IsExclusiveMode();
-		const bool bPushUndo = !bExclusiveMode && (m_eCameraMoveState == ECameraMoveState::MovingWithoutUndoPushed);
+		const bool bPushUndo = m_eCameraMoveState == ECameraMoveState::MovingWithoutUndoPushed;
 		if (bPushUndo)
 		{
 			GetIEditor()->GetIUndoManager()->Begin();
@@ -1298,8 +1298,6 @@ void CRenderViewport::ProcessKeys()
 	Vec3 xdir = m.GetColumn0().GetNormalized();
 
 	Vec3 pos = GetViewTM().GetTranslation();
-
-	IConsole* console = GetIEditor()->GetSystem()->GetIConsole();
 
 	float speedScale = 60.0f * GetIEditor()->GetSystem()->GetITimer()->GetFrameTime();
 	if (speedScale > 20) speedScale = 20;
@@ -1629,6 +1627,19 @@ bool CRenderViewport::CreateRenderContext(CRY_HWND hWnd, IRenderer::EViewportTyp
 		desc.screenResolution.y = m_currentResolution.height;
 
 		m_displayContextKey = m_renderer->CreateSwapChainBackedContext(desc);
+
+		if (viewportType == IRenderer::eViewportType_Default)
+		{
+			m_graphicsPipelineDesc.type = EGraphicsPipelineType::Standard;
+			m_graphicsPipelineDesc.shaderFlags = SHDF_ZPASS | SHDF_ALLOWHDR | SHDF_ALLOWPOSTPROCESS | SHDF_ALLOW_WATER | SHDF_ALLOW_AO | SHDF_ALLOW_SKY | SHDF_ALLOW_RENDER_DEBUG;
+		}
+		else
+		{
+			m_graphicsPipelineDesc.type = EGraphicsPipelineType::Minimum;
+			m_graphicsPipelineDesc.shaderFlags = SHDF_SECONDARY_VIEWPORT | SHDF_ALLOWHDR | SHDF_FORWARD_MINIMAL;
+		}
+		m_graphicsPipelineKey = m_renderer->CreateGraphicsPipeline(m_graphicsPipelineDesc);
+
 		m_bRenderContextCreated = true;
 
 		// Make main context current.
@@ -1647,6 +1658,9 @@ void CRenderViewport::DestroyRenderContext()
 		// Do not delete primary context.
 		if (m_displayContextKey != static_cast<HWND>(m_renderer->GetHWND()))
 			m_renderer->DeleteContext(m_displayContextKey);
+
+		m_renderer->ResetActiveGraphicsPipeline();
+		m_renderer->DeleteGraphicsPipeline(m_graphicsPipelineKey);
 
 		m_bRenderContextCreated = false;
 	}

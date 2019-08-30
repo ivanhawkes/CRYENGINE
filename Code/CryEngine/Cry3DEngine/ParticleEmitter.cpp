@@ -107,7 +107,7 @@ IMaterial* CParticleEmitter::GetMaterial(Vec3*) const
 	return NULL;
 }
 
-float CParticleEmitter::GetMaxViewDist()
+float CParticleEmitter::GetMaxViewDist() const
 {
 	// Max particles/radian, modified by emitter settings.
 	return CParticleManager::Instance()->GetMaxAngularDensity(gEnv->pSystem->GetViewCamera())
@@ -156,7 +156,7 @@ void CParticleEmitter::UpdateState()
 			Get3DEngine()->GetVisAreaFromPos(vPos) != NULL, nEnvFlags, true, this);
 	}
 
-	bool bUpdateState = (GetRndFlags()&ERF_HIDDEN)==0 && (bUpdateBounds || m_fAge >= m_fStateChangeAge);
+	bool bUpdateState = !IsHidden() && (bUpdateBounds || m_fAge >= m_fStateChangeAge);
 	if (bUpdateState)
 	{
 		m_fStateChangeAge = fHUGE;
@@ -674,7 +674,7 @@ void CParticleEmitter::UpdateFromEntity()
 		SetRndFlags(ERF_CASTSHADOWMAPS, false);
 }
 
-void CParticleEmitter::GetLocalBounds(AABB& bbox)
+void CParticleEmitter::GetLocalBounds(AABB& bbox) const
 {
 	if (!m_bbWorld.IsReset())
 	{
@@ -749,7 +749,7 @@ void CParticleEmitter::UpdateEffects()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
 
-	if (!(GetRndFlags() & ERF_HIDDEN))
+	if (!IsHidden())
 	{
 		for (auto& c : m_Containers)
 		{
@@ -1213,7 +1213,7 @@ void CParticleEmitter::UpdateStreamingPriority(const SUpdateStreamingPriorityCon
 
 		if (CStatObj* pStatObj = static_cast<CStatObj*>(params.pStatObj.get()))
 		{
-			m_pObjManager->PrecacheStatObj(pStatObj, context.lod, Matrix34A(m_Loc), pStatObj->GetMaterial(),
+			m_pObjManager->PrecacheStatObj(pStatObj, context.lod, pStatObj->GetMaterial(),
 				context.importance, normalizedDist, context.bFullUpdate, params.bDrawNear);
 		}
 	}

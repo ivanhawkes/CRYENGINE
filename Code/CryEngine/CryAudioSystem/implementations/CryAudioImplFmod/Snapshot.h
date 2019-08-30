@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ITriggerConnection.h>
+#include "BaseTriggerConnection.h"
 #include <PoolObject.h>
 #include <CryAudio/IAudioInterfacesCommonData.h>
 
@@ -12,7 +12,7 @@ namespace Impl
 {
 namespace Fmod
 {
-class CSnapshot final : public ITriggerConnection, public CPoolObject<CSnapshot, stl::PSyncNone>
+class CSnapshot final : public CBaseTriggerConnection, public CPoolObject<CSnapshot, stl::PSyncNone>
 {
 public:
 
@@ -29,16 +29,16 @@ public:
 	CSnapshot& operator=(CSnapshot const&) = delete;
 	CSnapshot& operator=(CSnapshot&&) = delete;
 
-#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_FMOD_USE_DEBUG_CODE)
 	explicit CSnapshot(
 		uint32 const id,
 		EActionType const actionType,
 		FMOD::Studio::EventDescription* const pEventDescription,
 		char const* const szName)
-		: m_id(id)
+		: CBaseTriggerConnection(EType::Snapshot, szName)
+		, m_id(id)
 		, m_actionType(actionType)
 		, m_pEventDescription(pEventDescription)
-		, m_name(szName)
 	{}
 
 #else
@@ -46,11 +46,12 @@ public:
 		uint32 const id,
 		EActionType const actionType,
 		FMOD::Studio::EventDescription* const pEventDescription)
-		: m_id(id)
+		: CBaseTriggerConnection(EType::Snapshot)
+		, m_id(id)
 		, m_actionType(actionType)
 		, m_pEventDescription(pEventDescription)
 	{}
-#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_FMOD_USE_DEBUG_CODE
 
 	virtual ~CSnapshot() override = default;
 
@@ -64,10 +65,6 @@ private:
 	uint32 const                          m_id;
 	EActionType const                     m_actionType;
 	FMOD::Studio::EventDescription* const m_pEventDescription;
-
-#if defined(CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE)
-	CryFixedStringT<MaxControlNameLength> const m_name;
-#endif  // CRY_AUDIO_IMPL_FMOD_USE_PRODUCTION_CODE
 };
 } // namespace Fmod
 } // namespace Impl

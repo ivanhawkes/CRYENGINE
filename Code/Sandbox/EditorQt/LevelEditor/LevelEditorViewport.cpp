@@ -1,4 +1,5 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+
 #include "StdAfx.h"
 #include "LevelEditorViewport.h"
 
@@ -33,6 +34,7 @@
 #include <Util/AffineParts.h>
 
 #include <Cry3DEngine/I3DEngine.h>
+#include <Cry3DEngine/ITimeOfDay.h>
 #include <CryAISystem/IAISystem.h>
 #include <CryAnimation/ICryAnimation.h>
 #include <CryGame/IGameFramework.h>
@@ -207,6 +209,50 @@ bool CLevelEditorViewport::HandleDragEvent(EDragEvent eventId, QEvent* event, in
 
 			return false;
 		}
+
+		if (className == "Environment")
+		{
+			if (!GetIEditor()->GetDocument()->IsDocumentReady())
+			{
+				return false;
+			}
+
+			switch (eventId)
+			{
+			case eDragEnter:
+				break;
+			case eDragMove:
+				CDragDropData::ShowDragText(GetViewWidget(), QString("%1 \"%2\"").arg(QObject::tr("Apply environment"), QtUtil::ToQString(pAsset->GetName())));
+				break;
+			case eDragLeave:
+				CDragDropData::ClearDragTooltip(GetViewWidget());
+				break;
+			case eDrop:
+				{
+					pDragEvent->acceptProposedAction();
+					event->accept();
+
+					ITimeOfDay* const pTimeOfDay = GetIEditor()->Get3DEngine()->GetTimeOfDay();
+					const string preset = pAsset->GetType()->GetObjectFilePath(pAsset);
+					if (pTimeOfDay->SetDefaultPreset(preset))
+					{
+						const char* szMessage = QT_TR_NOOP("Default environment now set to");
+						CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "%s %s", szMessage, pAsset->GetName().c_str());
+						return true;
+					}
+					else if (pTimeOfDay->LoadPreset(preset) && pTimeOfDay->SetDefaultPreset(preset))
+					{
+						const char* szMessage = QT_TR_NOOP("Environment Asset added to the level in Level Settings. Default environment now set to");
+						CryWarning(VALIDATOR_MODULE_EDITOR, VALIDATOR_WARNING, "%s %s", szMessage, pAsset->GetName().c_str());
+						return true;
+					}
+					return false;
+				}
+				break;
+			}
+			event->accept();
+			return true;
+		}
 	}
 
 	//The asset does not have a valid class name, search in the dragDrop data for a class name that we can instantiate
@@ -262,7 +308,6 @@ bool CLevelEditorViewport::ApplyAsset(const CDragDropData& dragDropData, QDropEv
 		{
 		case eDragMove:
 			{
-				const QDragMoveEvent* dragMove = static_cast<const QDragMoveEvent*>(pDropEvent);
 				CDragDropData::ShowDragText(GetViewWidget(), QString(dragText));
 			}
 			break;
@@ -291,11 +336,11 @@ void CLevelEditorViewport::PopulateMenu(CPopupMenuItem& menu)
 {
 	{
 		ICommandManager* pCommandManager = GetIEditor()->GetICommandManager();
-		CPopupMenuItem& itemZ = menu.AddCommand("camera.toggle_speed_height_relative");
+		menu.AddCommand("camera.toggle_speed_height_relative");
 		pCommandManager->GetAction("camera.toggle_speed_height_relative")->setChecked(s_cameraPreferences.IsSpeedHeightRelativeEnabled());
-		CPopupMenuItem& itemT = menu.AddCommand("camera.toggle_terrain_collisions");
+		menu.AddCommand("camera.toggle_terrain_collisions");
 		pCommandManager->GetAction("camera.toggle_terrain_collisions")->setChecked(s_cameraPreferences.IsTerrainCollisionEnabled());
-		CPopupMenuItem& itemO = menu.AddCommand("camera.toggle_object_collisions");
+		menu.AddCommand("camera.toggle_object_collisions");
 		pCommandManager->GetAction("camera.toggle_object_collisions")->setChecked(s_cameraPreferences.IsObjectCollisionEnabled());
 		menu.AddSeparator();
 	}
@@ -552,9 +597,9 @@ void CLevelEditorViewport::OnRender(SDisplayContext& context)
 
 			// Display Context handle forces rendering of the world go to the current viewport output window.
 
-			SRenderingPassInfo passInfo = SRenderingPassInfo::CreateGeneralPassRenderingInfo(tmpCamera, SRenderingPassInfo::DEFAULT_FLAGS, false, this->m_displayContextKey);
+			SRenderingPassInfo passInfo = SRenderingPassInfo::CreateGeneralPassRenderingInfo(m_graphicsPipelineKey, tmpCamera, SRenderingPassInfo::DEFAULT_FLAGS, false, this->m_displayContextKey);
 			RenderAll(CObjectRenderHelper{ context, passInfo });
-			m_engine->RenderWorld(renderFlags | SHDF_ALLOW_AO | SHDF_ALLOWPOSTPROCESS | SHDF_ALLOW_WATER | SHDF_ALLOWHDR | SHDF_ZPASS | SHDF_NOASYNC, passInfo, __FUNCTION__);
+			m_engine->RenderWorld(renderFlags | m_graphicsPipelineDesc.shaderFlags, passInfo, __FUNCTION__);
 		}
 		m_renderer->EnableSwapBuffers(true);
 	}
@@ -567,9 +612,9 @@ void CLevelEditorViewport::OnRender(SDisplayContext& context)
 
 		// Display Context handle forces rendering of the world go to the current viewport output window.
 
-		SRenderingPassInfo passInfo = SRenderingPassInfo::CreateGeneralPassRenderingInfo(m_Camera, SRenderingPassInfo::DEFAULT_FLAGS, false, this->m_displayContextKey);
+		SRenderingPassInfo passInfo = SRenderingPassInfo::CreateGeneralPassRenderingInfo(m_graphicsPipelineKey, m_Camera, SRenderingPassInfo::DEFAULT_FLAGS, false, this->m_displayContextKey);
 		RenderAll(CObjectRenderHelper{ context, passInfo });
-		m_engine->RenderWorld(renderFlags | SHDF_ALLOW_AO | SHDF_ALLOWPOSTPROCESS | SHDF_ALLOW_WATER | SHDF_ALLOWHDR | SHDF_ZPASS, passInfo, __FUNCTION__);
+		m_engine->RenderWorld(renderFlags | m_graphicsPipelineDesc.shaderFlags, passInfo, __FUNCTION__);
 	}
 
 	if (!m_renderer->IsStereoEnabled() && !m_Camera.m_bOmniCamera)

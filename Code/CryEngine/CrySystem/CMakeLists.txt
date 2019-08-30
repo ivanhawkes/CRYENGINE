@@ -79,6 +79,12 @@ add_sources("CrySystem_uber_1.cpp"
 		"OrbisDebugCallStack.cpp"
 )
 
+add_sources("CrySystem_uber_4.cpp"
+	PROJECTS CrySystem
+	SOURCE_GROUP "Profiler"
+		"Profiling/PlatformProfiler_orbis.cpp"
+)
+
 add_sources("CrySystem_uber_7.cpp"
 	PROJECTS CrySystem
 	SOURCE_GROUP "PlatformOS"
@@ -300,11 +306,17 @@ add_sources("CrySystem_uber_4.cpp"
 		"DiskProfiler.cpp"
 		"DiskProfilerWindowsSpecific.cpp"
 		"DiskProfilerWindowsSpecific.h"
-		"FrameProfileRender.cpp"
-		"FrameProfileSystem.cpp"
+		"Profiling/CryProfilingSystem.cpp"
+		"Profiling/ProfilingRenderer.cpp"
+		"Profiling/CryBrofiler.cpp"
+		"Profiling/CryProfilingSystemSharedImpl.cpp"
 		"PerfHUD.cpp"
 		"DiskProfiler.h"
-		"FrameProfileSystem.h"
+		"Profiling/ProfilingRenderer.h"
+		"Profiling/CryProfilingSystem.h"
+		"Profiling/CryBrofiler.h"
+		"Profiling/PlatformProfiler.h"
+		"Profiling/CryProfilingSystemSharedImpl.h"
 		"PerfHUD.h"
 		"Watchdog.h"
 		"Watchdog.cpp"
@@ -492,15 +504,32 @@ add_sources("CrySystem_uber_1.cpp"
 		"DurangoDebugCallstack.cpp"
 )
 
+add_sources("CrySystem_uber_4.cpp"
+	PROJECTS CrySystem
+	SOURCE_GROUP "Profiler"
+		"Profiling/PlatformProfiler_durango.cpp"
+)
+
 add_sources("CrySystem_uber_7.cpp"
 	PROJECTS CrySystem
 	SOURCE_GROUP "PlatformOS"
+		"PlatformOS/PlatformOSUserManager_Durango.h"
+		"PlatformOS/PlatformOSUserManager_Durango.cpp"
 		"PlatformOS/StreamingInstall_Durango.h"
 		"PlatformOS/StreamingInstall_Durango.cpp"
 		"PlatformOS/SaveReaderWriter_Durango.h"
 		"PlatformOS/SaveReaderWriter_Durango.cpp"
 		"PlatformOS/PlatformOS_Durango.cpp"
 		"PlatformOS/PlatformOS_Durango.h"
+)
+
+sources_platform(WINDOWS)
+add_sources("CrySystem_uber_4.cpp"
+	PROJECTS CrySystem
+	SOURCE_GROUP "Profiler"
+		"Profiling/PlatformProfiler_win.cpp"
+		"Profiling/PixForWindows.cpp"
+		"Profiling/PixForWindows.h"
 )
 
 # -- platformos.waf_files --
@@ -516,12 +545,20 @@ end_sources()
 #END-FILE-LIST
 
 MACRO(setup_crysystem)
-	target_link_libraries( ${THIS_PROJECT} PRIVATE zlib expat lz4 md5 tomcrypt )
-	use_scaleform()
+	if (WINDOWS)
+		target_link_libraries(${THIS_PROJECT} PRIVATE debug Detours)
+	endif ()
 
+	target_link_libraries( ${THIS_PROJECT} PRIVATE zlib expat lz4 md5 )
+	use_scaleform()
+	if (NOT DURANGO)
+		target_link_libraries( ${THIS_PROJECT} PRIVATE tomcrypt )
+	endif()
+	
 	if (WINDOWS)
 		set_property(TARGET ${THIS_PROJECT} APPEND_STRING PROPERTY LINK_FLAGS " /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcpmt.lib")
 		target_link_libraries(${THIS_PROJECT} PRIVATE wininet Shell32 Ole32 Gdi32)
+		target_link_libraries(${THIS_PROJECT} PRIVATE WinPixEventRuntime)
 	elseif (LINUX)
 		target_link_libraries( ${THIS_PROJECT} PRIVATE ncursesw m )
 	elseif (APPLE)
@@ -541,9 +578,14 @@ MACRO(setup_crysystem)
 		target_link_libraries( ${THIS_PROJECT} PRIVATE crashrpt )
 	endif()
 
+	if (OPTION_ENABLE_BROFILER AND OPTION_ENGINE)
+		target_compile_definitions(${THIS_PROJECT} PRIVATE USE_BROFILER)
+		target_include_directories( ${THIS_PROJECT} PRIVATE "${SDK_DIR}/Brofiler")
+		target_link_libraries( ${THIS_PROJECT} PRIVATE "${SDK_DIR}/Brofiler/ProfilerCore64.lib")
+	endif()
+
 	if (ORBIS OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		target_compile_options(${THIS_PROJECT} PRIVATE
-			-Wno-unused-variable
 			-Wno-array-bounds
 			-Wno-parentheses
 			-Wno-reorder
@@ -568,7 +610,6 @@ MACRO(setup_crysystem)
 			-Wno-unused-function
 			-Wno-unused-value
 			-Wno-array-bounds
-			-Wno-unused-variable
 			-Wno-sign-compare
 			-Wno-ignored-attributes
 			-Wno-int-in-bool-context
@@ -587,6 +628,7 @@ MACRO(setup_crysystem)
 			-Wno-address
 			-Wno-format
 			-Wno-switch
+			-Wno-address-of-packed-member
 		)
 	endif()
 ENDMACRO()

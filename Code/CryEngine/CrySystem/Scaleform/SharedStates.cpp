@@ -23,6 +23,7 @@
 	#include <CryRenderer/ITexture.h>
 	#include <CrySystem/IStreamEngine.h>
 	#include <CryString/UnicodeFunctions.h>
+	#include <CrySystem/ConsoleRegistration.h>
 
 	#ifndef GFC_NO_THREADSUPPORT
 //////////////////////////////////////////////////////////////////////////
@@ -67,8 +68,9 @@ GFile* CryGFxFileOpener::OpenFile(const char* pUrl, SInt flags, SInt /*mode*/)
 	assert(pUrl);
 	if (flags & ~(GFileConstants::Open_Read | GFileConstants::Open_Buffered))
 		return 0;
-	const char* pExt = PathUtil::GetExt(pUrl);
+
 	#if defined(USE_GFX_VIDEO)
+	const char* pExt = PathUtil::GetExt(pUrl);
 	if (!strcmp(pUrl, internal_video_player))
 		return new GMemoryFile(pUrl, fxvideoplayer_swf, sizeof(fxvideoplayer_swf));
 	if (!stricmp(pExt, "usm"))
@@ -360,19 +362,10 @@ CryGFxLog::~CryGFxLog()
 
 void CryGFxLog::LogMessageVarg(LogMessageType messageType, const char* pFmt, va_list argList)
 {
-	char logBuf[1024];
+	char logBuf[1024] = "<Flash> ";
 	{
-		const char prefix[] = "<Flash> ";
-
-		static_assert(sizeof(prefix) + 128 <= sizeof(logBuf), "Invalid array size!");
-
-		// prefix
-		{
-			cry_strcpy(logBuf, prefix);
-		}
-
 		// msg
-		size_t len = sizeof(prefix) - 1;
+		size_t len = strlen(logBuf);
 		{
 			cry_vsprintf(&logBuf[len], sizeof(logBuf) - len, pFmt, argList);
 			len = strlen(logBuf);

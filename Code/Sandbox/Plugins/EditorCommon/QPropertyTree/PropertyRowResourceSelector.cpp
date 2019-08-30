@@ -116,7 +116,6 @@ PropertyRowResourceSelector::PropertyRowResourceSelector()
 property_tree::InplaceWidget* PropertyRowResourceSelector::createWidget(PropertyTree* tree)
 {
 	int buttonsWidth = buttonCount() * 16;
-	int iconSpace = buttonsWidth ? buttonsWidth + 2 : 0;
 	int widgetWidth = max(16, widgetRect(tree).width() - buttonsWidth - 2);
 
 	context_.typeName = type_.c_str();
@@ -133,10 +132,10 @@ void PropertyRowResourceSelector::setValue(PropertyTree* tree, const char* str, 
 	CRY_ASSERT(selector_);
 
 	context_.typeName = type_.c_str();
-	QPropertyTree* qtree = static_cast<QPropertyTree*>(tree);
-	context_.parentWidget = qtree;
-	dll_string validatedPath = selector_->ValidateValue(context_, str, value_.c_str());
-	value_ = validatedPath.c_str();
+	QPropertyTree* pPropertyTree = static_cast<QPropertyTree*>(tree);
+	context_.parentWidget = pPropertyTree;
+	SResourceValidationResult validatedPath = selector_->ValidateValue(context_, str, value_.c_str());
+	value_ = validatedPath.validatedResource.c_str();
 	serializer_.setPointer((void*)handle);
 	serializer_.setType(type);
 }
@@ -393,7 +392,6 @@ bool PropertyRowResourceSelector::createFile(PropertyTree* tree)
 	if (!provider_)
 		return false;
 
-	QPropertyTree* qtree = static_cast<QPropertyTree*>(tree);
 	QString title;
 	if (labelUndecorated())
 		title = QString("Create file for '") + labelUndecorated() + "'";

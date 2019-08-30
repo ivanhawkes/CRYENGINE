@@ -168,7 +168,6 @@ bool CryCreateThread(TThreadHandle* pThreadHandle, const SThreadCreationDesc& th
 
 	assert(pThreadHandle != THREADID_NULL);
 	pthread_attr_t threadAttr;
-	sched_param schedParam;
 	pthread_attr_init(&threadAttr);
 	pthread_attr_setdetachstate(&threadAttr, PTHREAD_CREATE_JOINABLE);
 	pthread_attr_setstacksize(&threadAttr, nStackSize);
@@ -215,9 +214,11 @@ void CryThreadExitCall()
 //////////////////////////////////////////////////////////////////////////
 bool CryIsThreadAlive(TThreadHandle pThreadHandle)
 {
-	if ( getpriority(PRIO_PROCESS,pThreadHandle) != S_OK)
+	// Note: Don't use getpriority(PRIO_PROCESS,pThreadHandle. 
+	// On some linux platforms it is not supported and always return "false".
+	if ( pthread_kill(pThreadHandle, 0) != S_OK )	
 	{
-		return false; // Return -1 when thread does not exist
+		return false;  // unable to find thread
 	}
 	return true;
 }

@@ -584,8 +584,12 @@ ZipDir::CachePtr ZipDir::CacheFactory::MakeCache(const char* szFile)
 	}
 	else
 	{
+#if defined(USE_CRY_ASSERT)
 		size_t nSizeSerialized = m_treeFileEntries.Serialize(cache->GetRoot());
 		assert(nSizeSerialized == nSizeRequired);
+#else
+		m_treeFileEntries.Serialize(cache->GetRoot());
+#endif
 	}
 
 	char* pZipPath = ((char*)(pCacheInstance + 1)) + nSizeRequired;
@@ -736,7 +740,7 @@ bool ZipDir::CacheFactory::FindCDREnd()
 // builds up the m_mapFileEntries
 bool ZipDir::CacheFactory::BuildFileEntryMap()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	Seek(m_CDREnd.lCDROffset);
 
@@ -1293,14 +1297,13 @@ bool ZipDir::CacheFactory::DecryptKeysTable()
 	unsigned long res, len;
 
 	int hash_idx = find_hash("sha256");
-	int prng_idx = find_prng("yarrow");
 
 	// Decrypt CDR initial Vector
 	{
 		int stat = 0;
 		len = sizeof(tmp);
 		res = ZipEncrypt::custom_rsa_decrypt_key_ex(m_headerEncryption.CDR_IV, sizeof(m_headerEncryption.CDR_IV),
-		                                            tmp, &len, NULL, 0, hash_idx, LTC_LTC_PKCS_1_OAEP, &stat, &g_rsa_key_public_for_sign);
+		                                            tmp, &len, NULL, 0, hash_idx, LTC_PKCS_1_OAEP, &stat, &g_rsa_key_public_for_sign);
 		if (res != CRYPT_OK || stat != 1)
 			return false;
 
@@ -1318,7 +1321,7 @@ bool ZipDir::CacheFactory::DecryptKeysTable()
 		int stat = 0;
 		len = sizeof(tmp);
 		res = ZipEncrypt::custom_rsa_decrypt_key_ex(m_headerEncryption.keys_table[i], sizeof(m_headerEncryption.keys_table[i]),
-		                                            tmp, &len, NULL, 0, hash_idx, LTC_LTC_PKCS_1_OAEP, &stat, &g_rsa_key_public_for_sign);
+		                                            tmp, &len, NULL, 0, hash_idx, LTC_PKCS_1_OAEP, &stat, &g_rsa_key_public_for_sign);
 		if (res != CRYPT_OK || stat != 1)
 			return false;
 

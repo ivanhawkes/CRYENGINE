@@ -5,7 +5,7 @@
 
 #include "Common.h"
 #include "Impl.h"
-#include <CrySystem/IConsole.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 namespace CryAudio
 {
@@ -28,8 +28,6 @@ void SetPanningRule(ICVar* const pPanningRule)
 void CCVars::RegisterVariables()
 {
 #if CRY_PLATFORM_WINDOWS
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
 	m_secondaryMemoryPoolSize = 0;
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -42,13 +40,11 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 0;                 // Speakers
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 #elif CRY_PLATFORM_DURANGO
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
 	m_secondaryMemoryPoolSize = 32 << 10;          // 32 MiB
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -61,13 +57,11 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 0;                 // Speakers
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 #elif CRY_PLATFORM_ORBIS
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
 	m_secondaryMemoryPoolSize = 0;
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -80,13 +74,11 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 0;                 // Speakers
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 #elif CRY_PLATFORM_MAC
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
 	m_secondaryMemoryPoolSize = 0;
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -99,13 +91,11 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 0;                 // Speakers
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 #elif CRY_PLATFORM_LINUX
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
 	m_secondaryMemoryPoolSize = 0;
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -118,13 +108,11 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 0;                 // Speakers
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
-#elif defined(CRY_PLATFORM_IOS)
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
+#elif CRY_PLATFORM_IOS
 	m_secondaryMemoryPoolSize = 0;
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -137,13 +125,11 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 1;                 // Headphones
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 #elif CRY_PLATFORM_ANDROID
-	m_velocityTrackingThreshold = 0.1f;
-	m_eventPoolSize = 256;
 	m_secondaryMemoryPoolSize = 0;
 	m_prepareEventMemoryPoolSize = 4 << 10;        // 4 MiB
 	m_streamManagerMemoryPoolSize = 128;           // 128 KiB
@@ -156,10 +142,10 @@ void CCVars::RegisterVariables()
 	m_numSamplesPerFrame = 512;
 	m_numRefillsInVoice = 3;
 	m_panningRule = 1;                 // Headphones
-	#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+	#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	m_monitorMemoryPoolSize = 256;     // 256 KiB
 	m_monitorQueueMemoryPoolSize = 64; // 64 KiB
-	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+	#endif                             // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 #else
 	#error "Undefined platform."
 #endif
@@ -262,7 +248,7 @@ void CCVars::RegisterVariables()
 	                  "1: Headphones\n",
 	                  SetPanningRule);
 
-#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 	REGISTER_CVAR2("s_WwiseEnableCommSystem", &m_enableCommSystem, 0, VF_REQUIRE_APP_RESTART,
 	               "Specifies whether Wwise should initialize using its Comm system or not.\n"
 	               "This cvar is only available in non-release builds.\n"
@@ -293,7 +279,7 @@ void CCVars::RegisterVariables()
 	               "a: Draw event instances.\n"
 	               "b: Draw states values.\n"
 	               );
-#endif  // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -320,13 +306,13 @@ void CCVars::UnregisterVariables()
 		pConsole->UnregisterVariable("s_WwiseChannelConfig");
 		pConsole->UnregisterVariable("s_WwisePanningRule");
 
-#if defined(CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE)
 		pConsole->UnregisterVariable("s_WwiseEnableCommSystem");
 		pConsole->UnregisterVariable("s_WwiseEnableOutputCapture");
 		pConsole->UnregisterVariable("s_WwiseMonitorMemoryPoolSize");
 		pConsole->UnregisterVariable("s_WwiseMonitorQueueMemoryPoolSize");
 		pConsole->UnregisterVariable("s_WwiseDebugListFilter");
-#endif      // CRY_AUDIO_IMPL_WWISE_USE_PRODUCTION_CODE
+#endif      // CRY_AUDIO_IMPL_WWISE_USE_DEBUG_CODE
 	}
 }
 } // namespace Wwise

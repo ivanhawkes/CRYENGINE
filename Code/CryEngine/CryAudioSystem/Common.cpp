@@ -4,6 +4,8 @@
 #include "Common.h"
 #include "System.h"
 #include "Object.h"
+#include "Listener.h"
+#include "DefaultObject.h"
 #include "LoseFocusTrigger.h"
 #include "GetFocusTrigger.h"
 #include "MuteAllTrigger.h"
@@ -11,9 +13,9 @@
 #include "PauseAllTrigger.h"
 #include "ResumeAllTrigger.h"
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
 	#include "PreviewTrigger.h"
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 
 namespace CryAudio
 {
@@ -27,6 +29,8 @@ PreloadRequestLookup g_preloadRequests;
 EnvironmentLookup g_environments;
 SettingLookup g_settings;
 TriggerInstanceIdLookup g_triggerInstanceIdToObject;
+TriggerInstanceIdLookupDefault g_triggerInstanceIdToDefaultObject;
+ContextLookup g_registeredContexts;
 
 CLoseFocusTrigger g_loseFocusTrigger;
 CGetFocusTrigger g_getFocusTrigger;
@@ -43,13 +47,18 @@ TriggerInstanceId g_triggerInstanceIdCounter = 1;
 
 SPoolSizes g_poolSizes;
 
-#if defined(CRY_AUDIO_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_USE_DEBUG_CODE)
+CListener g_defaultListener(DefaultListenerId, false, g_szDefaultListenerName);
+CListener g_previewListener(g_previewListenerId, false, g_szPreviewListenerName);
 Objects g_constructedObjects;
-CObject g_object(CTransformation::GetEmptyObject(), "Global Object");
-CObject g_previewObject(CTransformation::GetEmptyObject(), "Preview Object");
+CDefaultObject g_defaultObject("Default Object");
+CDefaultObject g_previewObject("Preview Object");
 CPreviewTrigger g_previewTrigger;
 SPoolSizes g_debugPoolSizes;
+ContextInfo g_contextInfo;
+ContextDebugInfo g_contextDebugInfo;
 #else
-CObject g_object(CTransformation::GetEmptyObject());
-#endif // CRY_AUDIO_USE_PRODUCTION_CODE
+CListener g_defaultListener(DefaultListenerId, false);
+CDefaultObject g_defaultObject;
+#endif // CRY_AUDIO_USE_DEBUG_CODE
 }      // namespace CryAudio

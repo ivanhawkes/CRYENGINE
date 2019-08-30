@@ -191,9 +191,9 @@ enum EVortexDirection
     float maxSize;              \
     bool affectOpacity; )       \
   X(Opacity,                    \
-    Vec2 alphaScale;            \
-    Vec2 clipLow;               \
-    Vec2 clipRange;             \
+    Range alphaScale;           \
+    Range clipLow;              \
+    Range clipRange;            \
     float* samples;             \
     uint32 numSamples; )        \
   X(MotionPhysics,              \
@@ -296,7 +296,7 @@ public:
 		InternalSetParameters(Parameters::type, parameters);
 	}
 protected:
-	virtual void InternalSetParameters(const EParameterType type, const SFeatureParametersBase& p) {};
+	virtual void InternalSetParameters(const EParameterType type, const SFeatureParametersBase& p) {}
 };
 
 // interface of GPU particle system

@@ -8,6 +8,7 @@
 #include "SteamUserIdentifier.h"
 
 #include <CrySystem/ICmdLine.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 // Included only once per DLL module.
 #include <CryCore/Platform/platform_impl.inl>
@@ -155,6 +156,15 @@ namespace Cry
 				}
 
 				CryLogAlways("[Steam] Successfully initialized Steam API, user_id=%" PRIu64 " build_id=%i", pSteamUser->GetSteamID().ConvertToUint64(), pSteamApps->GetAppBuildId());
+
+#if CRY_GAMEPLATFORM_EXPERIMENTAL
+				m_environment["ApplicationId"].Format("%d", steam_appId);
+				m_environment["BuildId"].Format("%d", pSteamApps->GetAppBuildId());
+				if (strlen(betaName) > 0)
+				{
+					m_environment["NetworkEnvironment"] = betaName;
+				}
+#endif // CRY_GAMEPLATFORM_EXPERIMENTAL
 
 				if (Cry::GamePlatform::IPlugin* pPlugin = gEnv->pSystem->GetIPluginManager()->QueryPlugin<Cry::GamePlatform::IPlugin>())
 				{
@@ -451,17 +461,56 @@ namespace Cry
 				{
 					m_friends.clear();
 
-					constexpr int friendFlags = k_EFriendFlagAll;
+					constexpr int friendFlags = k_EFriendFlagImmediate;
 					const int friendCount = pSteamFriends->GetFriendCount(friendFlags);
 					for (int i = 0; i < friendCount; ++i)
 					{
-						CSteamID friendId = pSteamFriends->GetFriendByIndex(i, friendFlags);
+						const CSteamID friendId = pSteamFriends->GetFriendByIndex(i, friendFlags);
 						m_friends.push_back(TryGetAccount(friendId));
 					}
 				}
 
 				return m_friends;
 			}
+
+#if CRY_GAMEPLATFORM_EXPERIMENTAL
+			const DynArray<IAccount*>& CService::GetBlockedAccounts() const
+			{
+				if (ISteamFriends* const pSteamFriends = SteamFriends())
+				{
+					m_blockedAccounts.clear();
+
+					constexpr int friendFlags = k_EFriendFlagBlocked | k_EFriendFlagIgnored | k_EFriendFlagIgnoredFriend;
+					const int friendCount = pSteamFriends->GetFriendCount(friendFlags);
+					for (int i = 0; i < friendCount; ++i)
+					{
+						const CSteamID friendId = pSteamFriends->GetFriendByIndex(i, friendFlags);
+						m_blockedAccounts.push_back(TryGetAccount(friendId));
+					}
+				}
+
+				return m_blockedAccounts;
+			}
+
+			const DynArray<IAccount*>& CService::GetMutedAccounts() const
+			{
+				// Steam does not support muting
+				static const DynArray<IAccount*> dummy;
+				return dummy;
+			}
+
+			bool CService::GetEnvironmentValue(const char* szVarName, string& valueOut) const
+			{
+				auto pos = m_environment.find(szVarName);
+				if (pos != m_environment.end())
+				{
+					valueOut = pos->second;
+					return true;
+				}
+
+				return false;
+			}
+#endif // CRY_GAMEPLATFORM_EXPERIMENTAL
 
 			CAccount* CService::GetAccountById(const AccountIdentifier& accountId) const
 			{

@@ -923,7 +923,6 @@ static void BuildSphereSet(
 		base[min_axis] = centre[min_axis];
 		base[plane_axis[0]] = centre[plane_axis[0]] - size[plane_axis[0]] + size[plane_axis[0]] * 0.5f;
 		base[plane_axis[1]] = centre[plane_axis[1]] - size[plane_axis[1]] + size[plane_axis[1]] * 0.5f;
-		;
 		float radius = size[min_axis] * 1.5f;
 
 		Vec3 sphcent = pos + q * centre;
@@ -2013,7 +2012,7 @@ CMergedMeshRenderNode::CMergedMeshRenderNode()
 	m_visibleAABB.Reset();
 	SetRndFlags(ERF_CASTSHADOWMAPS | ERF_HAS_CASTSHADOWMAPS, true);
 	if (GetCVars()->e_MergedMeshesOutdoorOnly)
-		SetRndFlags(GetRndFlags() | ERF_OUTDOORONLY, true);
+		SetRndFlags(ERF_OUTDOORONLY, true);
 }
 CMergedMeshRenderNode::~CMergedMeshRenderNode()
 {
@@ -3023,13 +3022,13 @@ bool CMergedMeshRenderNode::PostRender(const SRenderingPassInfo& passInfo)
 
 	if (m_needsStaticMeshUpdate)
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE, "MMRM PR CR static");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE, "MMRM PR CR static");
 		CreateRenderMesh(RUT_STATIC, passInfo);
 		m_needsStaticMeshUpdate = false;
 	}
 	if (m_needsDynamicMeshUpdate)
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE, "MMRM PR CR dynamic");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE, "MMRM PR CR dynamic");
 		CreateRenderMesh(RUT_DYNAMIC, passInfo);
 		m_needsDynamicMeshUpdate = false;
 	}
@@ -3039,13 +3038,13 @@ bool CMergedMeshRenderNode::PostRender(const SRenderingPassInfo& passInfo)
 
 	if (m_needsPostRenderStatic)
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE,"MMRM PR RR static");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE,"MMRM PR RR static");
 		RenderRenderMesh(RUT_STATIC, distance, passInfo);
 		m_needsPostRenderStatic = false;
 	}
 	if (m_needsPostRenderDynamic)
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE,"MMRM PR RR dynamic");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE,"MMRM PR RR dynamic");
 		RenderRenderMesh(RUT_DYNAMIC, distance, passInfo);
 		m_needsPostRenderDynamic = false;
 	}
@@ -4152,7 +4151,7 @@ bool CMergedMeshesManager::GetUsedMeshes(DynArray<string>& meshNames)
 
 void CMergedMeshesManager::PreloadMeshes()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	if (FILE* file = gEnv->pCryPak->FOpen(Get3DEngine()->GetLevelFilePath(COMPILED_MERGED_MESHES_BASE_NAME COMPILED_MERGED_MESHES_LIST), "r"))
 	{
 		gEnv->pCryPak->FSeek(file, 0, SEEK_END);
@@ -4305,8 +4304,7 @@ void CMergedMeshesManager::SortActiveInstances(const SRenderingPassInfo& passInf
 
 void CMergedMeshesManager::Update(const SRenderingPassInfo& passInfo)
 {
-	CRY_PROFILE_REGION(PROFILE_3DENGINE, "MergedMeshesManager: Update");
-	CRYPROFILE_SCOPE_PROFILE_MARKER("MMRMGR: update")
+	CRY_PROFILE_SECTION(PROFILE_3DENGINE, "MergedMeshesManager: Update");
 
 	if (GetCVars()->e_MergedMeshes == 0 || !passInfo.IsGeneralPass())
 		return;
@@ -4349,8 +4347,7 @@ void CMergedMeshesManager::Update(const SRenderingPassInfo& passInfo)
 
 	// Update registered particles
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE, "MMRMGR: update projectiles");
-		CRYPROFILE_SCOPE_PROFILE_MARKER("MMRMGR: update projectiles");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE, "MMRMGR: update projectiles");
 
 		WriteLock _lock(m_ProjectileLock);
 		size_t pi = 0, pe = m_Projectiles.size();
@@ -4369,8 +4366,7 @@ void CMergedMeshesManager::Update(const SRenderingPassInfo& passInfo)
 	}
 
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE, "MMRMGR: state jobsync");
-		CRYPROFILE_SCOPE_PROFILE_MARKER("MMRMGR: state jobsync");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE, "MMRMGR: state jobsync");
 
 		// Maintain a sorted list of active instances - we have to wait here for the job to have completed
 		gEnv->pJobManager->WaitForJob(m_updateState);
@@ -4378,8 +4374,7 @@ void CMergedMeshesManager::Update(const SRenderingPassInfo& passInfo)
 
 	// Stream in instances up until main memory pool limit
 	{
-		CRY_PROFILE_REGION(PROFILE_3DENGINE, "MMRMGR: streaming");
-		CRYPROFILE_SCOPE_PROFILE_MARKER("MMRMGR: streaming");
+		CRY_PROFILE_SECTION(PROFILE_3DENGINE, "MMRMGR: streaming");
 
 		float yPos = 8.f;
 		bool hadOverflow = m_PoolOverFlow;
@@ -4945,7 +4940,7 @@ void CDeformableNode::RenderInternalDeform(
 	if (passInfo.IsGeneralPass() && ((passInfo.GetCamera().GetPosition() - bbox.GetCenter()).len2() < sqr(((IRenderNode*)pRenderObject->m_pRenderNode)->GetMaxViewDist()) * Cry3DEngineBase::GetCVars()->e_MergedMeshesDeformViewDistMod))
 	{
 		{
-			CRY_PROFILE_REGION(PROFILE_3DENGINE, "CDeformableNode::RenderInternalDeform JobSync");
+			CRY_PROFILE_SECTION(PROFILE_3DENGINE, "CDeformableNode::RenderInternalDeform JobSync");
 			gEnv->pJobManager->WaitForJob(m_cullState);
 			gEnv->pJobManager->WaitForJob(m_updateState);
 		}
@@ -5107,17 +5102,7 @@ void CMergedMeshRenderNode::OffsetPosition(const Vec3& delta)
 	m_pos += delta;
 }
 
-void CMergedMeshRenderNode::FillBBox(AABB& aabb)
-{
-	aabb = CMergedMeshRenderNode::GetBBox();
-}
-
-EERType CMergedMeshRenderNode::GetRenderNodeType()
-{
-	return eERType_MergedMesh;
-}
-
-float CMergedMeshRenderNode::GetMaxViewDist()
+float CMergedMeshRenderNode::GetMaxViewDist() const
 {
 	float radius = m_internalAABB.GetRadius();
 	return max(GetCVars()->e_ViewDistMin, radius * GetCVars()->e_MergedMeshesViewDistRatio);

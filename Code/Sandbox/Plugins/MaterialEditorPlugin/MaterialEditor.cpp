@@ -105,36 +105,7 @@ CMaterialEditor::CMaterialEditor()
 	, m_pMaterial(nullptr)
 {
 	InitMenuBar();
-	CreateToolbar();
-	EnableDockingSystem();
-
-	RegisterDockableWidget("Properties", [&]() 
-	{
-		auto inspector = new CInspector(this);
-		inspector->SetLockable(false);
-		return inspector;
-	}, true);
-
-	RegisterDockableWidget("Material", [&]() { return new CSubMaterialView(this); }, true);
-	RegisterDockableWidget("Preview", [&]() { return new CMaterialPreviewWidget(this); });
-
 	GetIEditor()->GetMaterialManager()->AddListener(this);
-}
-
-void CMaterialEditor::CreateToolbar()
-{
-	const auto pToolbar = new QWidget;
-	const auto pSpacer = new QWidget();
-	pSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-	auto toolbarLayout = new QHBoxLayout(pToolbar);
-	toolbarLayout->addWidget(pSpacer);
-	toolbarLayout->addWidget(CreateLockButton());
-	toolbarLayout->setContentsMargins(0, 0, 0, 0);
-
-	QVBoxLayout* pMainLayout = new QVBoxLayout();
-	pMainLayout->setContentsMargins(1, 1, 1, 1);
-	pMainLayout->addWidget(pToolbar);
-	SetContent(pMainLayout);
 }
 
 CMaterialEditor::~CMaterialEditor()
@@ -149,18 +120,14 @@ void CMaterialEditor::InitMenuBar()
 	AddToMenu(CEditor::MenuItems::Undo);
 	AddToMenu(CEditor::MenuItems::Redo);
 
-	CAbstractMenu* fileMenu = GetMenu(CEditor::MenuItems::FileMenu);
-	QAction* action = fileMenu->CreateAction(CryIcon("icons:General/Picker.ico") ,tr("Pick Material From Scene"), 0, 1);
-	connect(action, &QAction::triggered, this, &CMaterialEditor::OnPickMaterial);
+	CAbstractMenu* pFileMenu = GetMenu(CEditor::MenuItems::FileMenu);
+	QAction* pAction = pFileMenu->CreateAction(CryIcon("icons:General/Picker.ico"), tr("Pick Material From Scene"), 0, 1);
+	connect(pAction, &QAction::triggered, this, &CMaterialEditor::OnPickMaterial);
 
 	//Add a material actions menu
 	//TODO: consider adding a toolbar for material actions
 	CAbstractMenu* materialMenu = GetRootMenu()->CreateMenu(tr("Material"), 0, 3);
 	materialMenu->signalAboutToShow.Connect(this, &CMaterialEditor::FillMaterialMenu);
-
-	// Enable instant editing if possible
-	CAbstractMenu* const pEditMenu = GetMenu(CEditor::MenuItems::EditMenu);
-	pEditMenu->AddAction(m_pLockAction);
 }
 
 void CMaterialEditor::OnEditorNotifyEvent(EEditorNotifyEvent event)
@@ -172,8 +139,10 @@ void CMaterialEditor::OnEditorNotifyEvent(EEditorNotifyEvent event)
 		//HACK : Due to the questionable behavior of material manager, which clears itself when the level is loaded
 		//The materials used in the scene (and the material editor) will be recreated after the scene is loaded,
 		//making the material editor appear to be not in sync. A quick hack is to reload from filename, to get the updated material.
-		if(GetAssetBeingEdited())
+		if (GetAssetBeingEdited())
+		{
 			OnOpenAsset(GetAssetBeingEdited());
+		}
 	}
 }
 
@@ -184,7 +153,7 @@ void CMaterialEditor::OnDataBaseItemEvent(IDataBaseItem* pItem, EDataBaseItemEve
 
 	CMaterial* item = (CMaterial*)pItem;
 
-	if(pItem == m_pMaterial.get())
+	if (pItem == m_pMaterial.get())
 	{
 		switch (event)
 		{
@@ -192,12 +161,14 @@ void CMaterialEditor::OnDataBaseItemEvent(IDataBaseItem* pItem, EDataBaseItemEve
 		case EDB_ITEM_EVENT_UPDATE_PROPERTIES:
 			signalMaterialPropertiesChanged(item);
 			if (GetAssetBeingEdited())
+			{
 				GetAssetBeingEdited()->SetModified(true);
+			}
 			break;
 		case EDB_ITEM_EVENT_DELETE:
 			//Note: this happens on loading of the level. We will not handle it but things may be unexpected if the item is actually being deleted from the old material editor
 			/*CRY_ASSERT_MESSAGE(0, "Material was deleted by other means while it was being edited, this case is not well handled");
-			TryCloseAsset();*/
+			   TryCloseAsset();*/
 			break;
 		default:
 			break;
@@ -210,23 +181,29 @@ void CMaterialEditor::OnDataBaseItemEvent(IDataBaseItem* pItem, EDataBaseItemEve
 		case EDB_ITEM_EVENT_CHANGED:
 		case EDB_ITEM_EVENT_UPDATE_PROPERTIES:
 			signalMaterialPropertiesChanged(item);
-			if(GetAssetBeingEdited())
+			if (GetAssetBeingEdited())
+			{
 				GetAssetBeingEdited()->SetModified(true);
+			}
 			break;
 		case EDB_ITEM_EVENT_DELETE: //deleted from DB, what to do ?
 			if (item == m_pEditedMaterial)
+			{
 				SelectMaterialForEdit(nullptr);
+			}
 			break;
 		default:
 			break;
 		}
-	}	
+	}
 }
 
 void CMaterialEditor::OnSubMaterialsChanged(CMaterial::SubMaterialChange change)
 {
 	if (GetAssetBeingEdited())
+	{
 		GetAssetBeingEdited()->SetModified(true);
+	}
 
 	switch (change)
 	{
@@ -234,17 +211,25 @@ void CMaterialEditor::OnSubMaterialsChanged(CMaterial::SubMaterialChange change)
 		if (m_pMaterial->IsMultiSubMaterial())
 		{
 			if (m_pMaterial->GetSubMaterialCount() > 0)
+			{
 				SelectMaterialForEdit(m_pMaterial->GetSubMaterial(0));
+			}
 			else
+			{
 				SelectMaterialForEdit(nullptr);
+			}
 		}
 		else
+		{
 			SelectMaterialForEdit(m_pMaterial);
+		}
 		break;
 	case CMaterial::SubMaterialSet:
 		//If the material we are currently editing is no longer a child of loaded material, clear it
 		if (m_pEditedMaterial && m_pMaterial->IsMultiSubMaterial() && m_pEditedMaterial->GetParent() != m_pMaterial)
+		{
 			SelectMaterialForEdit(nullptr);
+		}
 		break;
 	case CMaterial::SlotCountChanged:
 		if (m_pMaterial->IsMultiSubMaterial() && m_pMaterial->GetSubMaterialCount() == 0)
@@ -257,12 +242,25 @@ void CMaterialEditor::OnSubMaterialsChanged(CMaterial::SubMaterialChange change)
 	}
 }
 
-void CMaterialEditor::CreateDefaultLayout(CDockableContainer* sender)
+void CMaterialEditor::OnInitialize()
 {
-	auto centerWidget = sender->SpawnWidget("Properties");
-	sender->SpawnWidget("Preview", centerWidget, QToolWindowAreaReference::Right);
-	auto materialWidget = sender->SpawnWidget("Material", centerWidget, QToolWindowAreaReference::Top);
-	sender->SetSplitterSizes(materialWidget, { 1, 4 });
+	RegisterDockableWidget("Properties", [&]()
+	{
+		CInspector* pInspector = new CInspector(this);
+		pInspector->SetLockable(false);
+		return pInspector;
+	}, true);
+
+	RegisterDockableWidget("Material", [&]() { return new CSubMaterialView(this); }, true);
+	RegisterDockableWidget("Preview", [&]() { return new CMaterialPreviewWidget(this); });
+}
+
+void CMaterialEditor::OnCreateDefaultLayout(CDockableContainer* pSender, QWidget* pAssetBrowser)
+{
+	QWidget* pCenterWidget = pSender->SpawnWidget("Properties", pAssetBrowser, QToolWindowAreaReference::VSplitRight);
+	pSender->SpawnWidget("Preview", pCenterWidget, QToolWindowAreaReference::Right);
+	QWidget* pMaterialWidget = pSender->SpawnWidget("Material", pCenterWidget, QToolWindowAreaReference::Top);
+	pSender->SetSplitterSizes(pMaterialWidget, { 1, 4 });
 }
 
 void CMaterialEditor::OnLayoutChange(const QVariantMap& state)
@@ -292,7 +290,7 @@ bool CMaterialEditor::OnOpenAsset(CAsset* pAsset)
 	const auto& filename = pAsset->GetFile(0);
 	CRY_ASSERT(filename && *filename);
 
-	const auto materialName = GetIEditor()->GetMaterialManager()->FilenameToMaterial(filename);
+	const string materialName = GetIEditor()->GetMaterialManager()->FilenameToMaterial(filename);
 
 	CMaterial* pMaterial = CSession::GetSessionMaterial(pAsset);
 	if (!pMaterial)
@@ -319,10 +317,6 @@ bool CMaterialEditor::OnOpenAsset(CAsset* pAsset)
 	return true;
 }
 
-bool CMaterialEditor::OnSaveAsset(CEditableAsset& editAsset)
-{
-	return GetAssetBeingEdited()->GetEditingSession()->OnSaveAsset(editAsset);
-}
 
 void CMaterialEditor::OnCloseAsset()
 {
@@ -375,8 +369,9 @@ void CMaterialEditor::BroadcastPopulateInspector()
 			title += "]";
 		}
 
-		PopulateInspectorEvent event([this](CInspector& inspector) {
-			inspector.AddWidget(m_pMaterialSerializer->CreatePropertyTree());
+		PopulateInspectorEvent event([this](CInspector& inspector)
+		{
+		  inspector.AddPropertyTree(m_pMaterialSerializer->CreatePropertyTree());
 		}, title);
 		event.Broadcast(this);
 	}

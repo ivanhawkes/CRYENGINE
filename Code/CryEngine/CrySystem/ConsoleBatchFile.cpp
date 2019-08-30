@@ -15,7 +15,7 @@
 
 #include "StdAfx.h"
 #include "ConsoleBatchFile.h"
-#include <CrySystem/IConsole.h>
+#include <CrySystem/ConsoleRegistration.h>
 #include <CrySystem/ISystem.h>
 #include "XConsole.h"
 #include <CryString/CryPath.h>
@@ -59,7 +59,9 @@ bool CConsoleBatchFile::ExecuteConfigFile(const char* sFilename)
 	CCryFile file;
 
 	{
+#if !defined(EXCLUDE_NORMAL_LOG)
 		const char* szLog = "Executing console batch file (try game,config,root):";
+#endif
 		string filenameLog;
 		string sfn = PathUtil::GetFile(filename);
 

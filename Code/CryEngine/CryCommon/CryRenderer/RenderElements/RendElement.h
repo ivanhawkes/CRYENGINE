@@ -1,33 +1,30 @@
 // Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#ifndef __RENDELEMENT_H__
-#define __RENDELEMENT_H__
+#pragma once
 
 #include <CryRenderer/VertexFormats.h>
 #include <CryMath/Cry_Color.h>
 
+class CParserBin;
 class CRenderElement;
+class CRenderView;
+class CShader;
+
 struct CRenderChunk;
 struct PrimitiveGroup;
-class CShader;
-struct SShaderTechnique;
-class CParserBin;
 struct SParserFrame;
-class CRenderView;
+struct SShaderTechnique;
 
 enum EDataType : int
 {
 	eDATA_Unknown = 0,
-	eDATA_Sky,
 	eDATA_ClientPoly,
 	eDATA_Flare,
 	eDATA_Terrain,
-	eDATA_SkyZone,
 	eDATA_Mesh,
 	eDATA_LensOptics,
 	eDATA_OcclusionQuery,
 	eDATA_Particle,
-	eDATA_HDRSky,
 	eDATA_FogVolume,
 	eDATA_WaterVolume,
 	eDATA_WaterOcean,
@@ -48,6 +45,8 @@ enum ERenderElementFlags : uint16
 	FCEF_SKINNED       = BIT(5),
 	FCEF_PRE_DRAW_DONE = BIT(6),
 
+	FCEF_KEEP_DISTANCE = BIT(7),
+
 	FCEF_NONE          = 0
 };
 
@@ -67,16 +66,16 @@ class IRenderElement
 {
 public:
 	IRenderElement() {}
-	virtual ~IRenderElement() {};
+	virtual ~IRenderElement() {}
 
 	virtual CRenderChunk*      mfGetMatInfo() = 0;
 	virtual TRenderChunkArray* mfGetMatInfoList() = 0;
 	virtual int                mfGetMatId() = 0;
 	virtual void               mfReset() = 0;
 	virtual bool               mfIsHWSkinned() = 0;
-	virtual CRenderElement*      mfCopyConstruct(void) = 0;
+	virtual CRenderElement*    mfCopyConstruct() = 0;
 	virtual void               mfCenter(Vec3& centr, CRenderObject* pObj, const SRenderingPassInfo& passInfo) = 0;
-	virtual void               mfGetBBox(Vec3& vMins, Vec3& vMaxs) const = 0;
+	virtual void               mfGetBBox(AABB& bb) const = 0;
 
 	virtual bool  mfUpdate(InputLayoutHandle eVertFormat, EStreamMasks StreamMask, bool bTessellation = false) = 0;
 
@@ -217,7 +216,7 @@ public:
 	virtual bool               mfIsHWSkinned() { return false; }
 	virtual CRenderElement*    mfCopyConstruct(void);
 	virtual void               mfCenter(Vec3& centr, CRenderObject* pObj, const SRenderingPassInfo& passInfo);
-	virtual void               mfGetBBox(Vec3& vMins, Vec3& vMaxs) const;
+	virtual void               mfGetBBox(AABB& bb) const;
 	virtual void  mfGetPlane(Plane& pl);
 
 
@@ -233,16 +232,16 @@ public:
 	// ~Pipeline 2.0 methods.
 	//////////////////////////////////////////////////////////////////////////
 
-	virtual InputLayoutHandle GetVertexFormat() const                                                { return InputLayoutHandle::Unspecified; };
+	virtual InputLayoutHandle GetVertexFormat() const                                                { return InputLayoutHandle::Unspecified; }
 	virtual bool          GetGeometryInfo(SGeometryInfo& streams, bool bSupportTessellation = false) { return false; }
 
 	//! Compile is called on a non mesh render elements, must be called only in rendering thread
 	//! Returns false if compile failed, and render element must not be rendered
-	virtual bool          Compile(CRenderObject* pObj, uint64 objFlags, ERenderElementFlags elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly)  { return false; };
+	virtual bool          Compile(CRenderObject* pObj, uint64 objFlags, ERenderElementFlags elmFlags, const AABB &localAABB, CRenderView *pRenderView, bool updateInstanceDataOnly)  { return false; }
 
 	//! Custom Drawing for the non mesh render elements.
 	//! Must be thread safe for the parallel recording
-	virtual void          DrawToCommandList(CRenderObject* pObj, const struct SGraphicsPipelinePassContext& ctx, class CDeviceCommandList* commandList)  {};
+	virtual void          DrawToCommandList(CRenderObject* pObj, const struct SGraphicsPipelinePassContext& ctx, class CDeviceCommandList* commandList)  {}
 	
 	//////////////////////////////////////////////////////////////////////////
 	// ~Pipeline 2.0 methods.
@@ -261,7 +260,6 @@ public:
 };
 
 #include "CREMesh.h"
-#include "CRESky.h"
 #include "CREOcclusionQuery.h"
 #include "CREFogVolume.h"
 #include "CREWaterVolume.h"
@@ -269,5 +267,3 @@ public:
 #include "CREGameEffect.h"
 #include "CREBreakableGlass.h"
 #include <Cry3DEngine/CREGeomCache.h>
-
-#endif  // __RENDELEMENT_H__

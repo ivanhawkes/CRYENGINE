@@ -32,7 +32,7 @@ public:
 	CEvent& operator=(CEvent const&) = delete;
 	CEvent& operator=(CEvent&&) = delete;
 
-#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
 	explicit CEvent(
 		char const* const szName,
 		uint32 const id,
@@ -56,6 +56,8 @@ public:
 		, m_fadeInTime(fadeInTime)
 		, m_fadeOutTime(fadeOutTime)
 		, m_isPanningEnabled(isPanningEnabled)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 	{}
 #else
 	explicit CEvent(
@@ -79,8 +81,10 @@ public:
 		, m_fadeInTime(fadeInTime)
 		, m_fadeOutTime(fadeOutTime)
 		, m_isPanningEnabled(isPanningEnabled)
+		, m_numInstances(0)
+		, m_toBeDestructed(false)
 	{}
-#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
 
 	virtual ~CEvent() override = default;
 
@@ -93,9 +97,9 @@ public:
 	EActionType GetType() const     { return m_type; }
 	SampleId    GetSampleId() const { return m_sampleId; }
 
-#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
 	char const* GetName() const { return m_name.c_str(); }
-#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
 
 	float GetAttenuationMinDistance() const { return m_attenuationMinDistance; }
 	float GetAttenuationMaxDistance() const { return m_attenuationMaxDistance; }
@@ -105,11 +109,17 @@ public:
 	int   GetFadeOutTime() const            { return m_fadeOutTime; }
 	bool  IsPanningEnabled() const          { return m_isPanningEnabled; }
 
+	void  IncrementNumInstances()           { ++m_numInstances; }
+	void  DecrementNumInstances();
+
+	bool  CanBeDestructed() const   { return m_toBeDestructed && (m_numInstances == 0); }
+	void  SetToBeDestructed() const { m_toBeDestructed = true; }
+
 private:
 
-#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE)
+#if defined(CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE)
 	CryFixedStringT<MaxControlNameLength> const m_name;
-#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_PRODUCTION_CODE
+#endif  // CRY_AUDIO_IMPL_SDLMIXER_USE_DEBUG_CODE
 
 	uint32 const m_id;
 	EActionType const m_type;
@@ -121,6 +131,8 @@ private:
 	int const         m_fadeInTime;
 	int const         m_fadeOutTime;
 	bool const        m_isPanningEnabled;
+	uint16            m_numInstances;
+	mutable bool      m_toBeDestructed;
 };
 } // namespace SDL_mixer
 } // namespace Impl

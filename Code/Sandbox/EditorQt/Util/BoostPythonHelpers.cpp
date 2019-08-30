@@ -790,7 +790,6 @@ PyGamePrefab::PyGamePrefab(void* prefabPtr, pSPyWrappedClass sharedPtr)
 
 PyGamePrefab::~PyGamePrefab()
 {
-	CPrefabObject* pPrefab = static_cast<CPrefabObject*>(m_prefabPtr);
 }
 
 std::vector<pPyGameObject> PyGamePrefab::GetChildren()
@@ -881,7 +880,6 @@ void PyGamePrefab::UpdatePrefab()
 PyGameGroup::PyGameGroup(void* groupPtr, pSPyWrappedClass sharedPtr)
 {
 	m_groupPtr = groupPtr;
-	CGroup* pGroup = static_cast<CGroup*>(m_groupPtr);
 }
 
 std::vector<pPyGameObject> PyGameGroup::GetChildren()
@@ -952,7 +950,6 @@ void PyGameGroup::UpdateGroup()
 PyGameCamera::PyGameCamera(void* cameraPtr, pSPyWrappedClass sharedPtr)
 {
 	m_cameraPtr = cameraPtr;
-	CCameraObject* pCamera = static_cast<CCameraObject*>(m_cameraPtr);
 }
 
 void PyGameCamera::UpdateCamera()
@@ -2692,7 +2689,7 @@ void RemoveListener(IPyScriptListener* pListener)
 
 void LoadPluginFromPath(string path)
 {
-	LOADING_TIME_PROFILE_SECTION_ARGS(path.c_str());
+	CRY_PROFILE_FUNCTION_ARG(PROFILE_LOADING_ONLY, path.c_str());
 	CFileEnum fileEnum;
 	__finddata64_t fileData;
 	if (fileEnum.StartEnumeration(path, "startup.py", &fileData))
@@ -2705,7 +2702,7 @@ void LoadPluginFromPath(string path)
 
 void LoadPythonPlugins()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	string userFolder(PathUtil::GetUserSandboxFolder());
 	boost::python::object mainModule(boost::python::handle<>(boost::python::borrowed(PyImport_ImportModule("sandbox"))));
 	boost::python::scope main_scope = mainModule;

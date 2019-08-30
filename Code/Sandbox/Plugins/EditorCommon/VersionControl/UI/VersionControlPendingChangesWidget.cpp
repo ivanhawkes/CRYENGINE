@@ -4,7 +4,10 @@
 #include "VersionControlUIHelper.h"
 #include "PendingChange.h"
 #include "AssetSystem/Loader/AssetLoaderHelpers.h"
+#include "AssetSystem/AssetManager.h"
+#include "VersionControl/DeletedWorkFilesStorage.h"
 #include "VersionControl/VersionControl.h"
+#include "VersionControl/AssetsVCSStatusProvider.h"
 #include "ProxyModels/AttributeFilterProxyModel.h"
 #include <CryString/CryPath.h>
 #include <QApplication>
@@ -23,6 +26,17 @@ bool IsLayerFile(const char* fileName)
 {
 	const char* const szExt = PathUtil::GetExt(fileName);
 	return strcmp(szExt, "lyr") == 0; 
+}
+
+bool IsDeletedWorkFiles(const CVersionControlFileStatus& fs)
+{
+	return CDeletedWorkFilesStorage::GetInstance().Contains(fs.GetFileName()) 
+		&& fs.HasState(CVersionControlFileStatus::eState_DeletedLocally);
+}
+
+bool IsWorkFile(const CVersionControlFileStatus& fs)
+{
+	return CAssetManager::GetInstance()->GetWorkFilesTracker().GetIndexCount(fs.GetFileName()) > 0 || IsDeletedWorkFiles(fs);
 }
 
 QIcon GetStatusIconForPendingChange(const CPendingChange* pPendingChange)
@@ -183,7 +197,7 @@ public:
 		vcs.GetFileStatuses([this](const auto& fs)
 		{
 			if (fs.IsUntouchedLocally()) return false;
-			return AssetLoader::IsMetadataFile(fs.GetFileName()) || IsLayerFile(fs.GetFileName());
+			return AssetLoader::IsMetadataFile(fs.GetFileName()) || IsLayerFile(fs.GetFileName()) || IsWorkFile(fs);
 		}, fileStatuses);
 
 		beginResetModel();
@@ -384,8 +398,6 @@ public:
 	}
 };
 
-CHeaderProxyStyle g_headerProxyStyle;
-
 CPendingChangesModel* GetModel(QTreeView* pTree)
 {
 	return static_cast<CPendingChangesModel*>(pTree->model());
@@ -406,7 +418,7 @@ void CVersionControlPendingChangesWidget::SelectAssets(const std::vector<CAsset*
 	signalSelectionChanged();
 }
 
-void CVersionControlPendingChangesWidget::SelectLayers(const std::vector<string>& layersFiles, bool shouldDeselectCurrent)
+void CVersionControlPendingChangesWidget::SelectFiles(const std::vector<string>& layersFiles, bool shouldDeselectCurrent)
 {
 	using namespace Private_VersionControlPendingChangesTab;
 	GetModel(m_pTree)->SetSelectedMainFiles(layersFiles, shouldDeselectCurrent);
@@ -426,7 +438,8 @@ std::vector<CPendingChange*> CVersionControlPendingChangesWidget::GetSelectedPen
 	return GetModel(m_pTree)->GetSelectedPendingChanges();
 }
 
-CVersionControlPendingChangesWidget::CVersionControlPendingChangesWidget(QWidget* pParent /*= nullptr*/)
+CVersionControlPendingChangesWidget::CVersionControlPendingChangesWidget(QWidget* pParent)
+	: QWidget(pParent)
 {
 	using namespace Private_VersionControlPendingChangesTab;
 
@@ -452,7 +465,8 @@ CVersionControlPendingChangesWidget::CVersionControlPendingChangesWidget(QWidget
 	m_pTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 	m_pTree->setBaseSize(460, 280);
 
-	m_pTree->header()->setStyle(&g_headerProxyStyle);
+	static CHeaderProxyStyle s_headerProxyStyle;
+	m_pTree->header()->setStyle(&s_headerProxyStyle);
 
 	QStyledItemDelegate* pCheckBoxItemDelegate = new CCheckBoxItemDelegate(m_pTree);
 	m_pTree->setItemDelegateForColumn(0, pCheckBoxItemDelegate);

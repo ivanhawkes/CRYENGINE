@@ -83,10 +83,13 @@ void CDecalRenderNode::CreateDecalOnStaticObjects()
 	CVisAreaManager* pVisAreaManager(GetVisAreaManager());
 	PodArray<SRNInfo> decalReceivers;
 
-	if (pTerrain && m_pOcNode && !m_pOcNode->GetVisArea())
-		pTerrain->GetObjectsAround(m_decalProperties.m_pos, m_decalProperties.m_radius, &decalReceivers, true, false);
-	else if (pVisAreaManager && m_pOcNode && m_pOcNode->GetVisArea())
-		pVisAreaManager->GetObjectsAround(m_decalProperties.m_pos, m_decalProperties.m_radius, &decalReceivers, true);
+	if (GetEntityVisArea())
+	{
+		if (pTerrain)
+			pTerrain->GetObjectsAround(m_decalProperties.m_pos, m_decalProperties.m_radius, &decalReceivers, true, false);
+		else if (pVisAreaManager)
+			pVisAreaManager->GetObjectsAround(m_decalProperties.m_pos, m_decalProperties.m_radius, &decalReceivers, true);
+	}
 
 	// delete vegetations
 	for (int nRecId(0); nRecId < decalReceivers.Count(); ++nRecId)
@@ -708,17 +711,7 @@ void CDecalRenderNode::OffsetPosition(const Vec3& delta)
 	m_Matrix.SetTranslation(m_Matrix.GetTranslation() + delta);
 }
 
-void CDecalRenderNode::FillBBox(AABB& aabb)
-{
-	aabb = CDecalRenderNode::GetBBox();
-}
-
-EERType CDecalRenderNode::GetRenderNodeType()
-{
-	return eERType_Decal;
-}
-
-float CDecalRenderNode::GetMaxViewDist()
+float CDecalRenderNode::GetMaxViewDist() const
 {
 	float fMatScale = m_Matrix.GetColumn0().GetLength();
 
