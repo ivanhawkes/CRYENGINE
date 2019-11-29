@@ -16,6 +16,7 @@ set(MSVC_COMMON_FLAGS
 	/wd4275     # non dll-interface class '' used as base for dll-interface class ''
 	/wd4961     # No profile data was merged into '', profile-guided optimizations disabled
 	/wd4068     # 'Unknown pragma' - sometimes need these in code to prevent global suppression.
+	/std:c++17  # ILH: Set compiler to c++17
 )
 string(REPLACE ";" " " MSVC_COMMON_FLAGS "${MSVC_COMMON_FLAGS}")
 
@@ -24,8 +25,8 @@ set(CMAKE_RC_FLAGS /nologo)
 # Override cxx flags
 set(CMAKE_CXX_FLAGS "${MSVC_COMMON_FLAGS}" CACHE STRING "C++ Common Flags" FORCE)
 
-set(CMAKE_C_FLAGS_DEBUG "/MDd /Zi /Zo /Od /Ob0 /Oy- /RTC1 /GS /DDEBUG /D_DEBUG" CACHE STRING "C Flags" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Zo /Od /Ob0 /Oy- /RTC1 /GS /DDEBUG /D_DEBUG" CACHE STRING "C++ Flags" FORCE)
+set(CMAKE_C_FLAGS_DEBUG "/MDd /ZI /Zo /Od /Ob0 /Oy- /RTC1 /GS /DDEBUG /D_DEBUG" CACHE STRING "C Flags" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "/MDd /ZI /Zo /Od /Ob0 /Oy- /RTC1 /GS /DDEBUG /D_DEBUG" CACHE STRING "C++ Flags" FORCE)
 
 # Create PDBs (/Zi)
 # Create better debug info (/Zo)
