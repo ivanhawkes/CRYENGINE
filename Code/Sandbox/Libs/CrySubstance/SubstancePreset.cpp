@@ -518,7 +518,7 @@ SubstanceAir::GraphInstance& CSubstancePreset::PrepareRenderInstance(ISubstanceI
 			{
 				SubstanceAir::OutputDesc desc;
 				desc.mLabel = renderData.name.c_str();
-				m_VirtualOutputsCache[renderData.name] = m_pGraphInstance->createOutput(newFormat, desc);
+				//m_VirtualOutputsCache[renderData.name] = m_pGraphInstance->createOutput(newFormat, desc);
 			}
 			else
 			{
