@@ -37,12 +37,12 @@ void CSubstanceManager::CrySubstanceCallbacks::outputComputed(
 		SubstanceAir::UInt runUid,
 		size_t userData,
 		const SubstanceAir::GraphInstance* graphInstance,
-		SubstanceAir::OutputInstance* outputInstance)
+		SubstanceAir::OutputInstanceBase* outputInstance)
 	{
 		ISubstanceInstanceRenderer* renderer = (ISubstanceInstanceRenderer*)userData;
 		if (CSubstanceManager::Instance()->m_renderers.count(std::type_index(typeid(*renderer))))
 		{
-			CSubstanceManager::Instance()->m_renderers[std::type_index(typeid(*renderer))]->OnOutputAvailable(runUid, graphInstance, outputInstance);
+			CSubstanceManager::Instance()->m_renderers[std::type_index(typeid(*renderer))]->OnOutputAvailable(runUid, graphInstance, static_cast<SubstanceAir::OutputInstance*> (outputInstance));
 			
 		}
 		else {
@@ -52,7 +52,7 @@ void CSubstanceManager::CrySubstanceCallbacks::outputComputed(
 	
 	}
 
-void CSubstanceManager::CrySubstanceCallbacks::outputComputed(SubstanceAir::UInt runUid, const SubstanceAir::GraphInstance* graphInstance, SubstanceAir::OutputInstance* outputInstance)
+void CSubstanceManager::CrySubstanceCallbacks::outputComputed(SubstanceAir::UInt runUid, const SubstanceAir::GraphInstance* graphInstance, SubstanceAir::OutputInstanceBase* outputInstance)
 {
 	outputComputed(runUid, 0, graphInstance, outputInstance);
 }
