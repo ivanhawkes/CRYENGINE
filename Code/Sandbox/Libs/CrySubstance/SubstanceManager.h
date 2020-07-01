@@ -54,8 +54,8 @@ protected:
 
 	struct CrySubstanceCallbacks : public SubstanceAir::RenderCallbacks
 	{
-		virtual void outputComputed(SubstanceAir::UInt runUid, size_t userData, const SubstanceAir::GraphInstance* graphInstance, SubstanceAir::OutputInstance* outputInstance) override;
-		void outputComputed(SubstanceAir::UInt runUid, const SubstanceAir::GraphInstance* graphInstance, SubstanceAir::OutputInstance* outputInstance);
+		virtual void outputComputed(SubstanceAir::UInt runUid, size_t userData, const SubstanceAir::GraphInstance* graphInstance, SubstanceAir::OutputInstanceBase* outputInstance) override;
+		void outputComputed(SubstanceAir::UInt runUid, const SubstanceAir::GraphInstance* graphInstance, SubstanceAir::OutputInstanceBase* outputInstance);
 	};
 
 	CSubstanceManager();

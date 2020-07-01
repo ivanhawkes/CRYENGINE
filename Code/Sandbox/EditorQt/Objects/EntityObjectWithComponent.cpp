@@ -28,7 +28,7 @@ bool CEntityObjectWithComponent::CreateGameObject()
 
 	if (!m_componentGUID.IsNull() && m_pEntity->QueryComponentByInterfaceID(m_componentGUID) == nullptr)
 	{
-		if (IEntityComponent* pComponent = m_pEntity->CreateComponentByInterfaceID(m_componentGUID, false))
+		if (IEntityComponent* pComponent = m_pEntity->CreateComponentByInterfaceID(m_componentGUID))
 		{
 			pComponent->GetComponentFlags().Add(EEntityComponentFlags::UserAdded);
 
