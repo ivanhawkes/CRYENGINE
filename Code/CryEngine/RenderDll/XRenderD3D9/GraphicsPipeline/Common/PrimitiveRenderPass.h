@@ -43,6 +43,8 @@ struct SCompiledRenderPrimitive : private NoCopy
 	uint8                      m_stencilRef = 0;
 	EType                      m_type = eType_Base;
 	SDrawInfo                  m_drawInfo;
+
+	D3D11_RECT				   m_scissorRect = { 0,0,0,0 };
 };
 
 
@@ -122,7 +124,7 @@ public:
 	void                          SetBuffer(uint32 shaderSlot, CGpuBuffer* pBuffer, ResourceViewHandle resourceViewID = EDefaultResourceViews::Default, EShaderStage shaderStages = EShaderStage_Pixel);
 	void                          SetInlineConstantBuffer(EConstantBufferShaderSlot shaderSlot, CConstantBuffer* pBuffer, EShaderStage shaderStages = EShaderStage_Pixel);
 	void                          SetPrimitiveType(EPrimitiveType primitiveType);
-	void                          SetCustomVertexStream(buffer_handle_t vertexBuffer, InputLayoutHandle vertexFormat, uint32 vertexStride);
+	void                          SetCustomVertexStream(buffer_handle_t vertexBuffer, InputLayoutHandle vertexFormat, uint32 vertexStride, uint32 vertexByteOffset = 0);
 	void                          SetCustomIndexStream(buffer_handle_t indexBuffer, RenderIndexType indexType);
 	void                          SetDrawInfo(ERenderPrimitiveType primType, uint32 vertexBaseOffset, uint32 vertexOrIndexOffset, uint32 vertexOrIndexCount, uint32 instanceCount = 1);
 	void                          SetDrawTopology(ERenderPrimitiveType primType);
@@ -143,6 +145,7 @@ public:
 
 	EDirtyFlags                   Compile(const CPrimitiveRenderPass& targetPass);
 
+	void SetScissorRect(const D3D11_RECT& scissorRect);
 private:
 
 	struct SPrimitiveGeometry
@@ -293,6 +296,12 @@ inline void CRenderPrimitive::SetRenderState(int state)
 	ASSIGN_VALUE(m_renderState, state, eDirty_RenderState);
 }
 
+inline void CRenderPrimitive::SetScissorRect(const D3D11_RECT& scissorRect)
+{
+	//ASSIGN_VALUE(m_scissorRect, scissorRect, eDirty_RenderState);
+	m_scissorRect = scissorRect;
+}
+
 inline void CRenderPrimitive::SetStencilState(int state, uint8 stencilRef, uint8 stencilReadMask, uint8 stencilWriteMask)
 {
 	ASSIGN_VALUE(m_stencilState, state, eDirty_RenderState);
@@ -332,10 +341,11 @@ inline void CRenderPrimitive::SetPrimitiveType(EPrimitiveType primitiveType)
 	ASSIGN_VALUE(m_primitiveType, primitiveType, eDirty_Geometry);
 }
 
-inline void CRenderPrimitive::SetCustomVertexStream(buffer_handle_t vertexBuffer, InputLayoutHandle vertexFormat, uint32 vertexStride)
+inline void CRenderPrimitive::SetCustomVertexStream(buffer_handle_t vertexBuffer, InputLayoutHandle vertexFormat, uint32 vertexStride, uint32 vertexByteOffset)
 {
 	ASSIGN_VALUE(m_primitiveGeometry.vertexStream.hStream, vertexBuffer, eDirty_Geometry);
 	ASSIGN_VALUE(m_primitiveGeometry.vertexStream.nStride, vertexStride, eDirty_Geometry);
+	ASSIGN_VALUE(m_primitiveGeometry.vertexStream.nByteOffset, vertexByteOffset, eDirty_Geometry);
 	ASSIGN_VALUE(m_primitiveGeometry.vertexFormat, vertexFormat, eDirty_Geometry | eDirty_Topology);
 	ASSIGN_VALUE(m_primitiveType, ePrim_Custom, eDirty_Geometry);
 }

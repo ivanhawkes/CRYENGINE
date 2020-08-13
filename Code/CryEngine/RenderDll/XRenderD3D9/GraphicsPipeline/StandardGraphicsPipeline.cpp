@@ -52,6 +52,8 @@
 #include "Common/ReverseDepth.h"
 #include "D3D_SVO.h"
 
+#include "Common/Pipeline/CustomPipeline.h"
+
 CStandardGraphicsPipeline::CStandardGraphicsPipeline(const IRenderer::SGraphicsPipelineDescription& desc, const std::string& uniqueIdentifier, const SGraphicsPipelineKey key)
 	: CGraphicsPipeline(desc, uniqueIdentifier, key)
 {
@@ -462,7 +464,6 @@ void CStandardGraphicsPipeline::Execute()
 			UpdatePerPassResourceSet();
 			UpdateRenderPasses();
 #endif
-
 			// CRendererResources::s_ptexDisplayTarget -> CRenderOutput->m_pColorTarget (PostAA)
 			// Post effects disabled, copy diffuse to color target
 			if (GetStage<CPostEffectStage>()->IsStageActive(m_renderingFlags))
@@ -470,8 +471,15 @@ void CStandardGraphicsPipeline::Execute()
 			else
 				m_PostToFramePass->Execute(m_pipelineResources.m_pTexDisplayTargetDst, pRenderView->GetRenderOutput()->GetColorTarget());
 
-			// CRenderOutput->m_pColorTarget
-			GetStage<CSceneForwardStage>()->ExecuteAfterPostProcessLDR();
+			
+		}
+			
+		// CRenderOutput->m_pColorTarget
+		GetStage<CSceneForwardStage>()->ExecuteAfterPostProcessLDR();
+
+		if (auto pCustomStage = Cry::Renderer::Pipeline::CCustomPipeline::Get())
+		{
+			pCustomStage->RT_Render(); //Add multiple calls to this later so we can sort stages
 		}
 
 		if (GetStage<CSceneCustomStage>()->IsSelectionHighlightEnabled())
@@ -497,11 +505,17 @@ void CStandardGraphicsPipeline::Execute()
 #endif
 	}
 
-	if (GetStage<COmniCameraStage>()->IsStageActive(m_renderingFlags))
-		GetStage<COmniCameraStage>()->Execute();
-
 	if (GetStage<CVolumetricFogStage>()->IsStageActive(m_renderingFlags))
 		GetStage<CVolumetricFogStage>()->ResetFrame();
+
+	//TODO:insert custom stage
+	/*if (auto pPassRenderer = Cry::Renderer::CustomPass::CCustomRenderer::GetCustomPassRenderer())
+	{
+		pPassRenderer->ExecuteCustomPasses();
+	}*/
+	
+
+
 
 	PROFILE_LABEL_POP("GRAPHICS_PIPELINE");
 

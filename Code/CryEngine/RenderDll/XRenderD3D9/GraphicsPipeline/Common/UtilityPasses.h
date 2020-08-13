@@ -40,7 +40,7 @@ public:
 	{
 		m_pass.SetGraphicsPipeline(pGraphicsPipeline);
 	}
-	void           Execute(CTexture* pSrcRT, CTexture* pDestRT);
+	void           Execute(CTexture* pSrcRT, CTexture* pDestRT, bool bNoCopy = false, uint32 stateMask = 0);
 
 	static EPassId GetPassId() { return EPassId::StretchRectPass; }
 

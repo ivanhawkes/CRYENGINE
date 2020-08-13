@@ -584,7 +584,7 @@ void CDeviceGraphicsCommandInterfaceImpl::SetVertexBuffersImpl(uint32 numStreams
 			buffer_size_t offset;
 			D3DBuffer* buffer = gcpRendD3D.m_DevBufMan.GetD3D(current.hStream, &offset);
 
-			uint32 offset32 = offset;
+			uint32 offset32 = offset + current.nByteOffset;
 			GetDX11CommandList()->GetD3D11DeviceContext()->IASetVertexBuffers(current.nSlot, 1, &buffer, &current.nStride, &offset32);
 		}
 	}

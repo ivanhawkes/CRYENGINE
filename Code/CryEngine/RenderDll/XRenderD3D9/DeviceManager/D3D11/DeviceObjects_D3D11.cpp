@@ -404,6 +404,8 @@ CDeviceSamplerState* CDeviceObjectFactory::CreateSamplerState(const SSamplerStat
 	Desc.BorderColor[3] = col.a;
 	if (pState.m_bComparison)
 		Desc.ComparisonFunc = D3D11_COMPARISON_LESS;
+	else if (pState.m_bNeverCompare)
+		Desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 	else
 		Desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
 
@@ -442,6 +444,8 @@ CDeviceSamplerState* CDeviceObjectFactory::CreateSamplerState(const SSamplerStat
 			Desc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
 		else if (pState.m_nMinFilter == FILTER_POINT && pState.m_nMagFilter == FILTER_POINT && (pState.m_nMipFilter == FILTER_NONE || pState.m_nMipFilter == FILTER_POINT))
 			Desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+		else if (pState.m_nMinFilter == FILTER_POINT && pState.m_nMagFilter == FILTER_POINT && (pState.m_nMipFilter == FILTER_LINEAR || pState.m_nMipFilter == FILTER_BILINEAR || pState.m_nMipFilter == FILTER_TRILINEAR))
+			Desc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
 		else if (pState.m_nMinFilter >= FILTER_ANISO2X && pState.m_nMagFilter >= FILTER_ANISO2X && pState.m_nMipFilter >= FILTER_ANISO2X)
 		{
 			Desc.Filter = D3D11_FILTER_ANISOTROPIC;

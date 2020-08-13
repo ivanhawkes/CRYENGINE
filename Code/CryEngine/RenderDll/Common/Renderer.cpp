@@ -42,6 +42,8 @@
 #endif
 #include <CryRenderer/IShader.h>
 
+#include "Pipeline/CustomPipeline.h"
+
 // TODO: replace by ID3DUserDefinedAnnotation https://msdn.microsoft.com/en-us/library/hh446881.aspx
 #if !CRY_RENDERER_GNM && !CRY_RENDERER_VULKAN && (CRY_RENDERER_DIRECT3D < 120) && !CRY_PLATFORM_DURANGO && CRY_PLATFORM_WINDOWS
 	#ifdef ENABLE_FRAME_PROFILER_LABELS
@@ -286,6 +288,12 @@ void CRenderer::InitRenderer()
 	SRenderStatistics::s_pCurrentOutput = &m_frameRenderStats[0];
 	SRenderStatistics::s_pPreviousOutput = &m_frameRenderStats[1];
 	memset(SRenderStatistics::s_pCurrentOutput, 0, sizeof(m_frameRenderStats));
+
+	if (auto pCustomPipeline = Cry::Renderer::Pipeline::CCustomPipeline::Create())
+	{
+		//Renderer init stuff
+	}
+
 }
 
 CRenderer::~CRenderer()
@@ -395,6 +403,9 @@ bool CRenderer::IsRenderingIntroMovies() const
 
 void CRenderer::Release()
 {
+	Cry::Renderer::Pipeline::CCustomPipeline::Destroy();
+
+
 	// Reminder for Andrey/AntonKap: this needs to be properly handled
 	//SAFE_DELETE(g_pSDynTexture_PoolAlloc)
 	//g_pSDynTexture_PoolAlloc = NULL;

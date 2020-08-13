@@ -441,6 +441,7 @@ const float VIRTUAL_SCREEN_HEIGHT = 600.0f;
 #define GS_BLDST_ONE_A_ZERO               0x90 // separate alpha blend state
 #define GS_BLDST_ONEMINUSSRC1ALPHA        0xA0 // dual source blending
 #define GS_BLDST_ONEMINUSSRC1ALPHA_A_ZERO 0xB0
+#define GS_BLDST_ONEMINUSSRC1COLOR_A	  0xC0
 #define GS_BLDST_MASK                     0xF0
 #define GS_BLDST_SHIFT                    4
 
@@ -481,6 +482,7 @@ static_assert(GS_NOCOLMASK_COUNT <= GS_COLMASK_MASK, "Exceeded count limit of po
 #define GS_DEPTHFUNC_LESS          0x000C0000
 #define GS_DEPTHFUNC_GEQUAL        0x00100000
 #define GS_DEPTHFUNC_NOTEQUAL      0x00140000
+#define GS_DEPTHFUNC_NEVER         0x00180000
 #define GS_DEPTHFUNC_MASK          0x001C0000 // enum
 #define GS_DEPTHFUNC_SHIFT         18
 

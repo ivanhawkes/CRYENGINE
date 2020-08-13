@@ -447,17 +447,24 @@ SInputLayout CDeviceObjectFactory::CreateInputLayoutForPermutation(const SShader
 	return SInputLayout(std::move(decs));
 }
 
-InputLayoutHandle CDeviceObjectFactory::CreateCustomVertexFormat(size_t numDescs, const D3D11_INPUT_ELEMENT_DESC* inputLayout)
+InputLayoutHandle CDeviceObjectFactory::CreateCustomVertexFormat(size_t numDescs, const D3D11_INPUT_ELEMENT_DESC* inputLayout, bool bReorderElements)
 {
 	std::vector<D3D11_INPUT_ELEMENT_DESC> decs;
 	for (int n = 0; n < numDescs; ++n) 
 	{
-		// Insert ordered by element name
-		auto it = std::lower_bound(decs.begin(), decs.end(), inputLayout[n], [](const D3D11_INPUT_ELEMENT_DESC& lhs, const D3D11_INPUT_ELEMENT_DESC& rhs)
+		if (bReorderElements)
 		{
-			return ::strcmp(lhs.SemanticName, rhs.SemanticName) <= 0;
-		});
-		decs.insert(it, inputLayout[n]);
+			// Insert ordered by element name
+			auto it = std::lower_bound(decs.begin(), decs.end(), inputLayout[n], [](const D3D11_INPUT_ELEMENT_DESC& lhs, const D3D11_INPUT_ELEMENT_DESC& rhs)
+			{
+				return ::strcmp(lhs.SemanticName, rhs.SemanticName) <= 0;
+			});
+			decs.insert(it, inputLayout[n]);
+		}
+		else
+		{
+			decs.push_back(inputLayout[n]);
+		}
 	}
 
 	// Find existing vertex format or store a new one

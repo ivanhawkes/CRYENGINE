@@ -21,7 +21,7 @@ ResourceViewHandle s_RTVDefaults[] =
 // CStretchRectPass
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void CStretchRectPass::Execute(CTexture* pSrcRT, CTexture* pDestRT)
+void CStretchRectPass::Execute(CTexture* pSrcRT, CTexture* pDestRT, bool bNoCopy, uint32 stateMask)
 {
 	//Check if the required shader is loaded
 	if (CShaderMan::s_shPostEffects == nullptr)
@@ -36,7 +36,7 @@ void CStretchRectPass::Execute(CTexture* pSrcRT, CTexture* pDestRT)
 	const D3DFormat destFormat = DeviceFormats::ConvertFromTexFormat(pDestRT->GetDstFormat());
 	const D3DFormat srcFormat = DeviceFormats::ConvertFromTexFormat(pSrcRT->GetDstFormat());
 
-	if (!bResample && destFormat == srcFormat)
+	if (!bNoCopy && ( !bResample && destFormat == srcFormat))
 	{
 		GetDeviceObjectFactory().GetCoreCommandList().GetCopyInterface()->Copy(pSrcRT->GetDevTexture(), pDestRT->GetDevTexture());
 		return;
@@ -55,7 +55,7 @@ void CStretchRectPass::Execute(CTexture* pSrcRT, CTexture* pDestRT)
 	m_pass.SetPrimitiveType(CRenderPrimitive::ePrim_ProceduralTriangle);
 	m_pass.SetRenderTarget(0, pDestRT);
 	m_pass.SetTechnique(CShaderMan::s_shPostEffects, bResample ? techTexToTexResampled : techTexToTex, 0);
-	m_pass.SetState(GS_NODEPTHTEST);
+	m_pass.SetState(GS_NODEPTHTEST | stateMask);
 	m_pass.SetTextureSamplerPair(0, pSrcRT, bResample ? EDefaultSamplerStates::LinearClamp : EDefaultSamplerStates::PointClamp);
 
 	if (bResample)

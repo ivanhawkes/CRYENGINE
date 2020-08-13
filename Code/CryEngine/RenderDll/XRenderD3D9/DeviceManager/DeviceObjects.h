@@ -162,7 +162,7 @@ public:
 	static SInputLayout            CreateInputLayoutForPermutation(const SShaderBlob* m_pConsumingVertexShader, const SInputLayoutCompositionDescriptor &compositionDescription, EStreamMasks StreamMask, const InputLayoutHandle VertexFormat);
 	static const SInputLayoutPair* GetOrCreateInputLayout(const SShaderBlob* pVS, EStreamMasks StreamMask, const InputLayoutHandle VertexFormat);
 	static const SInputLayoutPair* GetOrCreateInputLayout(const SShaderBlob* pVS, const InputLayoutHandle VertexFormat);
-	static InputLayoutHandle       CreateCustomVertexFormat(size_t numDescs, const D3D11_INPUT_ELEMENT_DESC* inputLayout);
+	static InputLayoutHandle       CreateCustomVertexFormat(size_t numDescs, const D3D11_INPUT_ELEMENT_DESC* inputLayout, bool bReorderElements = true);
 
 	////////////////////////////////////////////////////////////////////////////
 	// PipelineState API

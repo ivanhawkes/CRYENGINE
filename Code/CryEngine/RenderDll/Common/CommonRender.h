@@ -368,6 +368,7 @@ struct SSamplerState
 	bool  m_bComparison;                  // TODO: deprecate, use m_nReduction, add comparison function
 	bool  m_bSRGBLookup;                  // TODO: deprecate, use format
 	byte  m_bPAD;                         // TODO: remove
+	bool  m_bNeverCompare = false;
 
 	constexpr SSamplerState()
 		: m_nMinFilter(FILTER_POINT)
@@ -438,6 +439,7 @@ struct SSamplerState
 		, m_bComparison(src.m_bComparison)
 		, m_bSRGBLookup(src.m_bSRGBLookup)
 		, m_bPAD(src.m_bPAD)
+		, m_bNeverCompare(src.m_bNeverCompare)
 	{
 	}
 
@@ -450,7 +452,7 @@ struct SSamplerState
 	inline friend bool operator==(const SSamplerState& m1, const SSamplerState& m2)
 	{
 		return *(uint64*)&m1 == *(uint64*)&m2 && m1.m_dwBorderColor == m2.m_dwBorderColor && m1.m_fMipLodBias == m2.m_fMipLodBias &&
-			   m1.m_bActive == m2.m_bActive && m1.m_bComparison == m2.m_bComparison && m1.m_bSRGBLookup == m2.m_bSRGBLookup;
+			   m1.m_bActive == m2.m_bActive && m1.m_bComparison == m2.m_bComparison && m1.m_bSRGBLookup == m2.m_bSRGBLookup && m1.m_bNeverCompare == m2.m_bNeverCompare;
 	}
 	void Release()
 	{

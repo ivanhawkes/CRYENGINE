@@ -667,19 +667,26 @@ void CPrimitiveRenderPass::Execute()
 
 	pCommandInterface->BeginRenderPass(*m_pRenderPass, m_scissor);
 
+	D3D11_RECT nullRect = { 0,0,0,0 };
 	if (!gcpRendD3D.GetVrProjectionManager()->SetRenderingState(
-				commandList,
-				m_viewport,
-				(m_passFlags & ePassFlags_UseVrProjectionState) != 0,
-				(m_passFlags & ePassFlags_RequireVrProjectionConstants) != 0))
+		commandList,
+		m_viewport,
+		(m_passFlags & ePassFlags_UseVrProjectionState) != 0,
+		(m_passFlags & ePassFlags_RequireVrProjectionConstants) != 0))
 	{
 		pCommandInterface->SetViewports(1, &m_viewport);
-		pCommandInterface->SetScissorRects(1, &m_scissor);
+
+		if (!memcmp(&nullRect, &m_compiledPrimitives[0]->m_scissorRect, sizeof(D3D11_RECT)))
+			pCommandInterface->SetScissorRects(1, &m_scissor);
 	}
 
 	for (auto pPrimitive : m_compiledPrimitives)
 	{
 		uint32 bindSlot = 0;
+
+		if (memcmp(&nullRect, &pPrimitive->m_scissorRect, sizeof(D3D11_RECT)))
+			pCommandInterface->SetScissorRects(1, &pPrimitive->m_scissorRect);
+
 		pCommandInterface->SetResourceLayout(pPrimitive->m_pResourceLayout.get());
 		pCommandInterface->SetPipelineState(pPrimitive->m_pPipelineState.get());
 		pCommandInterface->SetStencilRef(pPrimitive->m_stencilRef);

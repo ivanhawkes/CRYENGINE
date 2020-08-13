@@ -33,6 +33,7 @@ struct CDeviceInputStream
 		stream.hStream = hStream;
 		stream.nStride = nStride;
 		stream.nSlot = nSlot;
+		stream.nByteOffset = nByteOffset;
 		return stream;
 	}
 
@@ -50,6 +51,7 @@ private:
 	DeviceBufferHandle hStream;
 	buffer_size_t      nStride; // NOTE: needs to contain index format for index buffers
 	buffer_size_t      nSlot;
+	buffer_size_t	   nByteOffset = 0u;
 
 	CDeviceInputStream() { hStream = ~0u; nStride = 0; nStride = 0; nSlot = 0; }
 	CDeviceInputStream(const SStreamInfo& stream) { *this = stream; }
@@ -60,12 +62,13 @@ private:
 		hStream = stream.hStream;
 		nStride = stream.nStride;
 		nSlot = stream.nSlot;
+		nByteOffset = stream.nByteOffset;
 		return *this;
 	}
 
 	inline bool operator==(const CDeviceInputStream& other) const
 	{
-		return (hStream == other.hStream) & (nStride == other.nStride) & (nSlot == other.nSlot);
+		return (hStream == other.hStream) & (nStride == other.nStride) & (nSlot == other.nSlot) & (nByteOffset == other.nByteOffset);
 	}
 };
 

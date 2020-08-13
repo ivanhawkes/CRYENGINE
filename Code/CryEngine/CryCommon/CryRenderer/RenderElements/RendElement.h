@@ -59,6 +59,7 @@ struct SStreamInfo
 	stream_handle_t hStream = ~0u;
 	uint32          nStride =  0u; // NOTE: for index buffers this needs to contain the index format
 	uint32          nSlot   =  0u;
+	uint32			nByteOffset = 0u;
 };
 
 
