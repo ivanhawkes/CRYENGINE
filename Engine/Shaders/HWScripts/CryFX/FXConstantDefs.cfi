@@ -38,6 +38,21 @@
 #define REG_PM_PARAM_5  c47
 #define REG_PM_PARAM_6  c48
 #define REG_PM_PARAM_7  c49
+#define REG_PM_PARAM_8  c50
+#define REG_PM_PARAM_9  c51
+#define REG_PM_PARAM_10  c52
+#define REG_PM_PARAM_11  c53
+#define REG_PM_PARAM_12  c54
+#define REG_PM_PARAM_13  c55
+#define REG_PM_PARAM_14  c56
+#define REG_PM_PARAM_15  c57
+#define REG_PM_PARAM_16  c58
+#define REG_PM_PARAM_17  c59
+#define REG_PM_PARAM_18  c60
+#define REG_PM_PARAM_19  c61
+#define REG_PM_PARAM_20  c62
+#define REG_PM_PARAM_21  c63
+
 
 float4   MatDifColor                 : PM_MatDiffuseColor             < register = REG_PM_DIFFUSE_COL; >;
 float4   MatSpecColor                : PM_MatSpecularColor            < register = REG_PM_SPECULAR_COL; >;

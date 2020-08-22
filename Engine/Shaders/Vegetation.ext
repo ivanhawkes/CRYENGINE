@@ -118,6 +118,22 @@ Property
   Hidden
 }
 
+Property
+{
+  Name = %VERTEXCOLORTINT
+  Mask = 0x4000000
+  Property    (Vertex Alpha Tinting)
+  Description (Normal-mapped diffuse layer from terrain blended below the base material)
+}
+
+Property
+{
+  Name = %WETNESS
+  Mask = 0x80000000
+  Property    (Wetness)
+  Description (Adds a layer of wetness and raindrops to shader, masked by vertex color Alpha)
+}
+
 #ifdef FEATURE_MESH_TESSELLATION
 Property
 {

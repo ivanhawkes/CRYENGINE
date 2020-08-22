@@ -191,6 +191,8 @@ struct SSkinBlendWeightsOut
 
 struct app2vertCommon
 {
+
+
 	IN_P
 	float2 baseTC   : TEXCOORDN;
 	IN_C0
@@ -219,6 +221,7 @@ struct app2vertCommon
 #if %_RT_ENVIRONMENT_CUBEMAP
 	uint InstIndex : SV_InstanceID;
 #endif
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

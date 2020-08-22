@@ -328,10 +328,28 @@ void Fwd_StandardOpaqueShading(in MaterialAttribsCommon commonAttribs, inout For
 		specularAcc += GetEnvironmentCMap(Fwd_GlobalProbe, ssMaterialTrilinearClamp, reflect(-viewVec, fwdAttribs.normal), fwdAttribs.smoothness) * GetEnvmapFresnel(fwdAttribs.reflectance, fwdAttribs.smoothness, NdotV);
 	}
 #endif
+
+	#if %USE_MOSS_2
 	
+		ForwardLightParams lightParams;
+		lightParams.type = LIGHT_TYPE_SUN;
+		lightParams.lightVec = CV_SunLightDir.xyz;
+		lightParams.illuminance = CV_SunColor.xyz;
+		
+		float NdotL = saturate(dot(fwdAttribs.normal, lightParams.lightVec));
+		half NdotLVertex = dot(fwdAttribs.custom.vertexNormal, lightParams.lightVec);
+		
+		half wrapDenom = 1 + diffuse_wrap_strength;
+		half fNdotLDiffuse = saturate(((NdotL + NdotLVertex) * 0.5 + diffuse_wrap_strength) / (wrapDenom * wrapDenom));
+		diffuseAcc.xyz = fNdotLDiffuse; 
+	#endif
+	
+
+
 #if %_RT_TILED_SHADING
 	TiledForwardShading(fwdAttribs, diffuseAcc, specularAcc, ssFwdBilinearWrap, ssFwdComparison, true, true, true, false, true);
 #endif
+
 
 	// Apply albedo (using simple energy conservation between specular and diffuse)
 	diffuseAcc *= fwdAttribs.albedo * saturate(1 - GetLuminance(fwdAttribs.reflectance));

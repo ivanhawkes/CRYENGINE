@@ -124,11 +124,10 @@ Property
 
 Property
 {
-  Name = %DIRTLAYER
+  Name = %CUSTOM_GLOSSY
   Mask = 0x200000
-  Property    (Dirtlayer)
-  Description (Deprecated - Dirt layer blended on top of base map (RGBA dirt map required in Custom slot))
-  DependencyReset = $TEX_Custom
+  Property    (Custom Glossy Map)
+  Description (Allows you to load a glossy map into a new glossy map slot))
 }
 
 Property
@@ -162,4 +161,22 @@ Property
   Mask = 0x80000
   DependencySet = $UserEnabled
   Hidden
+}
+/*
+Property
+{
+	Name = %TESTER
+	Mask = 0x200
+	Property (World Space Testing)
+	Description (Uses a fresnel like effect to create a fuzzy surface characteristic)
+}
+*/
+
+Property
+{
+	Name = %FUZZY_SURFACE
+	Mask = 0x200
+	Property (Fuzzy Surface)
+	Description (Uses a fresnel like effect to create a fuzzy surface characteristic)
+	DependencyReset = $TEX_Normals
 }

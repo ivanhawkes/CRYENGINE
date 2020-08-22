@@ -3,20 +3,102 @@
 //=== Shared samplers =========================================================
 
 // Material textures. TODO: remove sRGBLookup as it cannot work with resource sets
-#define DIFFUSEMAP            Texture2D   diffuseTex          : register(t0)       <sRGBLookup = true>          = TM_Diffuse;
-#define NORMALMAP             Texture2D   normalsTex          : register(t1)       <UIName = "Normalmap">       = TM_Normals;
-#define SPECULARMAP           Texture2D   specularTex         : register(t2)                                    = TM_Specular;
-#define ENVIRONMENTCUBEMAP    TextureCube envCubeTex          : register(t3)                                    = TM_Env;
+#if %SHADER_2LAYERS
+	#define DIFFUSEMAP            Texture2D   diffuseTex          : register(t0)       <sRGBLookup = true; UIName = "L1 Diffuse 1"> 	        = TM_Diffuse;
+
+#elif %IS_TRIBLEND
+	#define DIFFUSEMAP            Texture2D   diffuseTex          : register(t0)       <sRGBLookup = true; UIName = "Base Diffuse 1"> 	        = TM_Diffuse;
+#else
+	#define DIFFUSEMAP            Texture2D   diffuseTex          : register(t0)       <sRGBLookup = true>          = TM_Diffuse;
+#endif
+
+
+#if %SHADER_2LAYERS
+	#define NORMALMAP             Texture2D   normalsTex          : register(t1)       <UIName = "L1 Normal 1">     = TM_Normals;
+#elif %IS_TRIBLEND
+	#define NORMALMAP             Texture2D   normalsTex          : register(t1)       <UIName = "Base Normal 1">     = TM_Normals;
+#else
+	#define NORMALMAP             Texture2D   normalsTex          : register(t1)       <UIName = "Normalmap">       = TM_Normals;
+#endif
+
+
+#if %SHADER_2LAYERS
+	#define SPECULARMAP           Texture2D   specularTex         : register(t2)       <UIName = "L1 Specular 1">    = TM_Specular;
+#else
+	#define SPECULARMAP           Texture2D   specularTex         : register(t2)                                     = TM_Specular;
+#endif
+
+
+#if %SHADER_2LAYERS
+	#define ENVIRONMENTCUBEMAP    TextureCube envCubeTex          : register(t3)   <UIName = "L2 Diffuse 2">        = TM_Env;
+#else
+	#define ENVIRONMENTCUBEMAP    TextureCube envCubeTex          : register(t3)                                    = TM_Env;
+#endif
+
+
 #define DETAILMAP             Texture2D   detailTex           : register(t4)       <sRGBLookup = true>          = TM_Detail;
 #define SMOOTHNESSMAP         Texture2D   smoothnessTex       : register(t5)                                    = TM_Smoothness;
-#define HEIGHTMAP             Texture2D   heightTex           : register(t6)                                    = TM_Height;
-#define DECALMAP              Texture2D   decalTex            : register(t7)                                    = TM_DecalOverlay;
-#define SUBSURFACEMAP         Texture2D   subsurfaceTex       : register(t8)       <sRGBLookup = true>          = TM_SubSurface;
+
+
+#if %SHADER_2LAYERS && %OFFSET_BUMP_MAPPING
+	#define HEIGHTMAP             Texture2D   heightTex           : register(t6)                                    = TM_Height;
+
+#elif %TRIBLEND
+	#define HEIGHTMAP             Texture2D   heightTex           : register(t6)   <UIName = "Layer 2 Diffuse 2">      = TM_Height;
+
+#else	
+	#define HEIGHTMAP             Texture2D   heightTex           : register(t6)                                    = TM_Height;
+#endif
+
+#if %SHADER_3LAYERS
+	#define DECALMAP              Texture2D   decalTex            : register(t7)  <sRGBLookup = true; UIName = "L3 Diffuse 2">          = TM_DecalOverlay;
+
+#elif %TRIBLEND
+	#define DECALMAP              Texture2D   decalTex            : register(t7)  <UIName = "Layer 2 Normals 2">          = TM_DecalOverlay;	
+
+#else
+	#define DECALMAP              Texture2D   decalTex            : register(t7)                                     = TM_DecalOverlay;
+#endif
+
+#if %SHADER_3LAYERS
+	#define SUBSURFACEMAP         Texture2D   subsurfaceTex       : register(t8)       <UIName = "L3 Normals 3">    = TM_SubSurface;
+
+#elif %TRIBLEND && %TRI_GRUNGELAYER
+	#define SUBSURFACEMAP         Texture2D   subsurfaceTex       : register(t8)       <UIName = "L3 GrungeMap 3">    = TM_SubSurface;
+	
+#else
+	#define SUBSURFACEMAP         Texture2D   subsurfaceTex       : register(t8)       <sRGBLookup = true>          = TM_SubSurface;
+
+#endif
+
 #define CUSTOMMAP             Texture2D   customTex           : register(t9)                                    = TM_Custom;
 #define CUSTOMSECONDARYMAP    Texture2D   customSecondaryTex  : register(t10)                                   = TM_CustomSecondary;
-#define OPACITYMAP            Texture2D   opacityTex          : register(t11)                                   = TM_Opacity;
-#define TRANSLUCENCYMAP       Texture2D   translucencyTex     : register(t12)                                   = TM_Translucency;
-#define EMITTANCEMAP          Texture2D   emittanceTex        : register(t13)                                   = TM_Emittance;
+
+
+#if %SHADER_4LAYERS
+	#define OPACITYMAP            Texture2D   opacityTex          : register(t11)      <UIName = "RGBA Mask 1">     = TM_Opacity;
+#elif %TRIBLEND_THIRDLAYER
+	#define OPACITYMAP            Texture2D   opacityTex          : register(t11)      <UIName = "Layer 3 Normals 1">     = TM_Opacity;
+#else
+	#define OPACITYMAP            Texture2D   opacityTex          : register(t11)                                   = TM_Opacity;
+#endif
+
+#if %SHADER_4LAYERS
+	#define TRANSLUCENCYMAP       Texture2D   translucencyTex     : register(t12)     <UIName = "L4 Diffuse 4">      = TM_Translucency;
+#elif %MACRO_LAYER
+	#define TRANSLUCENCYMAP       Texture2D   translucencyTex     : register(t12)     <UIName = "Macro Diffuse 4">      = TM_Translucency;
+#elif %TRIBLEND
+	
+#else
+	#define TRANSLUCENCYMAP       Texture2D   translucencyTex     : register(t12)                                    = TM_Translucency;
+#endif
+
+#if %SHADER_3LAYERS
+	#define EMITTANCEMAP          Texture2D   emittanceTex        : register(t13)     <UIName = "L3 Diffuse 4">     = TM_Emittance;
+#else
+	#define EMITTANCEMAP          Texture2D   emittanceTex        : register(t13)                                   = TM_Emittance;
+#endif
+
 #define flowTex               detailTex  
 
 // GBuffer per pass textures.

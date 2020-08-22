@@ -317,6 +317,103 @@ float VertexAlphaBlendFactor
 
 #endif
 
+#if %VERTEXCOLORTINT
+
+float color_tinting_amount
+<
+	register = REG_PM_PARAM_6.x;
+	string UIName = "Vert Tint: Mask Strength";
+	string UIWidget = "slider";
+	float UIMin = 0.0;
+	float UIMax = 5;
+	float UIStep = 0.2;
+> = 1.0;
+	
+
+half3 color_tint
+<
+	register = REG_PM_PARAM_7;
+	string UIName = "Vert Tint: Tint Color";
+	string UIWidget = "color";
+	string UIHelp = "Changes tint color";
+> = {1.0, 1.0, 1.0, 1.0};
+	
+
+#endif
+
+
+#if %WETNESS
+
+float wetness_tiling
+<
+	register = REG_PM_PARAM_8.x;
+	string UIName = "Wetness Tiling";
+	string UIWidget = "slider";
+	float UIMin = 0;
+	float UIMax = 10;
+	float UIStep = 0.1;
+> = 1.0;
+
+float wetness_glossy
+<
+	register = REG_PM_PARAM_8.y;
+	string UIName = "Wetness Glossy";
+	string UIWidget = "slider";
+	float UIMin = -5;
+	float UIMax = 5;
+	float UIStep = 0.01;
+> = 0;
+
+float wetness_spec
+<
+	register = REG_PM_PARAM_8.z;
+	string UIName = "Wetness Specular";
+	string UIWidget = "slider";
+	float UIMin = -5;
+	float UIMax = 5;
+	float UIStep = 0.1;
+> = 0;
+
+float wetness_normal_strength
+<
+	register = REG_PM_PARAM_8.w;
+	string UIName = "Wetness Normal Strength";
+	string UIWidget = "slider";
+	float UIMin = 0;
+	float UIMax = 5;
+	float UIStep = 0.1;
+> = 1.0;
+
+float wetness_refraction
+<
+	register = REG_PM_PARAM_9.x;
+	string UIName = "Wetness refraction";
+	string UIWidget = "slider";
+	float UIMin = 0;
+	float UIMax = 0.5;
+	float UIStep = 0.1;
+> = 0.1;
+
+#endif
+
+
+#if %WETNESS
+
+Texture2D wetnessNormalTex : register(t9)
+<
+	UIName = "Wetness Normal";
+	UIDescription = "Wetness normal map with glossy for wetness pass";
+> = TM_Custom;
+
+Texture2D wetnessMaskTex : register(t10)
+<
+	UIName = "Wetness Mask";
+	UIDescription = "Mask for wetness map";
+> = TM_CustomSecondary;
+
+
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////// Custom shading pass structure /////////////////////////////////////
 

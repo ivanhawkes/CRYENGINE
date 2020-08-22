@@ -879,6 +879,17 @@ half DiffuseBRDF(half3 N, half3 V, half3 L, half Gloss, half NdotL)
 	return BurleyBRDF(NdotL, NdotV, VdotH, m);
 }
 
+half FuzzBRDF(half3 N, half3 V, half3 L, half Gloss, half NdotL)
+{
+	// TODO: Share computations with Specular BRDF
+	half m = SmoothnessToRoughness(min(Gloss, 1));
+	half VdotH = saturate(dot(V, normalize(V + L)));
+	half NdotV = abs(dot(N, V)) + 1e-5h;
+	
+	// Burley BRDF with renormalization to conserve energy
+	return BurleyBRDF(NdotL, NdotV, VdotH, m);
+}
+
 half3 ThinTranslucencyBRDF(half3 N, half3 L, half3 transmittanceColor)
 {
 	half w = lerp(0, 0.5, GetLuminance(transmittanceColor));
@@ -890,6 +901,20 @@ half3 ThinTranslucencyBRDF(half3 N, half3 L, half3 transmittanceColor)
 	return transmittanceColor * transmittance + diffuse;
 }
 
+float3 ApplyLightWrap(float3 lightWrapColor, float3 normalWS, float3 vertexNormalWS, float3 lightDirWS)
+{
+    float lightWrapDistance = 0.1;    
+    float3 wrapLight = lightWrapDistance * lightWrapColor;
+    float NdotL      = dot(normalWS, lightDirWS);
+    NdotL            = lerp(max(wrapLight.r, max(wrapLight.g, wrapLight.b)), 1.0, NdotL);
+
+    float wrapForwardNdotL = max(NdotL, dot(vertexNormalWS, lightDirWS))
+    float3 wrapForward     = lerp( wrapLight, float3(1.0, 1.0, 1.0), wrapForwardNdotL);
+    float3 wrapRecede      = lerp(-wrapLight, float3(1.0, 1.0, 1.0), NdotL);
+    float3 wrapLighting    = saturate(lerp(wrapRecede, wrapForward, lightWrapColor));
+
+    return wrapLighting;
+}
 
 ////////////////////////////////////////////////////////////////////////////
 // Occlusion
@@ -1133,6 +1158,189 @@ SilMapRes SilhouetteMap(in const float3 wsTriPos[3], in const float3 wsTriDispl[
 	return res;
 }
 
+ 
+
+float3 POM_TriblendMap_2Layer(in float2 baseTC, in float lod, in float3 viewDirNrm, in int numSteps, in float displacement, in float bias, in float blendLayerFactor, in float blendLayer2Tiling)
+{
+	float step =  1.0 / numSteps;
+	float bumpScale = displacement;
+
+	float2 delta = float2(viewDirNrm.x, viewDirNrm.y) * bumpScale / (-viewDirNrm.z * numSteps); // / max(-viewDirNrm.z * numSteps, 0.1)
+
+	baseTC -= (1.0 - bias) * numSteps * delta;
+
+	float NB0 = GetAlphaTex(diffuseTex, baseTC.xy);
+#if %TRIBLEND
+	float NB02 = GetAlphaTex(layer2Diffuse, baseTC.xy * blendLayer2Tiling);
+
+	NB0 += blendLayerFactor * (NB02 - NB0);
+#endif
+
+	float height = 1 - step;
+	float4 offset = float4(baseTC + delta, 0, lod);
+	
+	float NB1 = GetAlphaTex(diffuseTex, offset);
+#if %TRIBLEND
+	float NB12 = GetAlphaTex(layer2Diffuse, offset.xy * blendLayer2Tiling);
+
+	NB1 += blendLayerFactor * (NB12 - NB1);
+#endif
+
+	for (int i=0; i<numSteps; i++)
+	{
+		[flatten]
+		if (NB1 >= height)
+			break;
+
+		NB0 = NB1;
+
+		height -= step;
+		offset.xy += delta;
+
+		NB1 = GetDiffuseTexLod(diffuseTex, offset).a;
+#if %TRIBLEND
+		NB12 = GetDiffuseTexLod(layer2Diffuse, float4(offset.xy * blendLayer2Tiling, offset.zw)).a;
+
+		NB1 += blendLayerFactor * (NB12 - NB1);
+#endif
+	}
+
+	float4 offsetBest = offset;
+	float error = 1.0;
+
+	float t1 = height;
+	float t0 = t1 + step;
+
+	float delta1 = t1 - NB1;
+	float delta0 = t0 - NB0;
+
+	float4 intersect = float4(delta * numSteps, delta * numSteps + baseTC);
+
+	float t = 0;
+
+	for (int i=0; i<10; i++)
+	{
+		[flatten]
+		if (abs(error) <= 0.01)
+			break;
+
+		float denom = delta1 - delta0;
+		t = (t0 * delta1 - t1 * delta0) / denom;
+		offsetBest.xy = -t * intersect.xy + intersect.zw;
+
+		float NB = GetDiffuseTexLod(diffuseTex, offsetBest).a;
+#if %TRIBLEND
+		float NB2 = GetDiffuseTexLod(layer2Diffuse, float4(offsetBest.xy * blendLayer2Tiling, offsetBest.zw)).a;
+
+		NB += blendLayerFactor * (NB2 - NB);
+#endif
+
+		error = t - NB;
+		if (error < 0)
+		{
+			delta1 = error;
+			t1 = t;
+		}
+		else
+		{
+			delta0 = error;
+			t0 = t;
+		}
+	}
+	return float3(offsetBest.xy, t);
+}
+
+float3 POM_TriblendMap(in float2 baseTC, in float lod, in float3 viewDirNrm, in int numSteps, in float displacement, in float bias, in float blendLayerFactor, in float blendLayer2Tiling)
+{
+	float step =  1.0 / numSteps;
+	float bumpScale = displacement;
+
+	float2 delta = float2(viewDirNrm.x, viewDirNrm.y) * bumpScale / (-viewDirNrm.z * numSteps); // / max(-viewDirNrm.z * numSteps, 0.1)
+
+	baseTC -= (1.0 - bias) * numSteps * delta;
+
+	float NB0 = GetDiffuseTex(diffuseTex, baseTC.xy).a;
+#if %TRIBLEND
+	float NB02 = GetDiffuseTex(layer2Diffuse, baseTC.xy * blendLayer2Tiling).a;
+
+	NB0 += blendLayerFactor * (NB02 - NB0);
+#endif
+
+	float height = 1 - step;
+	float4 offset = float4(baseTC + delta, 0, lod);
+	
+	float NB1 = GetDiffuseTex(diffuseTex, offset).a;
+#if %TRIBLEND
+	float NB12 = GetDiffuseTex(layer2Diffuse, offset.xy * blendLayer2Tiling).a;
+
+	NB1 += blendLayerFactor * (NB12 - NB1);
+#endif
+
+	for (int i=0; i<numSteps; i++)
+	{
+		[flatten]
+		if (NB1 >= height)
+			break;
+
+		NB0 = NB1;
+
+		height -= step;
+		offset.xy += delta;
+
+		NB1 = GetDiffuseTexLod(diffuseTex, offset).a;
+#if %TRIBLEND
+		NB12 = GetDiffuseTexLod(layer2Diffuse, float4(offset.xy * blendLayer2Tiling, offset.zw)).a;
+
+		NB1 += blendLayerFactor * (NB12 - NB1);
+#endif
+	}
+
+	float4 offsetBest = offset;
+	float error = 1.0;
+
+	float t1 = height;
+	float t0 = t1 + step;
+
+	float delta1 = t1 - NB1;
+	float delta0 = t0 - NB0;
+
+	float4 intersect = float4(delta * numSteps, delta * numSteps + baseTC);
+
+	float t = 0;
+
+	for (int i=0; i<10; i++)
+	{
+		[flatten]
+		if (abs(error) <= 0.01)
+			break;
+
+		float denom = delta1 - delta0;
+		t = (t0 * delta1 - t1 * delta0) / denom;
+		offsetBest.xy = -t * intersect.xy + intersect.zw;
+
+		float NB = GetDiffuseTexLod(diffuseTex, offsetBest).a;
+#if %TRIBLEND
+		float NB2 = GetDiffuseTexLod(layer2Diffuse, float4(offsetBest.xy * blendLayer2Tiling, offsetBest.zw)).a;
+
+		NB += blendLayerFactor * (NB2 - NB);
+#endif
+
+		error = t - NB;
+		if (error < 0)
+		{
+			delta1 = error;
+			t1 = t;
+		}
+		else
+		{
+			delta0 = error;
+			t0 = t;
+		}
+	}
+	return float3(offsetBest.xy, t);
+}
+
+
 float3 ParallaxOcclusionMap(in float2 baseTC, in float lod, in float3 viewDirNrm, in int numSteps, in float displacement, in float bias, in float blendLayerFactor, in float blendLayer2Tiling)
 {
 	float step =  1.0 / numSteps;
@@ -1223,6 +1431,7 @@ float3 ParallaxOcclusionMap(in float2 baseTC, in float lod, in float3 viewDirNrm
 	return float3(offsetBest.xy, t);
 }
 
+
 float2 OffsetMap(in float2 baseTC, in half3 viewDirNrm, in int numSteps, in half displacement, in half bias, in half blendLayerFactor, in float blendLayer2Tiling)
 {
 	half offset = -bias * displacement;
@@ -1243,6 +1452,21 @@ float2 OffsetMap(in float2 baseTC, in half3 viewDirNrm, in int numSteps, in half
 	}
 	return newCoords.xy;
 }
+
+float2 OffsetMapHS(in float2 baseTC, in half3 viewDirNrm, in int numSteps, in half displacement, in half bias, in half blendLayerFactor, in float blendLayer2Tiling)
+{
+	half offset = -bias * displacement;
+	float3 newCoords = float3(baseTC, 0);
+	for (int i=0; i<numSteps; ++i)
+	{
+		half nz = GetNormalMap(normalsTex, newCoords.xy).z;
+		half h = GetHeightTex(rgba_mask, newCoords.xy);
+		half height = h * displacement + offset;
+		newCoords += (height - newCoords.z) * nz * viewDirNrm;
+	}
+	return newCoords.xy;
+}
+
 
 #define MICRO_DETAIL_QUALITY_DEF 0
 #define MICRO_DETAIL_QUALITY_OBM 1

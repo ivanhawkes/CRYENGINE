@@ -126,6 +126,7 @@ half3 GetNormalMapGrad(Texture2D bumpTex, float2 bumpTC, float2 ddx_bumpTC, floa
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 half  GetAlphaTex(Texture2D tex, float2 texTC)                                                      { return GetTexture2D(tex, ssMaterialAnisoHigh, texTC.xy).a; }// alpha test value in alpha channel
+half  GetAlphaTexLod(Texture2D tex, float4 texTC)                                                   { return GetTexture2DLod(tex, ssMaterialAnisoHigh, texTC.xyzw); }
 half4 GetDiffuseTex(Texture2D tex, float2 texTC)                                                    { return GetTexture2D(tex, ssMaterialAnisoHigh, texTC.xy); }
 half4 GetDiffuseTexGrad(Texture2D tex, float2 texTC, float2 ddxUV, float2 ddyUV)                    { return GetTexture2DGrad(tex, ssMaterialAnisoHigh, texTC.xy, ddxUV, ddyUV ); }
 half4 GetDiffuseTexLod(Texture2D tex, float4 texTC)                                                 { return GetTexture2DLod(tex, ssMaterialAnisoHigh, texTC.xyzw); }

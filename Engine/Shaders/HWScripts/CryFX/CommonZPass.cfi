@@ -127,6 +127,17 @@ vert2fragZ Common_ZPassVS(app2vertGBuffer IN_common)
   OUT.viewTS = vPos.xyz - g_VS_WorldViewPos.xyz;
 #endif
 
+#if %TESTER
+	
+	//float4x4 InstMatrix = GetInstanceMatrix();
+	//InstMatrix[0][3] -= g_VS_WorldViewPos.x;
+	//InstMatrix[1][3] -= g_VS_WorldViewPos.y;
+	//InstMatrix[2][3] -= g_VS_WorldViewPos.z;
+	//OUT.vPositionWS = vertPassPos.WorldPos.xyz;
+
+#endif
+
+
 #if %SILHOUETTE_PARALLAX_OCCLUSION_MAPPING
 	vert2geomZ OUT_ext = (vert2geomZ) 0;
 	OUT_ext.IN = OUT;
@@ -149,6 +160,33 @@ vert2fragZ Common_ZPassVS(app2vertGBuffer IN_common)
   return OUT;
 #endif
 }
+
+
+
+half3 combineNormalMap (half3 base, half3 secondary)
+{
+	base += half3(0, 0, 1);
+    secondary *= half3(-1, -1, 1);
+    return base * dot(base, secondary) / base.z - secondary;
+}
+
+
+half cheapContrast(half inmap, half contrastParam)
+{
+	return saturate(inmap = ((inmap - 0.5) * max(contrastParam, 0)) + 0.5);
+}
+
+float3 getWorldSpace(vert2fragZ IN) 
+{
+	float4x4 InstMatrix = GetInstanceMatrix();
+	InstMatrix[0][3] -= g_VS_WorldViewPos.x;
+	InstMatrix[1][3] -= g_VS_WorldViewPos.y;
+	InstMatrix[2][3] -= g_VS_WorldViewPos.z;
+	float3 WorldPos = mul(InstMatrix, IN.vertPassPos.Position);
+	WorldPos = mul(InstMatrix, IN.vertPassPos.Position);
+	return WorldPos;
+}
+
 
 ///////////////// geometry shaders //////////////////
 
@@ -323,6 +361,24 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 #endif
   }
 
+
+	#if %WETNESS
+		// LOAD TEXTURES FOR VEGETATION WETNESS PASS
+		
+		half3 pWetnessNormal = GetNormalMap(wetnessNormalTex, IN.baseTC.xy * wetness_tiling).xyz;
+		pWetnessNormal = lerp(float3(0, 0, 1), pWetnessNormal, wetness_normal_strength);
+		
+		half pWetnessMask = GetDiffuseTex(wetnessMaskTex, IN.baseTC.xy * wetness_tiling).x;
+		half pWetnessGloss = pWetnessMask;
+	#endif
+	
+	#if %WETNESS
+		////HANDLE REFRACTION
+		half fresnelEffect = clamp(dot(CV_CameraFrontVector.xyz, pWetnessNormal), 0, 1).x;
+		IN.baseTC.xy -= pWetnessNormal * wetness_refraction * fresnelEffect * pWetnessMask; 
+	#endif 
+
+
 	////////////////////////////////////////////////////////////////////////////////////////////////
 	// Alpha testing
 	
@@ -371,6 +427,10 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 		const float2 tcDetail = IN.baseTC.xy * CM_DetailTilingAndAlphaRef.xy;
 		vDetail = GetDetailTex(detailTex, tcDetail) * vDetailScales.xxyz;
 
+		#if %WETNESS
+			vDetail *= (1 - clamp(pWetnessMask / 0.1, 0, 1));
+		#endif
+
 		#if %ALPHAMASK_DETAILMAP
 			vDetail *= GetAlphaTex(diffuseTex, IN.baseTC.xy);
 		#endif
@@ -381,6 +441,10 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 #if %BILLBOARD
 		vNormalTS.xyz = GetNormalMap(normalsTex, IN.baseTC.xy).zyx;
 #endif
+
+	#if %WETNESS
+		vNormalTS.xyz = combineNormalMap(vNormalTS.xyz, pWetnessNormal);
+	#endif
 
 	#if !%GRASS
 		attribs.NormalWorld = normalize(mTangentToWS[2]);
@@ -396,10 +460,15 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 
 	////////////////////////////////////////////////////////////////////////////////////////////////
 	// Output smoothness
-
-	half fSmoothness = MatSpecColor.w;
-	fSmoothness *= GetSmoothnessTex(smoothnessTex, IN.baseTC.xy);
-
+	#if %CUSTOM_GLOSSY
+		half fSmoothness = MatSpecColor.w;
+		fSmoothness *= GetDiffuseTex(glossyTex, IN.baseTC.xy).x;
+	
+	#else
+		half fSmoothness = MatSpecColor.w;
+		fSmoothness *= GetSmoothnessTex(smoothnessTex, IN.baseTC.xy);
+	#endif
+	
   #if %BLENDLAYER
 		half layer2Smoothness = GetSmoothness2Tex(smoothness2Tex, IN.baseTC.xy * blendLayer2Tiling);
 		fSmoothness = lerp(fSmoothness, layer2Smoothness, blendFac);
@@ -409,6 +478,9 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 		fSmoothness = fSmoothness + fSmoothness * vDetail.w;
 	#endif
 	
+	#if %WETNESS
+		fSmoothness += (pWetnessGloss * wetness_glossy); 
+	#endif
 	attribs.Smoothness = fSmoothness;
 	
 	////////////////////////////////////////////////////////////////////////////////////////////////
@@ -432,8 +504,10 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 	
 	ApplyDirtAndBlendLayer(IN, blendFac, cAlbedo, cReflectance);
 
-	#if %VERTCOLORS
+	#if %VERTCOLORS && !%VERTEXCOLORTINT
 		cAlbedo *= IN.Color.rgb;
+	#else
+		cAlbedo = cAlbedo;
 	#endif
 
 	cAlbedo *= MatDifColor.rgb; 
@@ -442,8 +516,70 @@ pixout_gbuffer Common_ZPassPS(vert2fragZ IN)
 	cAlbedo = cAlbedo + cAlbedo * vDetail.z;
 #endif
 
+#if %WETNESS
+	cReflectance.xyz += pWetnessMask * wetness_spec; 
+#endif
+
 #if %DECAL	
 	cReflectance.xyz = GetLuminance(cReflectance.xyz);
+#endif
+
+
+#if %FUZZY_SURFACE
+
+// If no Normal map defined in material editor, do not compile FUZZY SURFACE:
+#if !%NORMAL_MAP
+	#undefine %FUZZY_SURFACE	
+#endif
+	
+	//CONSTRUCT masking feature:::::::::::::::::::::::::::::::::
+
+	//Load the custom fuzzyTex sampler found in illum.cfx line 436
+	half3 fuzzyMask = GetCustomTex((fuzzyTex), IN.baseTC.xy);
+	
+	fuzzyMask = 0.33333 * (fuzzyMask.x + fuzzyMask.y + fuzzyMask.z);
+
+	//Constructs the vector which has the PARAMS defined in the Illum.CFX
+	half3 fuzzyParams = half3(FuzzyPower, FuzzyEdgeBrightness, FuzzyCenterDarkness);
+	
+	//Convert Normals into World space normals(Normal map is grabbed from line 355)
+	half3 vNormalWS = normalize(mul(vNormalTS.xyz, mTangentToWS));
+
+	//Step 2+3 Gets dot product of WS normals and Camera Vector, And clamps it,
+	half3 fresnelEffect = clamp(dot(CV_CameraFrontVector.xyz, vNormalWS.xyz), 0, 1);
+	
+	// from 1 subtract resulting vector from steps 2+3, ensures the effect is on the outside of the shape and not the inside
+	half3 fresnelEffectInverted = 1 - fresnelEffect.xyz;
+	
+	// Power the results by parameter to be able to adjust the power of the effect
+	half3 fresnelPower = pow(fresnelEffectInverted.xyz, fuzzyParams.x);
+	
+	// Multiply by EdgeBrightness parameter, allows control over how bright the edge effect is
+	half3 fresnelEdgeBrightness = mul(fresnelPower.xyz, fuzzyParams.y);
+	
+	// Multiply by Darkening Effect Power, and then invert it to ensure its always on the interior of shape
+	half3 fresnelDirectionalDarken = mul(fresnelEffect.xyz, fuzzyParams.z);
+	half3 fresnelDirectionalDarkenInverted = 1 - fresnelDirectionalDarken.xyz;
+	
+	//Adds the darkening effect and the edge brightening effect together:
+	half3 effectcombined = fresnelEdgeBrightness.xyz + fresnelDirectionalDarkenInverted.xyz;
+	
+	//Multiply effect combined by the materials diffuse map to apply both effects to final albedo ((Diffuse map is grabbed from Line 424))
+	half3 endResult = effectcombined.xyz * diffuseMap.xyz;	
+	half3 endResultBlended = lerp(cAlbedo.xyz, endResult.xyz, fuzzyMask.xyz);
+	
+	//APPLY EFFECT::::::::::
+	cAlbedo = endResultBlended.xyz;
+#endif
+
+#if (%GRASS || %LEAVES) && %VERTEXCOLORTINT
+	
+	cAlbedo = lerp(cAlbedo, (cAlbedo * color_tint), cheapContrast(IN.Color.w, color_tinting_amount));
+
+#endif
+
+#if %TESTER
+	//cAlbedo = IN.vPositionWS.xyz;
 #endif
 	
 	attribs.Albedo = cAlbedo;

@@ -107,6 +107,10 @@ struct vert2fragZ
 	float4 terrainParams0    : TEXCOORDN;
 #endif
 
+#if %TESTER
+	//float3 vPositionWS    : TEXCOORDN;
+#endif
+
 #if %SILHOUETTE_PARALLAX_OCCLUSION_MAPPING || %PARALLAX_OCCLUSION_MAPPING || %OFFSET_BUMP_MAPPING || %_RT_ALPHABLEND || %TEMP_EYES || %LEAVES || %GRASS
 	float3 viewTS   : TEXCOORDN;
 #endif
@@ -124,6 +128,7 @@ struct vert2fragZ
 #if !%TEMP_TERRAIN && !%SILHOUETTE_PARALLAX_OCCLUSION_MAPPING
 	FRONT_FACE_PS
 #endif
+
 };
 
 struct vert2fragZPre

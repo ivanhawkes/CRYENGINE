@@ -407,6 +407,45 @@ float DecalSpecularOpacity
 
 #endif
 
+#if %FUZZY_SURFACE
+	
+	half FuzzyPower
+	<
+	  register = REG_PM_PARAM_8.x;
+	  stringUIHelp = "Sets the power of the effect as a whole";
+	  string UIName = "Fuzzy Power";
+	  string UIWidget = "slider";
+	  float UIMin = 0.0;
+	  float UIMax = 5.0;
+	  float UIStep = 0.01;
+	> = 1.5;
+	
+	half FuzzyEdgeBrightness
+	<
+	  register = REG_PM_PARAM_8.y;
+	  stringUIHelp = "Sets the power of the Edge Brightness Effect";
+	  string UIName = "Fuzzy Edge Brightness";
+	  string UIWidget = "slider";
+	  float UIMin = 0.0;
+	  float UIMax = 10.0;
+	  float UIStep = 0.01;
+	> = 5.0;
+	
+	half FuzzyCenterDarkness
+	<
+	  register = REG_PM_PARAM_8.z;
+	  stringUIHelp = "Sets the amount of fresnel AO effect";
+	  string UIName = "Fresnel AO";
+	  string UIWidget = "slider";
+	  float UIMin = 0.0;
+	  float UIMax = 3.0;
+	  float UIStep = 0.01;
+	> = 1.0;
+	
+#endif
+
+
+
 //=========================================================================
 
 #include "VertexLib.cfi"
@@ -419,6 +458,22 @@ Texture2D dirtTex : register(t9)
   UIName = "Dirt Map";
   UIDescription = "Dirt Map";
 > = TM_Custom;
+
+Texture2D glossyTex : register(t9)
+<
+  UIName = "Glossy Map";
+  UIDescription = "Glossy Map";
+> = TM_Custom;
+
+#if %FUZZY_SURFACE && !%BLENDLAYER || %DIRTLAYER
+Texture2D fuzzyTex : register(t9)
+<
+  UIName = "Fuzzy Mask Map";
+  UIDescription = "Fuzzy mask map for fuzzy surface feature";
+> = TM_Custom;
+#else
+	#undefine %FUZZY_SURFACE
+#endif 
 
 ///////////////// vertex shader //////////////////
 
